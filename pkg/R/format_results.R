@@ -34,6 +34,7 @@ format_summary <- function(earth_result) {
   coefs$term <- rownames(coefs)
   rownames(coefs) <- NULL
   coefs <- coefs[, c("term", earth_result$target)]
+  coefs[[earth_result$target]] <- round(coefs[[earth_result$target]], 6)
 
   # Model statistics
   model_summary <- summary(model)
@@ -132,7 +133,7 @@ format_anova <- function(earth_result) {
     term        = seq_len(nrow(dirs)),
     description = terms_desc,
     variables   = vars_involved,
-    coefficient = as.numeric(coefs),
+    coefficient = round(as.numeric(coefs), 6),
     stringsAsFactors = FALSE
   )
 }

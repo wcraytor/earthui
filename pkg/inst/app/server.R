@@ -57,15 +57,102 @@ function(input, output, session) {
 
   output$data_preview <- DT::renderDataTable({
     req(rv$data)
-    DT::datatable(rv$data, options = list(pageLength = 10, scrollX = TRUE),
-                  rownames = FALSE)
+    DT::datatable(rv$data,
+                  options = list(pageLength = 10, scrollX = TRUE),
+                  rownames = FALSE,
+                  class = "compact stripe",
+                  callback = DT::JS("
+                    // Click on any cell to see full text in a popup
+                    table.on('click', 'td', function() {
+                      var text = $(this).text();
+                      if (text.length > 0) {
+                        var $popup = $('#eui-cell-popup');
+                        if (!$popup.length) {
+                          $popup = $('<div id=\"eui-cell-popup\">' +
+                            '<div class=\"eui-popup-backdrop\"></div>' +
+                            '<div class=\"eui-popup-content\"><pre></pre>' +
+                            '<button class=\"btn btn-sm btn-secondary eui-popup-close\">Close</button></div></div>');
+                          $('body').append($popup);
+                          $popup.on('click', '.eui-popup-backdrop, .eui-popup-close', function() {
+                            $popup.hide();
+                          });
+                        }
+                        $popup.find('pre').text(text);
+                        $popup.show();
+                      }
+                    });
+                  "))
   })
 
   # --- Variable Configuration ---
   output$target_selector <- renderUI({
     req(rv$data)
-    selectInput("target", "Target (response) variable",
-                choices = names(rv$data))
+    storage_key <- if (is.null(rv$file_name)) "default" else rv$file_name
+
+    # JavaScript: persist target variable + advanced parameters in localStorage
+    js <- tags$script(HTML(sprintf("
+      (function() {
+        var storageKey = 'earthui_settings_' + %s;
+        var selectIds = ['target', 'degree', 'pmethod', 'glm_family'];
+        var numericIds = ['nprune', 'thresh', 'penalty', 'minspan', 'endspan',
+                          'fast_k', 'nfold_override'];
+        var allIds = selectIds.concat(numericIds);
+
+        var saved = null;
+        try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
+
+        function restoreSettings() {
+          if (!saved) return;
+          selectIds.forEach(function(id) {
+            if (saved[id] !== undefined && saved[id] !== null) {
+              var el = document.getElementById(id);
+              if (el && el.selectize) {
+                if (id === 'target') {
+                  if (el.selectize.options[saved[id]]) {
+                    el.selectize.setValue(saved[id]);
+                  }
+                } else {
+                  el.selectize.setValue(saved[id]);
+                }
+              }
+            }
+          });
+          numericIds.forEach(function(id) {
+            if (saved[id] !== undefined) {
+              var $el = $('#' + id);
+              if ($el.length) { $el.val(saved[id]).trigger('change'); }
+            }
+          });
+        }
+
+        function saveSettings() {
+          var state = {};
+          selectIds.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el && el.selectize) { state[id] = el.selectize.getValue(); }
+          });
+          numericIds.forEach(function(id) {
+            state[id] = $('#' + id).val();
+          });
+          try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
+        }
+
+        // Restore after selectize initializes
+        setTimeout(restoreSettings, 500);
+
+        // Save on any tracked input change
+        $(document).off('shiny:inputchanged.euisettings')
+                   .on('shiny:inputchanged.euisettings', function(event) {
+          if (allIds.indexOf(event.name) >= 0) { saveSettings(); }
+        });
+      })();
+    ", jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
+
+    tagList(
+      selectInput("target", "Target (response) variable",
+                  choices = names(rv$data)),
+      js
+    )
   })
 
   output$variable_table <- renderUI({
@@ -329,7 +416,7 @@ function(input, output, session) {
     req(rv$result)
     s <- format_summary(rv$result)
     DT::datatable(s$coefficients, options = list(pageLength = 20),
-                  rownames = FALSE)
+                  rownames = FALSE, class = "compact stripe")
   })
 
   # --- Results: Variable Importance ---
@@ -341,7 +428,8 @@ function(input, output, session) {
   output$importance_table <- DT::renderDataTable({
     req(rv$result)
     DT::datatable(format_variable_importance(rv$result),
-                  options = list(pageLength = 20), rownames = FALSE)
+                  options = list(pageLength = 20), rownames = FALSE,
+                  class = "compact stripe")
   })
 
   # --- Results: Partial Dependence ---
@@ -377,7 +465,8 @@ function(input, output, session) {
   output$anova_table <- DT::renderDataTable({
     req(rv$result)
     DT::datatable(format_anova(rv$result),
-                  options = list(pageLength = 20), rownames = FALSE)
+                  options = list(pageLength = 20), rownames = FALSE,
+                  class = "compact stripe")
   })
 
   # --- Export Report ---

@@ -1,5 +1,15 @@
 fluidPage(
   theme = bslib::bs_theme(version = 5, bootswatch = "flatly"),
+  tags$head(tags$style(HTML("
+    .dataTable td, .dataTable th { padding: 4px 8px !important; }
+    .dataTables_wrapper { font-size: 0.9em; }
+    .dataTable td { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+    #eui-cell-popup { display: none; }
+    .eui-popup-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 9998; }
+    .eui-popup-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border-radius: 8px; padding: 20px; max-width: 80vw; max-height: 70vh; overflow: auto; z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    .eui-popup-content pre { white-space: pre-wrap; word-wrap: break-word; margin-bottom: 12px; font-size: 0.9em; }
+    .eui-popup-close { float: right; }
+  "))),
   titlePanel("earthui - Interactive Earth Model Builder"),
 
   sidebarLayout(
