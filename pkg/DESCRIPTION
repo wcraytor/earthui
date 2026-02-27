@@ -3,6 +3,8 @@ Title: Interactive GUI for Enhanced Adaptive Regression Through Hinges
 Version: 0.1.0
 Authors@R:
     person("William", "Craytor", , "bcraytor@proton.me", role = c("aut", "cre"))
+Author: William Craytor [aut, cre]
+Maintainer: William Craytor <bcraytor@proton.me>
 Description: Provides a Shiny-based graphical user interface for the 'earth'
     package, enabling interactive building and exploration of multivariate
     adaptive regression spline models. Features include data import from CSV
