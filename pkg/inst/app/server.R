@@ -538,6 +538,23 @@ function(input, output, session) {
     plot_partial_dependence(rv$result, input$pd_variable)
   })
 
+  # --- Results: Contribution ---
+  output$contrib_variable_selector <- renderUI({
+    req(rv$result)
+    imp <- format_variable_importance(rv$result)
+    vars <- if (nrow(imp) > 0) {
+      imp$variable[imp$variable %in% names(rv$result$data)]
+    } else {
+      rv$result$predictors
+    }
+    selectInput("contrib_variable", "Select variable", choices = vars)
+  })
+
+  output$contrib_plot <- renderPlot({
+    req(rv$result, input$contrib_variable)
+    plot_contribution(rv$result, input$contrib_variable)
+  })
+
   # --- Results: Diagnostics ---
   output$residuals_plot <- renderPlot({
     req(rv$result)

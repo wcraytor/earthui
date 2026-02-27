@@ -160,6 +160,12 @@ fluidPage(
             plotOutput("pd_plot", height = "400px")
           ),
           tabPanel(
+            "Contribution",
+            br(),
+            uiOutput("contrib_variable_selector"),
+            plotOutput("contrib_plot", height = "400px")
+          ),
+          tabPanel(
             "Diagnostics",
             br(),
             fluidRow(

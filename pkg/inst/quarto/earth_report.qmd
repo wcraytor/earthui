@@ -88,6 +88,20 @@ for (var in top_vars) {
 }
 ```
 
+## Variable Contribution
+
+```{r contribution, fig.width=8, fig.height=4, results='asis'}
+imp <- format_variable_importance(result)
+top_vars <- head(imp$variable[imp$variable %in% names(result$data)], 4)
+
+for (var in top_vars) {
+  cat(sprintf("\n### %s\n\n", var))
+  p <- plot_contribution(result, var)
+  print(p)
+  cat("\n\n")
+}
+```
+
 ## Diagnostics
 
 ### Residuals vs Fitted

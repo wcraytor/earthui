@@ -122,6 +122,102 @@ plot_partial_dependence <- function(earth_result, variable, n_grid = 50L) {
     )
 }
 
+#' Plot variable contribution
+#'
+#' Creates a scatter plot showing each variable's actual contribution to the
+#' prediction. For each observation, the contribution is the sum of
+#' coefficient * basis function value across all terms involving that variable.
+#'
+#' @param earth_result An object of class `"earthui_result"` as returned by
+#'   [fit_earth()].
+#' @param variable Character string. Name of the predictor variable to plot.
+#'
+#' @return A [ggplot2::ggplot] object.
+#'
+#' @export
+#' @examples
+#' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
+#' plot_contribution(result, "wt")
+plot_contribution <- function(earth_result, variable) {
+  validate_earthui_result(earth_result)
+
+  if (!is.character(variable) || length(variable) != 1L) {
+    stop("`variable` must be a single character string.", call. = FALSE)
+  }
+
+  model <- earth_result$model
+  data <- earth_result$data
+
+  # Identify which basis-function columns involve this variable
+  dirs <- model$dirs[model$selected.terms, , drop = FALSE]
+  col_names <- colnames(dirs)
+
+  # For categorical variables, find all dummy columns for this base var
+  matching_cols <- col_names == variable
+  if (!any(matching_cols) && variable %in% earth_result$categoricals) {
+    for (cn in col_names) {
+      if (startsWith(cn, variable) && cn != variable) {
+        matching_cols[col_names == cn] <- TRUE
+      }
+    }
+  }
+
+  if (!any(matching_cols)) {
+    return(
+      ggplot2::ggplot() +
+        ggplot2::annotate("text", x = 0.5, y = 0.5,
+                          label = paste("Variable", variable,
+                                        "not used in model")) +
+        ggplot2::theme_void()
+    )
+  }
+
+  # Terms that involve this variable (any matching column has dir != 0)
+  var_terms <- which(apply(dirs[, matching_cols, drop = FALSE] != 0, 1, any))
+
+  # Compute per-term contributions: bx * coefficient
+  bx <- model$bx
+  coefs <- as.numeric(stats::coef(model))
+  contributions <- sweep(bx, 2, coefs, "*")
+
+  # Sum contributions for terms involving this variable
+  var_contrib <- rowSums(contributions[, var_terms, drop = FALSE])
+
+  var_col <- data[[variable]]
+
+  if (is.factor(var_col) || is.character(var_col)) {
+    plot_df <- data.frame(x = as.character(var_col), y = var_contrib,
+                          stringsAsFactors = FALSE)
+    ggplot2::ggplot(plot_df, ggplot2::aes(x = .data$x, y = .data$y)) +
+      ggplot2::geom_boxplot(fill = "#2c7bb6", alpha = 0.5, outlier.shape = NA) +
+      ggplot2::geom_jitter(color = "#2c7bb6", alpha = 0.5, width = 0.2) +
+      ggplot2::labs(
+        title = paste("Contribution:", variable),
+        x = variable,
+        y = paste("Contribution to", earth_result$target)
+      ) +
+      ggplot2::theme_minimal() +
+      ggplot2::theme(
+        plot.title = ggplot2::element_text(face = "bold", size = 14)
+      )
+  } else {
+    plot_df <- data.frame(x = var_col, y = var_contrib)
+    ggplot2::ggplot(plot_df, ggplot2::aes(x = .data$x, y = .data$y)) +
+      ggplot2::geom_point(alpha = 0.6, color = "#2c7bb6") +
+      ggplot2::geom_smooth(method = "loess", se = FALSE, color = "#d7191c",
+                           linewidth = 0.8, formula = y ~ x) +
+      ggplot2::labs(
+        title = paste("Contribution:", variable),
+        x = variable,
+        y = paste("Contribution to", earth_result$target)
+      ) +
+      ggplot2::theme_minimal() +
+      ggplot2::theme(
+        plot.title = ggplot2::element_text(face = "bold", size = 14)
+      )
+  }
+}
+
 #' Plot residual diagnostics
 #'
 #' Creates a two-panel diagnostic plot: residuals vs fitted values and
