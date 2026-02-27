@@ -116,11 +116,18 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
          call. = FALSE)
   }
 
-  # Drop factor columns with fewer than 2 levels (causes contrasts error)
+  # Drop factor/character columns with fewer than 2 unique values (causes contrasts error)
   drop_cols <- character(0)
   for (col in names(model_df)) {
-    if (is.factor(model_df[[col]]) && nlevels(droplevels(model_df[[col]])) < 2L) {
-      drop_cols <- c(drop_cols, col)
+    if (col == target) next
+    if (is.factor(model_df[[col]])) {
+      if (nlevels(droplevels(model_df[[col]])) < 2L) {
+        drop_cols <- c(drop_cols, col)
+      }
+    } else if (is.character(model_df[[col]])) {
+      if (length(unique(model_df[[col]])) < 2L) {
+        drop_cols <- c(drop_cols, col)
+      }
     }
   }
   if (length(drop_cols) > 0L) {
