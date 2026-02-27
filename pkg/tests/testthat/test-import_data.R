@@ -10,7 +10,7 @@ test_that("import_data reads CSV files correctly", {
   expect_equal(names(df), names(mtcars))
 })
 
-test_that("import_data preserves column names with spaces", {
+test_that("import_data converts column names to snake_case", {
   tmp <- tempfile(fileext = ".csv")
   on.exit(unlink(tmp))
   df_orig <- data.frame(
@@ -21,7 +21,7 @@ test_that("import_data preserves column names with spaces", {
   write.csv(df_orig, tmp, row.names = FALSE)
 
   df <- import_data(tmp)
-  expect_equal(names(df), c("Sale Price", "Lot Size"))
+  expect_equal(names(df), c("sale_price", "lot_size"))
 })
 
 test_that("import_data rejects missing file", {

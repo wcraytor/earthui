@@ -9,6 +9,7 @@ fit_earth(
   target,
   predictors,
   categoricals = NULL,
+  linpreds = NULL,
   degree = 1L,
   allowed_func = NULL,
   nfold = NULL,
@@ -32,6 +33,9 @@ fit_earth(
 
 \item{categoricals}{Character vector. Names of predictors to treat as
 categorical (converted to factors before fitting). Default is \code{NULL}.}
+
+\item{linpreds}{Character vector. Names of predictors constrained to enter
+the model linearly (no hinge functions). Default is \code{NULL}.}
 
 \item{degree}{Integer. Maximum degree of interaction. Default is 1
 (no interactions). When >= 2, cross-validation is automatically enabled.}
