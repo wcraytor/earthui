@@ -55,33 +55,44 @@ function(input, output, session) {
     )
   })
 
+  # Shared DataTable callback for click-to-popup on cells
+  cell_popup_js <- DT::JS("
+    table.on('click', 'td', function() {
+      var text = $(this).text();
+      if (text.length > 0) {
+        var $popup = $('#eui-cell-popup');
+        if (!$popup.length) {
+          $popup = $('<div id=\"eui-cell-popup\">' +
+            '<div class=\"eui-popup-backdrop\"></div>' +
+            '<div class=\"eui-popup-content\"><pre></pre>' +
+            '<button class=\"btn btn-sm btn-secondary eui-popup-close\">Close</button></div></div>');
+          $('body').append($popup);
+          $popup.on('click', '.eui-popup-backdrop, .eui-popup-close', function() {
+            $popup.hide();
+          });
+        }
+        $popup.find('pre').text(text);
+        $popup.show();
+      }
+    });
+  ")
+
   output$data_preview <- DT::renderDataTable({
     req(rv$data)
     DT::datatable(rv$data,
                   options = list(pageLength = 10, scrollX = TRUE),
                   rownames = FALSE,
                   class = "compact stripe",
-                  callback = DT::JS("
-                    // Click on any cell to see full text in a popup
-                    table.on('click', 'td', function() {
-                      var text = $(this).text();
-                      if (text.length > 0) {
-                        var $popup = $('#eui-cell-popup');
-                        if (!$popup.length) {
-                          $popup = $('<div id=\"eui-cell-popup\">' +
-                            '<div class=\"eui-popup-backdrop\"></div>' +
-                            '<div class=\"eui-popup-content\"><pre></pre>' +
-                            '<button class=\"btn btn-sm btn-secondary eui-popup-close\">Close</button></div></div>');
-                          $('body').append($popup);
-                          $popup.on('click', '.eui-popup-backdrop, .eui-popup-close', function() {
-                            $popup.hide();
-                          });
-                        }
-                        $popup.find('pre').text(text);
-                        $popup.show();
-                      }
-                    });
-                  "))
+                  callback = cell_popup_js)
+  })
+
+  output$data_preview_tab <- DT::renderDataTable({
+    req(rv$data)
+    DT::datatable(rv$data,
+                  options = list(pageLength = 10, scrollX = TRUE),
+                  rownames = FALSE,
+                  class = "compact stripe",
+                  callback = cell_popup_js)
   })
 
   # --- Variable Configuration ---
@@ -270,23 +281,72 @@ function(input, output, session) {
     }
 
     n <- length(preds)
-    rows <- list()
-    for (i in seq_len(n - 1)) {
-      for (j in (i + 1):n) {
-        id <- paste0("allowed_", i, "_", j)
-        rows <- c(rows, list(
-          div(
-            style = "display: inline-block; margin: 2px 6px;",
-            checkboxInput(id,
-                          label = paste(preds[i], "\u2194", preds[j]),
-                          value = TRUE)
-          )
-        ))
-      }
+
+    # Column headers: empty corner cell + variable names
+    header_cells <- list(tags$th(style = "padding: 2px;", ""))
+    for (j in seq_len(n)) {
+      header_cells <- c(header_cells, list(
+        tags$th(style = "padding: 2px 4px; font-size: 0.75em; text-align: center; writing-mode: vertical-lr; transform: rotate(180deg); max-height: 100px; overflow: hidden;",
+                title = preds[j], preds[j])
+      ))
     }
+    header_row <- tags$tr(header_cells)
+
+    # Build matrix rows
+    table_rows <- list(header_row)
+    for (i in seq_len(n)) {
+      cells <- list(
+        tags$td(style = "padding: 2px 4px; font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;",
+                title = preds[i], preds[i])
+      )
+      for (j in seq_len(n)) {
+        if (j > i) {
+          # Upper triangle: checkbox
+          id <- paste0("allowed_", i, "_", j)
+          cells <- c(cells, list(
+            tags$td(style = "text-align: center; padding: 2px;",
+                    tags$input(type = "checkbox", id = id,
+                               class = "eui-interaction-cb", checked = "checked",
+                               style = "margin: 0;"))
+          ))
+        } else {
+          # Diagonal and lower triangle: empty
+          cells <- c(cells, list(
+            tags$td(style = "padding: 2px;",
+                    if (i == j) "\u00b7" else "")
+          ))
+        }
+      }
+      table_rows <- c(table_rows, list(tags$tr(cells)))
+    }
+
+    # JavaScript to sync checkboxes with Shiny inputs
+    js <- tags$script(HTML(sprintf("
+      $(document).off('change.euimatrix').on('change.euimatrix', '.eui-interaction-cb', function() {
+        var n = %d;
+        for (var i = 1; i < n; i++) {
+          for (var j = i + 1; j <= n; j++) {
+            var id = 'allowed_' + i + '_' + j;
+            Shiny.setInputValue(id, $('#' + id).is(':checked'));
+          }
+        }
+      });
+      // Initial sync
+      setTimeout(function() {
+        var n = %d;
+        for (var i = 1; i < n; i++) {
+          for (var j = i + 1; j <= n; j++) {
+            var id = 'allowed_' + i + '_' + j;
+            Shiny.setInputValue(id, $('#' + id).is(':checked'));
+          }
+        }
+      }, 200);
+    ", n, n)))
+
     div(
-      style = "max-height: 250px; overflow-y: auto; border: 1px solid #ddd; padding: 8px; border-radius: 4px;",
-      rows
+      style = "max-height: 300px; overflow: auto; border: 1px solid #ddd; padding: 4px; border-radius: 4px;",
+      tags$table(style = "border-collapse: collapse;", table_rows),
+      js
     )
   })
 
@@ -415,8 +475,11 @@ function(input, output, session) {
   output$summary_table <- DT::renderDataTable({
     req(rv$result)
     s <- format_summary(rv$result)
-    DT::datatable(s$coefficients, options = list(pageLength = 20),
-                  rownames = FALSE, class = "compact stripe")
+    dt <- DT::datatable(s$coefficients, options = list(pageLength = 20),
+                        rownames = FALSE, class = "compact stripe")
+    numeric_cols <- names(s$coefficients)[vapply(s$coefficients, is.numeric, logical(1))]
+    if (length(numeric_cols) > 0) dt <- DT::formatRound(dt, numeric_cols, digits = 6)
+    dt
   })
 
   # --- Results: Variable Importance ---
@@ -427,9 +490,12 @@ function(input, output, session) {
 
   output$importance_table <- DT::renderDataTable({
     req(rv$result)
-    DT::datatable(format_variable_importance(rv$result),
-                  options = list(pageLength = 20), rownames = FALSE,
-                  class = "compact stripe")
+    imp_df <- format_variable_importance(rv$result)
+    dt <- DT::datatable(imp_df, options = list(pageLength = 20),
+                        rownames = FALSE, class = "compact stripe")
+    numeric_cols <- names(imp_df)[vapply(imp_df, is.numeric, logical(1))]
+    if (length(numeric_cols) > 0) dt <- DT::formatRound(dt, numeric_cols, digits = 6)
+    dt
   })
 
   # --- Results: Partial Dependence ---
@@ -464,9 +530,12 @@ function(input, output, session) {
   # --- Results: ANOVA ---
   output$anova_table <- DT::renderDataTable({
     req(rv$result)
-    DT::datatable(format_anova(rv$result),
-                  options = list(pageLength = 20), rownames = FALSE,
-                  class = "compact stripe")
+    anova_df <- format_anova(rv$result)
+    dt <- DT::datatable(anova_df, options = list(pageLength = 20),
+                        rownames = FALSE, class = "compact stripe")
+    numeric_cols <- names(anova_df)[vapply(anova_df, is.numeric, logical(1))]
+    if (length(numeric_cols) > 0) dt <- DT::formatRound(dt, numeric_cols, digits = 6)
+    dt
   })
 
   # --- Export Report ---

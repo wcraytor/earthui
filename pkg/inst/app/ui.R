@@ -126,6 +126,11 @@ fluidPage(
         tabsetPanel(
           id = "results_tabs",
           tabPanel(
+            "Data",
+            br(),
+            DT::dataTableOutput("data_preview_tab")
+          ),
+          tabPanel(
             "Summary",
             br(),
             uiOutput("summary_metrics"),
