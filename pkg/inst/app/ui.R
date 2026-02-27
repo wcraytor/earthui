@@ -131,6 +131,12 @@ fluidPage(
             DT::dataTableOutput("data_preview_tab")
           ),
           tabPanel(
+            "Equation",
+            br(),
+            div(style = "overflow-x: auto; padding: 10px;",
+                uiOutput("model_equation"))
+          ),
+          tabPanel(
             "Summary",
             br(),
             uiOutput("summary_metrics"),

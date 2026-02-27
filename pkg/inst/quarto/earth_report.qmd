@@ -50,6 +50,13 @@ summary_info <- format_summary(result)
 | RSS | `r sprintf("%.2f", summary_info$rss)` |
 `r if (result$cv_enabled && !is.na(summary_info$cv_rsq)) paste0("| CV R² | ", sprintf("%.4f", summary_info$cv_rsq), " |")`
 
+## Model Equation
+
+```{r model-equation, results='asis'}
+eq <- format_model_equation(result)
+cat("$$\n", eq$latex, "\n$$\n")
+```
+
 ## Coefficients & Basis Functions
 
 ```{r coefficients}

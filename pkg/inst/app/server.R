@@ -14,6 +14,9 @@ function(input, output, session) {
   # --- Data Import ---
   observeEvent(input$file_input, {
     req(input$file_input)
+    message("earthui: file upload received: ", input$file_input$name)
+    message("earthui: datapath = ", input$file_input$datapath)
+    message("earthui: file exists = ", file.exists(input$file_input$datapath))
     ext <- tolower(tools::file_ext(input$file_input$name))
     rv$file_ext <- ext
     rv$file_path <- input$file_input$datapath
@@ -23,9 +26,16 @@ function(input, output, session) {
     } else {
       rv$sheets <- NULL
     }
-    rv$data <- import_data(input$file_input$datapath, sheet = 1)
-    rv$categoricals <- detect_categoricals(rv$data)
-    rv$result <- NULL
+    tryCatch({
+      rv$data <- import_data(input$file_input$datapath, sheet = 1)
+      rv$categoricals <- detect_categoricals(rv$data)
+      rv$result <- NULL
+      message("earthui: import OK, ", nrow(rv$data), " rows, ", ncol(rv$data), " cols")
+    }, error = function(e) {
+      message("earthui: IMPORT ERROR: ", e$message)
+      showNotification(paste("Import error:", e$message),
+                       type = "error", duration = 15)
+    })
   })
 
   output$sheet_selector <- renderUI({
@@ -472,6 +482,13 @@ function(input, output, session) {
     metrics
   })
 
+  # --- Results: Model Equation ---
+  output$model_equation <- renderUI({
+    req(rv$result)
+    eq <- format_model_equation(rv$result)
+    withMathJax(HTML(eq$latex_inline))
+  })
+
   output$summary_table <- DT::renderDataTable({
     req(rv$result)
     s <- format_summary(rv$result)
@@ -546,13 +563,18 @@ function(input, output, session) {
     },
     content = function(file) {
       req(rv$result)
-      tryCatch({
-        render_report(rv$result,
-                      output_format = input$export_format,
-                      output_file = file)
-      }, error = function(e) {
-        showNotification(paste("Export error:", e$message),
-                         type = "error", duration = 10)
+      fmt <- input$export_format
+      withProgress(message = "Rendering report...", value = 0.3, {
+        tryCatch({
+          render_report(rv$result,
+                        output_format = fmt,
+                        output_file = file)
+          setProgress(1, detail = "Done")
+        }, error = function(e) {
+          message("earthui export error: ", e$message)
+          # Write error to a text file so the download doesn't silently 404
+          writeLines(paste("Report generation failed:", e$message), file)
+        })
       })
     }
   )

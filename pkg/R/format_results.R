@@ -192,6 +192,280 @@ format_variable_importance <- function(earth_result) {
   imp_df
 }
 
+#' Format earth model as LaTeX equation
+#'
+#' Converts a fitted earth model into a LaTeX-formatted mathematical
+#' representation using g-function notation. Basis functions are grouped by
+#' degree (constant, first-degree, second-degree, third-degree) and labeled
+#' with indices that encode the group, position, and factor variable count.
+#'
+#' @param earth_result An object of class `"earthui_result"` as returned by
+#'   [fit_earth()].
+#' @param digits Integer. Number of significant digits for coefficients and
+#'   cut points. Default is 7.
+#'
+#' @return A list containing:
+#'   \describe{
+#'     \item{latex}{Character string. LaTeX array environment.}
+#'     \item{latex_inline}{Character string. Wrapped in display math
+#'       delimiters for MathJax/HTML rendering.}
+#'     \item{groups}{List of group structures for programmatic access.}
+#'   }
+#'
+#' @export
+#' @examples
+#' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
+#' eq <- format_model_equation(result)
+#' cat(eq$latex)
+format_model_equation <- function(earth_result, digits = 7L) {
+  validate_earthui_result(earth_result)
+  model <- earth_result$model
+
+  # Extract matrices for selected terms
+  dirs  <- model$dirs[model$selected.terms, , drop = FALSE]
+  cuts  <- model$cuts[model$selected.terms, , drop = FALSE]
+  coefs <- as.numeric(stats::coef(model))
+  col_names <- colnames(dirs)
+
+  # Resolve dummy columns to base variables
+  col_info <- resolve_columns_(col_names, earth_result$categoricals,
+                               earth_result$data)
+
+  # Build per-term metadata
+  n_terms <- nrow(dirs)
+  term_list <- vector("list", n_terms)
+
+  for (i in seq_len(n_terms)) {
+    active_cols <- which(dirs[i, ] != 0)
+
+    if (length(active_cols) == 0L) {
+      # Intercept
+      term_list[[i]] <- list(
+        index       = i,
+        coefficient = coefs[i],
+        components  = list(),
+        base_vars   = character(0),
+        var_set_key = "(Intercept)",
+        degree      = 0L,
+        n_factors   = 0L
+      )
+      next
+    }
+
+    components <- lapply(active_cols, function(j) {
+      list(
+        col_name  = col_names[j],
+        base_var  = col_info$base_var[j],
+        level     = col_info$level[j],
+        is_factor = col_info$is_factor[j],
+        dir       = dirs[i, j],
+        cut       = cuts[i, j]
+      )
+    })
+
+    base_vars <- sort(unique(vapply(components, `[[`, character(1), "base_var")))
+    n_factors <- sum(!duplicated(vapply(components, function(c) {
+      if (c$is_factor) c$base_var else ""
+    }, character(1))) & vapply(components, `[[`, logical(1), "is_factor"))
+
+    term_list[[i]] <- list(
+      index       = i,
+      coefficient = coefs[i],
+      components  = components,
+      base_vars   = base_vars,
+      var_set_key = paste(base_vars, collapse = "_"),
+      degree      = length(base_vars),
+      n_factors   = n_factors
+    )
+  }
+
+  # Group terms by variable set
+  keys <- vapply(term_list, `[[`, character(1), "var_set_key")
+  unique_keys <- unique(keys)
+
+  groups <- lapply(unique_keys, function(k) {
+    members <- term_list[keys == k]
+    list(
+      var_set_key = k,
+      degree      = members[[1]]$degree,
+      n_factors   = members[[1]]$n_factors,
+      base_vars   = members[[1]]$base_vars,
+      terms       = members
+    )
+  })
+
+  # Sort by degree then by first appearance
+  group_degrees <- vapply(groups, `[[`, integer(1), "degree")
+  groups <- groups[order(group_degrees)]
+
+  # Assign g-function labels
+  degree_counters <- integer(0)
+  for (g_idx in seq_along(groups)) {
+    j <- groups[[g_idx]]$degree
+    j_chr <- as.character(j)
+    if (is.na(degree_counters[j_chr])) degree_counters[j_chr] <- 0L
+    degree_counters[j_chr] <- degree_counters[j_chr] + 1L
+    k <- degree_counters[j_chr]
+    f <- groups[[g_idx]]$n_factors
+
+    groups[[g_idx]]$k <- k
+    groups[[g_idx]]$g_label <- sprintf("{}^{%d}g_{%d}^{%d}", f, k, j)
+
+    if (j == 0L) {
+      groups[[g_idx]]$label <- "Basis"
+    } else {
+      groups[[g_idx]]$label <- paste(
+        vapply(groups[[g_idx]]$base_vars, latex_escape_text_, character(1)),
+        collapse = "\\_"
+      )
+    }
+  }
+
+  # Build LaTeX lines
+  lines <- character(0)
+  for (g_idx in seq_along(groups)) {
+    grp <- groups[[g_idx]]
+    for (t_idx in seq_along(grp$terms)) {
+      term <- grp$terms[[t_idx]]
+      is_first <- (t_idx == 1L)
+      term_str <- format_term_latex_(term, is_first, digits)
+
+      if (is_first) {
+        line <- sprintf("  \\text{%s} & = & %s \\; = \\; %s",
+                        grp$label, grp$g_label, term_str)
+      } else {
+        line <- sprintf("  & & \\quad \\quad \\quad \\quad %s", term_str)
+      }
+      lines <- c(lines, paste0(line, " \\\\"))
+    }
+  }
+
+  # Remove trailing \\  from last line
+  if (length(lines) > 0L) {
+    lines[length(lines)] <- sub(" \\\\\\\\$", "", lines[length(lines)])
+  }
+
+  latex <- paste0(
+    "\\begin{array}{l@{\\hspace{2em}}r@{\\hspace{1em}}l}\n",
+    paste(lines, collapse = "\n"),
+    "\n\\end{array}"
+  )
+
+  result <- list(
+    latex        = latex,
+    latex_inline = paste0("$$\n", latex, "\n$$"),
+    groups       = groups
+  )
+  class(result) <- "earthui_equation"
+  result
+}
+
+# --- Internal helpers for format_model_equation (not exported) ---
+
+#' Map dummy column names to base variables and factor levels
+#' @keywords internal
+#' @noRd
+resolve_columns_ <- function(col_names, categoricals, data) {
+  info <- data.frame(
+    col_name  = col_names,
+    base_var  = col_names,
+    level     = NA_character_,
+    is_factor = FALSE,
+    stringsAsFactors = FALSE
+  )
+
+  if (length(categoricals) == 0L) return(info)
+
+  # Sort categoricals by name length descending to match longer names first
+  categoricals <- categoricals[order(-nchar(categoricals))]
+
+  for (cat_var in categoricals) {
+    if (!cat_var %in% names(data)) next
+    factor_col <- data[[cat_var]]
+    lvls <- if (is.factor(factor_col)) levels(factor_col) else
+      sort(unique(as.character(factor_col)))
+
+    for (lvl in lvls) {
+      for (sep in c("", ".")) {
+        dummy_name <- paste0(cat_var, sep, lvl)
+        idx <- which(info$col_name == dummy_name & !info$is_factor)
+        if (length(idx) == 1L) {
+          info$base_var[idx]  <- cat_var
+          info$level[idx]     <- as.character(lvl)
+          info$is_factor[idx] <- TRUE
+        }
+      }
+    }
+  }
+  info
+}
+
+#' Escape special characters for LaTeX text mode
+#' @keywords internal
+#' @noRd
+latex_escape_text_ <- function(x) {
+  x <- gsub("_", "\\_", x, fixed = TRUE)
+  x <- gsub("%", "\\%", x, fixed = TRUE)
+  x <- gsub("&", "\\&", x, fixed = TRUE)
+  x <- gsub("#", "\\#", x, fixed = TRUE)
+  x
+}
+
+#' Format a number for LaTeX display
+#' @keywords internal
+#' @noRd
+format_number_ <- function(x, digits = 7L) {
+  if (x == 0) return("0")
+  trimws(formatC(x, format = "g", digits = digits))
+}
+
+#' Format one hinge/indicator/linear component as LaTeX
+#' @keywords internal
+#' @noRd
+format_component_latex_ <- function(comp) {
+  var_tex <- latex_escape_text_(comp$base_var)
+
+  if (comp$is_factor) {
+    sprintf("I\\{\\text{%s} = %s\\}", var_tex, comp$level)
+  } else if (comp$dir == 2) {
+    # Linear predictor (no hinge)
+    sprintf("\\text{%s}", var_tex)
+  } else if (comp$dir == 1) {
+    sprintf("\\max(0, \\text{%s} - %s)", var_tex, format_number_(comp$cut))
+  } else {
+    # dir == -1
+    sprintf("\\max(0, %s - \\text{%s})", format_number_(comp$cut), var_tex)
+  }
+}
+
+#' Format a complete term (coefficient * components) as LaTeX
+#' @keywords internal
+#' @noRd
+format_term_latex_ <- function(term_info, is_first, digits) {
+  coef <- term_info$coefficient
+
+  # Intercept
+  if (term_info$degree == 0L) {
+    return(format_number_(coef, digits))
+  }
+
+  # Build component strings
+  comp_strs <- vapply(term_info$components, format_component_latex_, character(1))
+  product <- paste(comp_strs, collapse = " \\cdot ")
+
+  if (is_first) {
+    coef_str <- format_number_(coef, digits)
+    paste0(coef_str, " \\cdot ", product)
+  } else {
+    abs_coef_str <- format_number_(abs(coef), digits)
+    if (coef >= 0) {
+      paste0("+", abs_coef_str, " \\cdot ", product)
+    } else {
+      paste0("-", abs_coef_str, " \\cdot ", product)
+    }
+  }
+}
+
 #' Validate earthui_result object
 #' @param x Object to validate.
 #' @return Invisible NULL. Raises error if invalid.
