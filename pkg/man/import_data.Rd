@@ -17,11 +17,12 @@ Defaults to the first sheet. Ignored for CSV files.}
 \code{\link[readxl:read_excel]{readxl::read_excel()}}.}
 }
 \value{
-A data frame with column names preserved from the source file.
+A data frame with column names converted to snake_case.
+Duplicate column names are made unique by appending numeric suffixes.
 }
 \description{
-Reads a CSV (.csv) or Excel (.xlsx, .xls) file and returns a data frame
-with column names preserved exactly as they appear in the source file.
+Reads a CSV (.csv) or Excel (.xlsx, .xls) file and returns a data frame.
+Column names are converted to snake_case and duplicates are made unique.
 }
 \examples{
 # Create a temporary CSV for demonstration

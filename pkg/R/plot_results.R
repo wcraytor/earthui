@@ -171,6 +171,9 @@ plot_residuals <- function(earth_result) {
 #' @return A [ggplot2::ggplot] object.
 #'
 #' @export
+#' @examples
+#' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
+#' plot_qq(result)
 plot_qq <- function(earth_result) {
   validate_earthui_result(earth_result)
   model <- earth_result$model

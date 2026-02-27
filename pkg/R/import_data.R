@@ -1,7 +1,7 @@
 #' Import data from CSV or Excel files
 #'
-#' Reads a CSV (.csv) or Excel (.xlsx, .xls) file and returns a data frame
-#' with column names preserved exactly as they appear in the source file.
+#' Reads a CSV (.csv) or Excel (.xlsx, .xls) file and returns a data frame.
+#' Column names are converted to snake_case and duplicates are made unique.
 #'
 #' @param filepath Character string. Path to the data file. Supported formats:
 #'   `.csv`, `.xlsx`, `.xls`.
@@ -10,7 +10,8 @@
 #' @param ... Additional arguments passed to [utils::read.csv()] or
 #'   [readxl::read_excel()].
 #'
-#' @return A data frame with column names preserved from the source file.
+#' @return A data frame with column names converted to snake_case.
+#'   Duplicate column names are made unique by appending numeric suffixes.
 #'
 #' @export
 #' @examples

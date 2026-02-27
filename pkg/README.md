@@ -10,11 +10,9 @@ without writing code.
 ## Installation
 
 ```r
-# Install from CRAN (when available)
-install.packages("earthui")
-
-# Or install the development version
-# devtools::install_github("wcraytor/earthui")
+# Install from GitHub
+# install.packages("remotes")
+remotes::install_github("wcraytor/earthui")
 ```
 
 ## Quick Start

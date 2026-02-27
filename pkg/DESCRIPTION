@@ -2,7 +2,7 @@ Package: earthui
 Title: Interactive GUI for Enhanced Adaptive Regression Through Hinges
 Version: 0.1.0
 Authors@R:
-    person("ValEngr", "Team", , "team@valengr.com", role = c("aut", "cre"))
+    person("William", "Craytor", , "bcraytor@proton.me", role = c("aut", "cre"))
 Description: Provides a Shiny-based graphical user interface for the 'earth'
     package, enabling interactive building and exploration of multivariate
     adaptive regression spline models. Features include data import from CSV
@@ -17,21 +17,22 @@ Depends:
     R (>= 4.1.0)
 Imports:
     earth (>= 5.3.0),
-    shiny,
-    readxl,
     ggplot2,
+    readxl,
+    shiny,
     stats,
-    utils,
-    tools
+    tools,
+    utils
 Suggests:
-    DT,
     bslib,
+    DT,
+    jsonlite,
+    knitr,
     plotly,
     quarto,
+    rmarkdown,
     roxygen2,
-    testthat (>= 3.0.0),
-    knitr,
-    rmarkdown
+    testthat (>= 3.0.0)
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

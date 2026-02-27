@@ -207,8 +207,8 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
     model       = model,
     target      = target,
     predictors  = predictors,
-    categoricals = categoricals %||% character(0),
-    linpreds    = linpreds %||% character(0),
+    categoricals = if (is.null(categoricals)) character(0) else categoricals,
+    linpreds    = if (is.null(linpreds)) character(0) else linpreds,
     degree      = degree,
     cv_enabled  = cv_enabled,
     data        = model_df
@@ -216,6 +216,3 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   class(result) <- "earthui_result"
   result
 }
-
-#' @keywords internal
-`%||%` <- function(a, b) if (is.null(a)) b else a

@@ -14,6 +14,13 @@
 #'   launch()
 #' }
 launch <- function(...) {
+  for (pkg in c("bslib", "DT", "jsonlite")) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+      stop("Package '", pkg, "' is required for the Shiny app. ",
+           "Install it with: install.packages('", pkg, "')",
+           call. = FALSE)
+    }
+  }
   app_dir <- system.file("app", package = "earthui")
   if (app_dir == "") {
     stop("Could not find the Shiny app directory. ",

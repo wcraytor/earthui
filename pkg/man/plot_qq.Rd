@@ -16,3 +16,7 @@ A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 \description{
 Creates a normal Q-Q plot of the model residuals.
 }
+\examples{
+result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
+plot_qq(result)
+}

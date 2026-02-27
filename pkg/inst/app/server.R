@@ -74,7 +74,7 @@ function(input, output, session) {
     nrows <- nrow(rv$data)
 
     # Storage key for remembering settings
-    storage_key <- rv$file_name %||% "default"
+    storage_key <- if (is.null(rv$file_name)) "default" else rv$file_name
 
     # Header row
     header <- tags$div(

@@ -17,7 +17,7 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: ValEngr Team \email{team@valengr.com}
+\strong{Maintainer}: William Craytor \email{bcraytor@proton.me}
 
 }
 \keyword{internal}
