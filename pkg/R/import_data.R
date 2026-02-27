@@ -40,8 +40,22 @@ import_data <- function(filepath, sheet = 1, ...) {
   )
 
   # Ensure plain data.frame (not tibble) for consistent downstream handling
-
   df <- as.data.frame(df, stringsAsFactors = FALSE, check.names = FALSE)
+
+  # Convert column names to snake_case
+  col_names <- names(df)
+  col_names <- gsub("[^[:alnum:]]+", "_", col_names)  # non-alphanumeric -> _
+  col_names <- gsub("([a-z])([A-Z])", "\\1_\\2", col_names)  # camelCase -> camel_Case
+  col_names <- tolower(col_names)  # lowercase
+  col_names <- gsub("^_|_$", "", col_names)  # trim leading/trailing _
+  col_names[col_names == ""] <- "col"
+  names(df) <- col_names
+
+  # Make duplicate column names unique
+  col_names <- names(df)
+  if (anyDuplicated(col_names)) {
+    names(df) <- make.unique(col_names, sep = "_")
+  }
 
   if (nrow(df) == 0L) {
     warning("Imported file has zero rows.", call. = FALSE)

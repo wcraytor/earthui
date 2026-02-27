@@ -8,6 +8,8 @@
 #' @param predictors Character vector. Names of predictor variables.
 #' @param categoricals Character vector. Names of predictors to treat as
 #'   categorical (converted to factors before fitting). Default is `NULL`.
+#' @param linpreds Character vector. Names of predictors constrained to enter
+#'   the model linearly (no hinge functions). Default is `NULL`.
 #' @param degree Integer. Maximum degree of interaction. Default is 1
 #'   (no interactions). When >= 2, cross-validation is automatically enabled.
 #' @param allowed_func Function or `NULL`. An allowed function as returned by
@@ -49,7 +51,7 @@
 #'                     predictors = c("cyl", "disp", "hp", "wt"))
 #' format_summary(result)
 fit_earth <- function(df, target, predictors, categoricals = NULL,
-                      degree = 1L, allowed_func = NULL,
+                      linpreds = NULL, degree = 1L, allowed_func = NULL,
                       nfold = NULL, nprune = NULL, thresh = NULL,
                       penalty = NULL, minspan = NULL, endspan = NULL,
                       fast.k = NULL, pmethod = NULL, glm = NULL, ...) {
@@ -100,8 +102,46 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
     model_df <- model_df[complete, , drop = FALSE]
   }
   if (nrow(model_df) < 10L) {
+    na_counts <- vapply(model_df, function(col) sum(is.na(col)), integer(1L))
+    na_info <- na_counts[na_counts > 0L]
+    detail <- if (length(na_info) > 0L) {
+      paste0(" Columns with NAs: ",
+             paste(sprintf("%s (%d)", names(na_info), na_info), collapse = ", "),
+             ".")
+    } else {
+      ""
+    }
     stop("Insufficient data: need at least 10 complete observations, have ",
-         nrow(model_df), ".", call. = FALSE)
+         nrow(model_df), " (from ", nrow(df), " original rows).", detail,
+         call. = FALSE)
+  }
+
+  # Drop factor columns with fewer than 2 levels (causes contrasts error)
+  drop_cols <- character(0)
+  for (col in names(model_df)) {
+    if (is.factor(model_df[[col]]) && nlevels(droplevels(model_df[[col]])) < 2L) {
+      drop_cols <- c(drop_cols, col)
+    }
+  }
+  if (length(drop_cols) > 0L) {
+    message("Dropped factor columns with < 2 levels: ",
+            paste(drop_cols, collapse = ", "))
+    model_df <- model_df[, !names(model_df) %in% drop_cols, drop = FALSE]
+    predictors <- setdiff(predictors, drop_cols)
+    if (!is.null(categoricals)) {
+      categoricals <- setdiff(categoricals, drop_cols)
+    }
+    if (length(predictors) == 0L) {
+      stop("No predictors remaining after dropping single-level factors.",
+           call. = FALSE)
+    }
+  }
+
+  # Drop unused factor levels
+  for (col in names(model_df)) {
+    if (is.factor(model_df[[col]])) {
+      model_df[[col]] <- droplevels(model_df[[col]])
+    }
   }
 
   # --- Build earth arguments ---
@@ -119,6 +159,20 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   } else if (degree >= 2L) {
     earth_args$nfold <- 10L
     cv_enabled <- TRUE
+  }
+
+  # Linear predictors (no hinge functions)
+  if (!is.null(linpreds) && length(linpreds) > 0L) {
+    linpreds <- intersect(linpreds, names(model_df))
+    if (length(linpreds) > 0L) {
+      # earth expects column indices (1-based, relative to predictor columns)
+      pred_cols <- setdiff(names(model_df), target)
+      lin_idx <- match(linpreds, pred_cols)
+      lin_idx <- lin_idx[!is.na(lin_idx)]
+      if (length(lin_idx) > 0L) {
+        earth_args$linpreds <- lin_idx
+      }
+    }
   }
 
   if (!is.null(nprune))    earth_args$nprune   <- as.integer(nprune)
@@ -147,6 +201,7 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
     target      = target,
     predictors  = predictors,
     categoricals = categoricals %||% character(0),
+    linpreds    = linpreds %||% character(0),
     degree      = degree,
     cv_enabled  = cv_enabled,
     data        = model_df

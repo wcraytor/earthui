@@ -4,13 +4,38 @@ function(input, output, session) {
   rv <- reactiveValues(
     data = NULL,
     categoricals = NULL,
-    result = NULL
+    result = NULL,
+    file_name = NULL,
+    sheets = NULL,
+    file_path = NULL,
+    file_ext = NULL
   )
 
   # --- Data Import ---
   observeEvent(input$file_input, {
     req(input$file_input)
-    rv$data <- import_data(input$file_input$datapath)
+    ext <- tolower(tools::file_ext(input$file_input$name))
+    rv$file_ext <- ext
+    rv$file_path <- input$file_input$datapath
+    rv$file_name <- input$file_input$name
+    if (ext %in% c("xlsx", "xls")) {
+      rv$sheets <- readxl::excel_sheets(input$file_input$datapath)
+    } else {
+      rv$sheets <- NULL
+    }
+    rv$data <- import_data(input$file_input$datapath, sheet = 1)
+    rv$categoricals <- detect_categoricals(rv$data)
+    rv$result <- NULL
+  })
+
+  output$sheet_selector <- renderUI({
+    req(rv$sheets)
+    selectInput("sheet", "Sheet", choices = rv$sheets, selected = rv$sheets[1])
+  })
+
+  observeEvent(input$sheet, {
+    req(rv$file_path, input$sheet)
+    rv$data <- import_data(rv$file_path, sheet = input$sheet)
     rv$categoricals <- detect_categoricals(rv$data)
     rv$result <- NULL
   })
@@ -43,22 +68,110 @@ function(input, output, session) {
                 choices = names(rv$data))
   })
 
-  output$predictor_selector <- renderUI({
+  output$variable_table <- renderUI({
     req(rv$data, input$target)
     candidates <- setdiff(names(rv$data), input$target)
-    checkboxGroupInput("predictors", "Predictor variables",
-                       choices = candidates, selected = candidates)
-  })
+    nrows <- nrow(rv$data)
 
-  output$categorical_selector <- renderUI({
-    req(rv$data, input$predictors, rv$categoricals)
-    # Only show predictors that were selected
-    preds <- input$predictors
-    auto_cats <- names(rv$categoricals[rv$categoricals])
-    default_cats <- intersect(auto_cats, preds)
+    # Storage key for remembering settings
+    storage_key <- rv$file_name %||% "default"
 
-    checkboxGroupInput("categoricals", "Flag as categorical",
-                       choices = preds, selected = default_cats)
+    # Header row
+    header <- tags$div(
+      style = "display: flex; align-items: center; padding: 4px 0; border-bottom: 2px solid #ccc; font-weight: bold; font-size: 0.85em;",
+      tags$div(style = "flex: 1; min-width: 120px;", "Variable"),
+      tags$div(style = "width: 45px; text-align: center;", "Inc?"),
+      tags$div(style = "width: 55px; text-align: center;", "Factor"),
+      tags$div(style = "width: 55px; text-align: center;", "Linear"),
+      tags$div(style = "width: 50px; text-align: right; padding-right: 4px;", "NAs")
+    )
+
+    # Build rows using numeric index for IDs
+    rows <- lapply(seq_along(candidates), function(i) {
+      col <- candidates[i]
+      n_na <- sum(is.na(rv$data[[col]]))
+      pct_na <- n_na / nrows
+      na_style <- if (pct_na > 0.3) "color: red;" else ""
+
+      tags$div(
+        style = "display: flex; align-items: center; padding: 2px 0; border-bottom: 1px solid #eee;",
+        tags$div(style = "flex: 1; min-width: 120px; font-size: 0.82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                 title = col, col),
+        tags$div(style = "width: 45px; text-align: center;",
+                 tags$input(type = "checkbox", id = paste0("eui_inc_", i),
+                            class = "eui-var-cb")),
+        tags$div(style = "width: 55px; text-align: center;",
+                 tags$input(type = "checkbox", id = paste0("eui_fac_", i),
+                            class = "eui-var-cb")),
+        tags$div(style = "width: 55px; text-align: center;",
+                 tags$input(type = "checkbox", id = paste0("eui_lin_", i),
+                            class = "eui-var-cb")),
+        tags$div(style = paste0("width: 50px; text-align: right; font-size: 0.8em; padding-right: 4px;", na_style),
+                 if (n_na > 0L) as.character(n_na) else "")
+      )
+    })
+
+    # JavaScript: sync checkboxes <-> Shiny inputs, with localStorage persistence
+    col_json <- jsonlite::toJSON(candidates, auto_unbox = FALSE)
+    n_cols <- length(candidates)
+    js <- tags$script(HTML(sprintf("
+      (function() {
+        var cols = %s;
+        var n = %d;
+        var storageKey = 'earthui_vars_' + %s;
+
+        function gatherState() {
+          var inc = [], fac = [], lin = [];
+          for (var i = 1; i <= n; i++) {
+            if ($('#eui_inc_' + i).is(':checked')) inc.push(cols[i-1]);
+            if ($('#eui_fac_' + i).is(':checked')) fac.push(cols[i-1]);
+            if ($('#eui_lin_' + i).is(':checked')) lin.push(cols[i-1]);
+          }
+          Shiny.setInputValue('predictors', inc.length > 0 ? inc : null);
+          Shiny.setInputValue('categoricals', fac.length > 0 ? fac : null);
+          Shiny.setInputValue('linpreds', lin.length > 0 ? lin : null);
+        }
+
+        function saveState() {
+          var state = {};
+          for (var i = 1; i <= n; i++) {
+            state[cols[i-1]] = {
+              inc: $('#eui_inc_' + i).is(':checked'),
+              fac: $('#eui_fac_' + i).is(':checked'),
+              lin: $('#eui_lin_' + i).is(':checked')
+            };
+          }
+          try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
+        }
+
+        function restoreState() {
+          var saved = null;
+          try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
+          if (saved) {
+            for (var i = 1; i <= n; i++) {
+              var s = saved[cols[i-1]];
+              if (s) {
+                $('#eui_inc_' + i).prop('checked', s.inc);
+                $('#eui_fac_' + i).prop('checked', s.fac);
+                $('#eui_lin_' + i).prop('checked', s.lin);
+              }
+            }
+          }
+        }
+
+        // Restore saved state, then sync to Shiny
+        restoreState();
+        setTimeout(gatherState, 200);
+
+        // On any checkbox change, save and sync
+        $(document).off('change.euivar').on('change.euivar', '.eui-var-cb', function() {
+          saveState();
+          gatherState();
+        });
+      })();
+    ", col_json, n_cols, jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
+
+    tagList(header, rows, js)
   })
 
   # --- Allowed Interaction Matrix ---
@@ -69,7 +182,6 @@ function(input, output, session) {
       return(p("Need at least 2 predictors for interactions."))
     }
 
-    # Build upper triangular checkboxes
     n <- length(preds)
     rows <- list()
     for (i in seq_len(n - 1)) {
@@ -91,7 +203,6 @@ function(input, output, session) {
     )
   })
 
-  # Helper: collect the allowed matrix from UI checkboxes
   get_allowed_matrix <- reactive({
     req(input$predictors)
     preds <- input$predictors
@@ -119,13 +230,11 @@ function(input, output, session) {
 
     degree <- as.integer(input$degree)
 
-    # Build allowed function if degree >= 2
     allowed_func <- NULL
     if (degree >= 2) {
       allowed_func <- build_allowed_function(get_allowed_matrix())
     }
 
-    # Collect advanced parameters (NA -> NULL)
     na_to_null <- function(x) if (is.na(x) || is.null(x)) NULL else x
 
     nprune <- na_to_null(input$nprune)
@@ -142,6 +251,7 @@ function(input, output, session) {
     }
 
     pmethod <- input$pmethod
+    linpreds <- input$linpreds
 
     tryCatch({
       rv$result <- fit_earth(
@@ -149,6 +259,7 @@ function(input, output, session) {
         target = input$target,
         predictors = input$predictors,
         categoricals = input$categoricals,
+        linpreds = linpreds,
         degree = degree,
         allowed_func = allowed_func,
         nfold = nfold,

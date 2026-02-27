@@ -10,6 +10,7 @@ fluidPage(
       h4("1. Import Data"),
       fileInput("file_input", "Choose CSV or Excel file",
                 accept = c(".csv", ".xlsx", ".xls")),
+      uiOutput("sheet_selector"),
       uiOutput("data_preview_info"),
       hr(),
 
@@ -18,8 +19,11 @@ fluidPage(
         condition = "output.data_loaded",
         h4("2. Variable Configuration"),
         uiOutput("target_selector"),
-        uiOutput("predictor_selector"),
-        uiOutput("categorical_selector"),
+        h5("Predictor Settings"),
+        tags$p(style = "font-size: 0.8em; color: #666; margin-bottom: 5px;",
+               "Inc = include as predictor, Factor = treat as categorical, Linear = linear-only (no hinges)"),
+        div(style = "max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 4px;",
+            uiOutput("variable_table")),
         hr(),
 
         # --- Model Configuration ---
