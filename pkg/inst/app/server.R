@@ -486,7 +486,7 @@ function(input, output, session) {
   output$model_equation <- renderUI({
     req(rv$result)
     eq <- format_model_equation(rv$result)
-    withMathJax(HTML(eq$latex_inline))
+    HTML(eq$html)
   })
 
   output$summary_table <- DT::renderDataTable({

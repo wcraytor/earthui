@@ -9,6 +9,9 @@ fluidPage(
     .eui-popup-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border-radius: 8px; padding: 20px; max-width: 80vw; max-height: 70vh; overflow: auto; z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
     .eui-popup-content pre { white-space: pre-wrap; word-wrap: break-word; margin-bottom: 12px; font-size: 0.9em; }
     .eui-popup-close { float: right; }
+    .eui-equation { margin-left: 1in; border-collapse: collapse; font-family: 'Cambria Math', 'Latin Modern Math', 'STIX Two Math', 'Times New Roman', Georgia, serif; font-size: 1.05em; }
+    .eui-eq-label { vertical-align: top; white-space: nowrap; padding-right: 2em; text-align: left; font-weight: bold; padding-bottom: 0.4em; }
+    .eui-eq-expr { text-align: left; vertical-align: top; padding-bottom: 0.4em; }
   "))),
   titlePanel("earthui - Interactive Earth Model Builder"),
 

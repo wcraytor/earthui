@@ -298,60 +298,69 @@ format_model_equation <- function(earth_result, digits = 7L) {
   group_degrees <- vapply(groups, `[[`, integer(1), "degree")
   groups <- groups[order(group_degrees)]
 
-  # Assign g-function labels
-  degree_counters <- integer(0)
+  # Assign labels
   for (g_idx in seq_along(groups)) {
     j <- groups[[g_idx]]$degree
-    j_chr <- as.character(j)
-    if (is.na(degree_counters[j_chr])) degree_counters[j_chr] <- 0L
-    degree_counters[j_chr] <- degree_counters[j_chr] + 1L
-    k <- degree_counters[j_chr]
-    f <- groups[[g_idx]]$n_factors
-
-    groups[[g_idx]]$k <- k
-    groups[[g_idx]]$g_label <- sprintf("{}^{%d}g_{%d}^{%d}", f, k, j)
-
     if (j == 0L) {
       groups[[g_idx]]$label <- "Basis"
     } else {
-      groups[[g_idx]]$label <- paste(
-        vapply(groups[[g_idx]]$base_vars, latex_escape_text_, character(1)),
-        collapse = "\\_"
-      )
+      groups[[g_idx]]$label <- paste(groups[[g_idx]]$base_vars, collapse = ", ")
     }
   }
 
-  # Build LaTeX lines
-  lines <- character(0)
+  # Build HTML two-column table
+  html_rows <- character(0)
+  for (g_idx in seq_along(groups)) {
+    grp <- groups[[g_idx]]
+    eq_parts <- character(0)
+    for (t_idx in seq_along(grp$terms)) {
+      term <- grp$terms[[t_idx]]
+      is_first <- (t_idx == 1L)
+      eq_parts <- c(eq_parts, format_term_html_(term, is_first, digits))
+    }
+    eq_str <- paste(eq_parts, collapse = "<br>")
+    label_html <- html_escape_(grp$label)
+    html_rows <- c(html_rows, sprintf(
+      "<tr><td class=\"eui-eq-label\">%s:</td><td class=\"eui-eq-expr\">%s</td></tr>",
+      label_html, eq_str
+    ))
+  }
+
+  html <- paste0(
+    "<table class=\"eui-equation\">\n",
+    paste(html_rows, collapse = "\n"),
+    "\n</table>"
+  )
+
+  # Build LaTeX (for Quarto/PDF reports)
+  latex_lines <- character(0)
   for (g_idx in seq_along(groups)) {
     grp <- groups[[g_idx]]
     for (t_idx in seq_along(grp$terms)) {
       term <- grp$terms[[t_idx]]
       is_first <- (t_idx == 1L)
       term_str <- format_term_latex_(term, is_first, digits)
-
+      label_tex <- latex_escape_text_(grp$label)
       if (is_first) {
-        line <- sprintf("  \\text{%s} & = & %s \\; = \\; %s",
-                        grp$label, grp$g_label, term_str)
+        line <- sprintf("  \\text{%s:} & %s", label_tex, term_str)
       } else {
-        line <- sprintf("  & & \\quad \\quad \\quad \\quad %s", term_str)
+        line <- sprintf("  & %s", term_str)
       }
-      lines <- c(lines, paste0(line, " \\\\"))
+      latex_lines <- c(latex_lines, paste0(line, " \\\\"))
     }
   }
-
-  # Remove trailing \\  from last line
-  if (length(lines) > 0L) {
-    lines[length(lines)] <- sub(" \\\\\\\\$", "", lines[length(lines)])
+  if (length(latex_lines) > 0L) {
+    latex_lines[length(latex_lines)] <- sub(" \\\\\\\\$", "",
+                                            latex_lines[length(latex_lines)])
   }
-
   latex <- paste0(
-    "\\begin{array}{l@{\\hspace{2em}}r@{\\hspace{1em}}l}\n",
-    paste(lines, collapse = "\n"),
+    "\\begin{array}{l l}\n",
+    paste(latex_lines, collapse = "\n"),
     "\n\\end{array}"
   )
 
   result <- list(
+    html         = html,
     latex        = latex,
     latex_inline = paste0("$$\n", latex, "\n$$"),
     groups       = groups
@@ -464,6 +473,56 @@ format_term_latex_ <- function(term_info, is_first, digits) {
       paste0("-", abs_coef_str, " \\cdot ", product)
     }
   }
+}
+
+#' Escape HTML special characters
+#' @keywords internal
+#' @noRd
+html_escape_ <- function(x) {
+  x <- gsub("&", "&amp;", x, fixed = TRUE)
+  x <- gsub("<", "&lt;", x, fixed = TRUE)
+  x <- gsub(">", "&gt;", x, fixed = TRUE)
+  x
+}
+
+#' Format one hinge/indicator/linear component as plain text (HTML)
+#' @keywords internal
+#' @noRd
+format_component_html_ <- function(comp) {
+  var <- comp$base_var
+
+  if (comp$is_factor) {
+    sprintf("I{%s = %s}", var, comp$level)
+  } else if (comp$dir == 2) {
+    var
+  } else if (comp$dir == 1) {
+    sprintf("max(0, %s - %s)", var, format_number_(comp$cut))
+  } else {
+    sprintf("max(0, %s - %s)", format_number_(comp$cut), var)
+  }
+}
+
+#' Format a complete term as plain text (HTML)
+#' @keywords internal
+#' @noRd
+format_term_html_ <- function(term_info, is_first, digits) {
+  coef <- term_info$coefficient
+
+  if (term_info$degree == 0L) {
+    return(html_escape_(format_number_(coef, digits)))
+  }
+
+  comp_strs <- vapply(term_info$components, format_component_html_, character(1))
+  product <- paste(comp_strs, collapse = " * ")
+
+  if (is_first) {
+    txt <- paste0(format_number_(coef, digits), " * ", product)
+  } else {
+    abs_str <- format_number_(abs(coef), digits)
+    sign <- if (coef >= 0) "+" else "-"
+    txt <- paste0(sign, " ", abs_str, " * ", product)
+  }
+  html_escape_(txt)
 }
 
 #' Validate earthui_result object
