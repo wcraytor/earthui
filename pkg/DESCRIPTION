@@ -1,0 +1,39 @@
+Package: earthui
+Title: Interactive GUI for Enhanced Adaptive Regression Through Hinges
+Version: 0.1.0
+Authors@R:
+    person("ValEngr", "Team", , "team@valengr.com", role = c("aut", "cre"))
+Description: Provides a Shiny-based graphical user interface for the 'earth'
+    package, enabling interactive building and exploration of multivariate
+    adaptive regression spline models. Features include data import from CSV
+    and Excel files, automatic detection of categorical variables, interactive
+    control of interaction terms via an allowed matrix, comprehensive model
+    diagnostics with variable importance and partial dependence plots, and
+    publication-quality report generation via 'Quarto'.
+License: GPL (>= 3)
+URL: https://github.com/valengr/earthui
+BugReports: https://github.com/valengr/earthui/issues
+Depends:
+    R (>= 4.1.0)
+Imports:
+    earth (>= 5.3.0),
+    shiny,
+    readxl,
+    ggplot2,
+    stats,
+    utils,
+    tools
+Suggests:
+    DT,
+    bslib,
+    plotly,
+    quarto,
+    roxygen2,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+Config/testthat/edition: 3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+VignetteBuilder: knitr
