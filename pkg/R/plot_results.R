@@ -170,7 +170,7 @@ plot_residuals <- function(earth_result) {
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
-#' @keywords internal
+#' @export
 plot_qq <- function(earth_result) {
   validate_earthui_result(earth_result)
   model <- earth_result$model

@@ -8,7 +8,7 @@ format_variable_importance(earth_result)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
-\code{\link{fit_earth}}.}
+\code{\link[=fit_earth]{fit_earth()}}.}
 }
 \value{
 A data frame with columns \code{variable}, \code{nsubsets}, \code{gcv}, and \code{rss},
@@ -16,7 +16,7 @@ sorted by overall importance (nsubsets).
 }
 \description{
 Extracts variable importance scores from a fitted earth model using
-\code{\link[earth]{evimp}}.
+\code{\link[earth:evimp]{earth::evimp()}}.
 }
 \examples{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))

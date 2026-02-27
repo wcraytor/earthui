@@ -8,7 +8,7 @@ plot_partial_dependence(earth_result, variable, n_grid = 50L)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
-\code{\link{fit_earth}}.}
+\code{\link[=fit_earth]{fit_earth()}}.}
 
 \item{variable}{Character string. Name of the predictor variable to plot.}
 
@@ -16,7 +16,7 @@ plot_partial_dependence(earth_result, variable, n_grid = 50L)
 calculation. Default is 50.}
 }
 \value{
-A \code{\link[ggplot2]{ggplot}} object.
+A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 }
 \description{
 Creates a partial dependence plot for a selected variable from a fitted

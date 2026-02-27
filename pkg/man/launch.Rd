@@ -7,7 +7,7 @@
 launch(...)
 }
 \arguments{
-\item{\dots}{Additional arguments passed to \code{\link[shiny]{runApp}}.}
+\item{...}{Additional arguments passed to \code{\link[shiny:runApp]{shiny::runApp()}}.}
 }
 \value{
 This function does not return a value; it launches the Shiny app.

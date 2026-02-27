@@ -41,7 +41,7 @@ the model linearly (no hinge functions). Default is \code{NULL}.}
 (no interactions). When >= 2, cross-validation is automatically enabled.}
 
 \item{allowed_func}{Function or \code{NULL}. An allowed function as returned by
-\code{\link{build_allowed_function}}. Only used when \code{degree >= 2}.}
+\code{\link[=build_allowed_function]{build_allowed_function()}}. Only used when \code{degree >= 2}.}
 
 \item{nfold}{Integer. Number of cross-validation folds. Automatically set
 to 10 when \code{degree >= 2} unless explicitly provided. Set to 0 to disable.}
@@ -69,22 +69,22 @@ step of the forward pass. Default is earth's default (20).}
 \item{glm}{List or \code{NULL}. If provided, passed to earth's \code{glm} argument
 to fit a GLM on the earth basis functions.}
 
-\item{\dots}{Additional arguments passed to \code{\link[earth]{earth}}.}
+\item{...}{Additional arguments passed to \code{\link[earth:earth]{earth::earth()}}.}
 }
 \value{
 A list with class \code{"earthui_result"} containing:
 \describe{
-  \item{model}{The fitted earth model object.}
-  \item{target}{Name of the response variable.}
-  \item{predictors}{Names of predictor variables used.}
-  \item{categoricals}{Names of categorical predictors.}
-  \item{degree}{Degree of interaction used.}
-  \item{cv_enabled}{Logical; whether cross-validation was used.}
-  \item{data}{The data frame used for fitting.}
+\item{model}{The fitted earth model object.}
+\item{target}{Name of the response variable.}
+\item{predictors}{Names of predictor variables used.}
+\item{categoricals}{Names of categorical predictors.}
+\item{degree}{Degree of interaction used.}
+\item{cv_enabled}{Logical; whether cross-validation was used.}
+\item{data}{The data frame used for fitting.}
 }
 }
 \description{
-Wrapper around \code{\link[earth]{earth}} with parameter validation and automatic
+Wrapper around \code{\link[earth:earth]{earth::earth()}} with parameter validation and automatic
 cross-validation when interaction terms are enabled.
 }
 \examples{

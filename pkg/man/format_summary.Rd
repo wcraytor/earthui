@@ -8,20 +8,20 @@ format_summary(earth_result)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
-\code{\link{fit_earth}}.}
+\code{\link[=fit_earth]{fit_earth()}}.}
 }
 \value{
 A list containing:
 \describe{
-  \item{coefficients}{Data frame of model coefficients and basis functions.}
-  \item{r_squared}{Training R-squared.}
-  \item{gcv}{Generalized cross-validation value.}
-  \item{grsq}{Generalized R-squared (1 - GCV/variance).}
-  \item{rss}{Residual sum of squares.}
-  \item{n_terms}{Number of terms in the pruned model.}
-  \item{n_predictors}{Number of predictors used in the final model.}
-  \item{n_obs}{Number of observations.}
-  \item{cv_rsq}{Cross-validated R-squared (if CV was used, else NA).}
+\item{coefficients}{Data frame of model coefficients and basis functions.}
+\item{r_squared}{Training R-squared.}
+\item{gcv}{Generalized cross-validation value.}
+\item{grsq}{Generalized R-squared (1 - GCV/variance).}
+\item{rss}{Residual sum of squares.}
+\item{n_terms}{Number of terms in the pruned model.}
+\item{n_predictors}{Number of predictors used in the final model.}
+\item{n_obs}{Number of observations.}
+\item{cv_rsq}{Cross-validated R-squared (if CV was used, else NA).}
 }
 }
 \description{

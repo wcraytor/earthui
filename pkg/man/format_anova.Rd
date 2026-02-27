@@ -8,7 +8,7 @@ format_anova(earth_result)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
-\code{\link{fit_earth}}.}
+\code{\link[=fit_earth]{fit_earth()}}.}
 }
 \value{
 A data frame with the ANOVA decomposition showing which predictors

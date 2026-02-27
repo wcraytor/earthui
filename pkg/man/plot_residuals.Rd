@@ -8,10 +8,11 @@ plot_residuals(earth_result)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
-\code{\link{fit_earth}}.}
+\code{\link[=fit_earth]{fit_earth()}}.}
 }
 \value{
-A \code{\link[ggplot2]{ggplot}} object showing residuals vs fitted values.
+A \link[ggplot2:ggplot]{ggplot2::ggplot} object showing residuals vs fitted values.
+Use \code{\link[=plot_qq]{plot_qq()}} for the Q-Q plot separately.
 }
 \description{
 Creates a two-panel diagnostic plot: residuals vs fitted values and

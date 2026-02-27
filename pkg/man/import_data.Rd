@@ -13,14 +13,14 @@ import_data(filepath, sheet = 1, ...)
 \item{sheet}{Character or integer. For Excel files, the sheet to read.
 Defaults to the first sheet. Ignored for CSV files.}
 
-\item{\dots}{Additional arguments passed to \code{\link[utils]{read.csv}} or
-\code{\link[readxl]{read_excel}}.}
+\item{...}{Additional arguments passed to \code{\link[utils:read.table]{utils::read.csv()}} or
+\code{\link[readxl:read_excel]{readxl::read_excel()}}.}
 }
 \value{
 A data frame with column names preserved from the source file.
 }
 \description{
-Reads a CSV (\code{.csv}) or Excel (\code{.xlsx}, \code{.xls}) file and returns a data frame
+Reads a CSV (.csv) or Excel (.xlsx, .xls) file and returns a data frame
 with column names preserved exactly as they appear in the source file.
 }
 \examples{

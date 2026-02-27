@@ -6,42 +6,18 @@
 \alias{earthui-package}
 \title{earthui: Interactive GUI for Enhanced Adaptive Regression Through Hinges}
 \description{
-Provides a Shiny-based graphical user interface for the \pkg{earth}
-package, enabling interactive building and exploration of multivariate
-adaptive regression spline models. Features include data import from CSV
-and Excel files, automatic detection of categorical variables, interactive
-control of interaction terms via an allowed matrix, comprehensive model
-diagnostics with variable importance and partial dependence plots, and
-publication-quality report generation via \pkg{Quarto}.
+Provides a Shiny-based graphical user interface for the 'earth' package, enabling interactive building and exploration of multivariate adaptive regression spline models. Features include data import from CSV and Excel files, automatic detection of categorical variables, interactive control of interaction terms via an allowed matrix, comprehensive model diagnostics with variable importance and partial dependence plots, and publication-quality report generation via 'Quarto'.
 }
-\section{Main functions}{
-
-\describe{
-  \item{\code{\link{launch}}}{Launch the interactive Shiny application.}
-  \item{\code{\link{import_data}}}{Import data from CSV or Excel files.}
-  \item{\code{\link{detect_categoricals}}}{Detect likely categorical variables.}
-  \item{\code{\link{build_allowed_matrix}}}{Build an allowed interaction matrix.}
-  \item{\code{\link{build_allowed_function}}}{Convert the matrix to an earth-compatible function.}
-  \item{\code{\link{fit_earth}}}{Fit an earth (MARS) model with parameter validation.}
-  \item{\code{\link{format_summary}}}{Extract model summary statistics.}
-  \item{\code{\link{format_anova}}}{Extract the ANOVA decomposition.}
-  \item{\code{\link{format_variable_importance}}}{Extract variable importance scores.}
-  \item{\code{\link{plot_variable_importance}}}{Plot variable importance.}
-  \item{\code{\link{plot_partial_dependence}}}{Plot partial dependence for a variable.}
-  \item{\code{\link{plot_residuals}}}{Plot residual diagnostics.}
-  \item{\code{\link{plot_actual_vs_predicted}}}{Plot actual vs predicted values.}
-  \item{\code{\link{render_report}}}{Render a Quarto report of model results.}
-}
-}
-
 \seealso{
 Useful links:
 \itemize{
   \item \url{https://github.com/wcraytor/earthui}
   \item Report bugs at \url{https://github.com/wcraytor/earthui/issues}
 }
+
 }
 \author{
 \strong{Maintainer}: ValEngr Team \email{team@valengr.com}
+
 }
 \keyword{internal}

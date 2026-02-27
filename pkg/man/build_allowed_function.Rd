@@ -8,16 +8,16 @@ build_allowed_function(allowed_matrix)
 }
 \arguments{
 \item{allowed_matrix}{A symmetric logical matrix as returned by
-\code{\link{build_allowed_matrix}}.}
+\code{\link[=build_allowed_matrix]{build_allowed_matrix()}}.}
 }
 \value{
 A function with signature
-\code{function(degree, pred, parents, namesx, first)} suitable for the
-\code{allowed} parameter of \code{\link[earth]{earth}}.
+\verb{function(degree, pred, parents, namesx, first)} suitable for the
+\code{allowed} parameter of \code{\link[earth:earth]{earth::earth()}}.
 }
 \description{
 Converts an allowed interaction matrix into a function compatible with
-the \code{allowed} parameter of \code{\link[earth]{earth}}. The function checks that
+the \code{allowed} parameter of \code{\link[earth:earth]{earth::earth()}}. The function checks that
 ALL pairwise combinations among the predictors in a proposed interaction
 term are TRUE in the matrix.
 }

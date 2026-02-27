@@ -8,13 +8,13 @@ plot_variable_importance(earth_result, type = "nsubsets")
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
-\code{\link{fit_earth}}.}
+\code{\link[=fit_earth]{fit_earth()}}.}
 
 \item{type}{Character. Importance metric to plot: \code{"nsubsets"} (default),
 \code{"gcv"}, or \code{"rss"}.}
 }
 \value{
-A \code{\link[ggplot2]{ggplot}} object.
+A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 }
 \description{
 Creates a horizontal bar chart of variable importance from a fitted

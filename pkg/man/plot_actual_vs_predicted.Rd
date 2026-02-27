@@ -8,10 +8,10 @@ plot_actual_vs_predicted(earth_result)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
-\code{\link{fit_earth}}.}
+\code{\link[=fit_earth]{fit_earth()}}.}
 }
 \value{
-A \code{\link[ggplot2]{ggplot}} object.
+A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 }
 \description{
 Creates a scatter plot of actual vs predicted values with a 1:1 reference

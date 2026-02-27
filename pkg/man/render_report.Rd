@@ -8,7 +8,7 @@ render_report(earth_result, output_format = "html", output_file = NULL)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
-\code{\link{fit_earth}}.}
+\code{\link[=fit_earth]{fit_earth()}}.}
 
 \item{output_format}{Character. Output format: \code{"html"}, \code{"pdf"}, or
 \code{"docx"}. Default is \code{"html"}.}
