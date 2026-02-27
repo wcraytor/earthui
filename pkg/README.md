@@ -56,4 +56,4 @@ plot_partial_dependence(result, "sqft")
 
 ## License
 
-GPL-3
+AGPL-3
