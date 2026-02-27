@@ -70,7 +70,8 @@ knitr::kable(format_variable_importance(result), digits = 4)
 
 ```{r partial-dependence, fig.width=8, fig.height=4, results='asis'}
 imp <- format_variable_importance(result)
-top_vars <- head(imp$variable, 4)
+# Filter to variables that exist in the model data (evimp may include "-unused" entries)
+top_vars <- head(imp$variable[imp$variable %in% names(result$data)], 4)
 
 for (var in top_vars) {
   cat(sprintf("\n### %s\n\n", var))

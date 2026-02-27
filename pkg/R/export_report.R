@@ -39,10 +39,12 @@ render_report <- function(earth_result, output_format = "html",
     output_file <- tempfile(fileext = paste0(".", output_format))
   }
 
-  # Create a temporary directory for rendering
-
+  # Create a temporary directory for rendering.
+  # Use normalizePath to resolve symlinks (e.g. /var -> /private/var on macOS)
+  # which prevents Quarto cleanup errors with path mismatch.
   tmp_dir <- tempfile("earthui_report_")
   dir.create(tmp_dir, recursive = TRUE)
+  tmp_dir <- normalizePath(tmp_dir)
   on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
 
   # Copy template
@@ -60,10 +62,20 @@ render_report <- function(earth_result, output_format = "html",
     docx = "docx"
   )
 
-  quarto::quarto_render(
-    input = tmp_qmd,
-    output_format = quarto_format,
-    execute_params = list(result_file = result_file)
+  # Quarto may error during cleanup on macOS due to symlink path mismatches.
+  # Catch that error and check if the output was actually produced.
+  tryCatch(
+    quarto::quarto_render(
+      input = tmp_qmd,
+      output_format = quarto_format,
+      execute_params = list(result_file = result_file)
+    ),
+    error = function(e) {
+      # Check if the rendered file exists despite the error
+      rendered <- list.files(tmp_dir,
+                             pattern = paste0("\\.", output_format, "$"))
+      if (length(rendered) == 0L) stop(e)
+    }
   )
 
   # Find the rendered file
