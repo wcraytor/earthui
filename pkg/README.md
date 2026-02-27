@@ -10,9 +10,27 @@ without writing code.
 ## Installation
 
 ```r
-# Install from GitHub
-# install.packages("remotes")
+# Install remotes if needed
+install.packages("remotes")
+
+# Install earthui from GitHub
 remotes::install_github("wcraytor/earthui")
+```
+
+### Optional: Report Export
+
+To export reports (HTML, PDF, or Word), install the
+[Quarto CLI](https://quarto.org/docs/get-started/) and the R package:
+
+```r
+install.packages("quarto")
+```
+
+For PDF reports, a LaTeX distribution is also required:
+
+```r
+install.packages("tinytex")
+tinytex::install_tinytex()
 ```
 
 ## Quick Start
