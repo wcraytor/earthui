@@ -11,8 +11,8 @@ Description: Provides a Shiny-based graphical user interface for the 'earth'
     diagnostics with variable importance and partial dependence plots, and
     publication-quality report generation via 'Quarto'.
 License: GPL (>= 3)
-URL: https://github.com/valengr/earthui
-BugReports: https://github.com/valengr/earthui/issues
+URL: https://github.com/wcraytor/earthui
+BugReports: https://github.com/wcraytor/earthui/issues
 Depends:
     R (>= 4.1.0)
 Imports:

@@ -14,7 +14,7 @@ without writing code.
 install.packages("earthui")
 
 # Or install the development version
-# devtools::install_github("valengr/earthui")
+# devtools::install_github("wcraytor/earthui")
 ```
 
 ## Quick Start

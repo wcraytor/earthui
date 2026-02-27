@@ -37,8 +37,8 @@ publication-quality report generation via \pkg{Quarto}.
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/valengr/earthui}
-  \item Report bugs at \url{https://github.com/valengr/earthui/issues}
+  \item \url{https://github.com/wcraytor/earthui}
+  \item Report bugs at \url{https://github.com/wcraytor/earthui/issues}
 }
 }
 \author{
