@@ -158,8 +158,18 @@ function(input, output, session) {
           try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
         }
 
-        // Restore after selectize initializes
-        setTimeout(restoreSettings, 500);
+        // Restore after selectize initializes (retry until target is ready)
+        var attempts = 0;
+        function tryRestore() {
+          var el = document.getElementById('target');
+          if (el && el.selectize && el.selectize.isSetup) {
+            restoreSettings();
+          } else if (attempts < 20) {
+            attempts++;
+            setTimeout(tryRestore, 250);
+          }
+        }
+        tryRestore();
 
         // Save on any tracked input change
         $(document).off('shiny:inputchanged.euisettings')
