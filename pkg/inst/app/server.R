@@ -636,19 +636,6 @@ function(input, output, session) {
     dt
   })
 
-  # --- Results: Partial Dependence ---
-  output$pd_variable_selector <- renderUI({
-    req(rv$result)
-    imp <- format_variable_importance(rv$result)
-    vars <- if (nrow(imp) > 0) imp$variable else rv$result$predictors
-    selectInput("pd_variable", "Select variable", choices = vars)
-  })
-
-  output$pd_plot <- renderPlot({
-    req(rv$result, input$pd_variable)
-    plot_partial_dependence(rv$result, input$pd_variable)
-  })
-
   # --- Results: Contribution ---
   output$contrib_variable_selector <- renderUI({
     req(rv$result)

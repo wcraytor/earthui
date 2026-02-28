@@ -73,21 +73,6 @@ plot_variable_importance(result)
 knitr::kable(format_variable_importance(result), digits = 4)
 ```
 
-## Partial Dependence
-
-```{r partial-dependence, fig.width=8, fig.height=4, results='asis'}
-imp <- format_variable_importance(result)
-# Filter to variables that exist in the model data (evimp may include "-unused" entries)
-top_vars <- head(imp$variable[imp$variable %in% names(result$data)], 4)
-
-for (var in top_vars) {
-  cat(sprintf("\n### %s\n\n", var))
-  p <- plot_partial_dependence(result, var)
-  print(p)
-  cat("\n\n")
-}
-```
-
 ## Variable Contribution
 
 ```{r contribution, fig.width=8, fig.height=4, results='asis'}

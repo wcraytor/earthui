@@ -12,6 +12,23 @@ fluidPage(
     .eui-equation { margin-left: 1in; border-collapse: collapse; font-family: 'Cambria Math', 'Latin Modern Math', 'STIX Two Math', 'Times New Roman', Georgia, serif; font-size: 1.05em; }
     .eui-eq-label { vertical-align: top; white-space: nowrap; padding-right: 2em; text-align: left; font-weight: bold; padding-bottom: 0.4em; }
     .eui-eq-expr { text-align: left; vertical-align: top; padding-bottom: 0.4em; }
+    .eui-param-help { position: absolute; top: 0; right: 0; width: 18px; height: 18px; border-radius: 50%; background: #5bc0de; color: #fff; font-size: 11px; font-weight: bold; text-align: center; line-height: 18px; cursor: pointer; z-index: 10; }
+    .eui-param-help:hover { background: #31b0d5; }
+  ")),
+  tags$script(HTML("
+    $(document).on('shiny:connected', function() {
+      function initPopovers() {
+        var els = document.querySelectorAll('[data-bs-toggle=\"popover\"]');
+        els.forEach(function(el) {
+          if (!bootstrap.Popover.getInstance(el)) {
+            new bootstrap.Popover(el, { html: false, container: 'body' });
+          }
+        });
+      }
+      initPopovers();
+      var obs = new MutationObserver(function() { setTimeout(initPopovers, 200); });
+      obs.observe(document.body, { childList: true, subtree: true });
+    });
   "))),
   titlePanel("earthui - Interactive Earth Model Builder"),
 
@@ -41,7 +58,7 @@ fluidPage(
 
         # --- Model Configuration ---
         h4("3. Model Configuration"),
-        selectInput("degree", "Degree (max interaction order)",
+        selectInput("degree", "Max interaction order (degree)",
                     choices = 1:4, selected = 1),
         conditionalPanel(
           condition = "input.degree >= 2",
@@ -71,71 +88,114 @@ fluidPage(
                          style = "margin-bottom: 10px; width: 100%;"),
 
             h6("Forward Pass", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
-            numericInput("nk", "Max terms before pruning (nk)",
-                         value = NA, min = 1, step = 1),
-            numericInput("thresh", "Forward step threshold",
-                         value = 0.001, min = 0, step = 0.0001),
-            numericInput("penalty", "GCV penalty per knot",
-                         value = NA, min = -1, step = 0.5),
-            numericInput("minspan", "Min span", value = NA, step = 1),
-            numericInput("endspan", "End span", value = NA, min = 0, step = 1),
-            numericInput("newvar_penalty", "New variable penalty",
-                         value = 0, min = 0, step = 0.01),
-            numericInput("fast_k", "fast.k", value = 20, min = 0, step = 1),
-            numericInput("fast_beta", "fast.beta", value = 1, min = 0, step = 0.1),
-            checkboxInput("auto_linpreds", "Auto.linpreds", value = TRUE),
+            param_with_help(
+              numericInput("nk", "Max terms before pruning (nk)", value = NA, min = 1, step = 1),
+              "Maximum number of model terms before pruning (includes intercept). Default is semi-automatically calculated from the number of predictors."),
+            param_with_help(
+              numericInput("thresh", "Forward step threshold (thresh)", value = 0.001, min = 0, step = 0.0001),
+              "Forward pass terminates if adding a term changes RSq by less than this value. Default 0.001."),
+            param_with_help(
+              numericInput("penalty", "GCV penalty per knot (penalty)", value = NA, min = -1, step = 0.5),
+              "GCV penalty per knot. Default is 3 if degree>1, else 2. Use 0 to penalize only terms. Use -1 for no penalty (GCV = RSS/n)."),
+            param_with_help(
+              numericInput("minspan", "Min span (minspan)", value = NA, step = 1),
+              "Minimum observations between knots. Default 0 = auto-calculated. Negative values specify max knots per predictor (e.g., -3 = three evenly spaced knots)."),
+            param_with_help(
+              numericInput("endspan", "End span (endspan)", value = NA, min = 0, step = 1),
+              "Minimum observations before first and after last knot. Default 0 = auto-calculated. Be wary of reducing this for predictions near data limits."),
+            param_with_help(
+              numericInput("newvar_penalty", "New variable penalty (newvar.penalty)", value = 0, min = 0, step = 0.01),
+              "Penalty for adding a new variable (Friedman's gamma). Default 0. Non-zero values (0.01-0.2) prefer reusing existing variables, simplifying interpretation."),
+            param_with_help(
+              numericInput("fast_k", "fast.k", value = 20, min = 0, step = 1),
+              "Max parent terms per forward step (Fast MARS). Default 20. Set 0 to disable. Lower = faster, higher = potentially better model."),
+            param_with_help(
+              numericInput("fast_beta", "fast.beta", value = 1, min = 0, step = 0.1),
+              "Fast MARS ageing coefficient. Default 1. A value of 0 sometimes gives better results."),
+            param_with_help(
+              checkboxInput("auto_linpreds", "Auto.linpreds", value = TRUE),
+              "Default TRUE. If the best knot is at the predictor minimum, add the predictor linearly (no hinge). Only affects predictions outside training data range."),
 
             h6("Pruning", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
-            selectInput("pmethod", "Pruning method",
-                        choices = c("backward", "none", "exhaustive",
-                                    "forward", "seqrep", "cv"),
-                        selected = "backward"),
-            numericInput("nprune", "Max terms after pruning (nprune)",
-                         value = NA, min = 1, step = 1),
+            param_with_help(
+              selectInput("pmethod", "Pruning method (pmethod)",
+                          choices = c("backward", "none", "exhaustive", "forward", "seqrep", "cv"),
+                          selected = "backward"),
+              "Pruning method. Default 'backward'. Use 'cv' with nfold to select terms by cross-validation. Use 'none' to retain all forward pass terms."),
+            param_with_help(
+              numericInput("nprune", "Max terms after pruning (nprune)", value = NA, min = 1, step = 1),
+              "Maximum terms (including intercept) in pruned model. Default NULL = all terms from forward pass, after pruning."),
 
             h6("Cross Validation", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
-            numericInput("nfold_override", "CV folds (nfold)",
-                         value = NA, min = 0, step = 1),
-            numericInput("ncross", "Number of cross-validations (ncross)",
-                         value = 1, min = 1, step = 1),
-            checkboxInput("stratify", "Stratify CV samples", value = TRUE),
+            param_with_help(
+              numericInput("nfold_override", "CV folds (nfold)", value = NA, min = 0, step = 1),
+              "Number of CV folds. Default 0 (no CV). Auto-set to 10 when degree >= 2. Use trace=0.5 to trace CV."),
+            param_with_help(
+              numericInput("ncross", "ncross", value = 1, min = 1, step = 1),
+              "Number of cross-validations (each has nfold folds). Default 1. Use higher values (e.g., 30) with variance models."),
+            param_with_help(
+              checkboxInput("stratify", "Stratify CV samples (stratify)", value = TRUE),
+              "Default TRUE. Stratify CV samples so each fold has approximately equal response distribution."),
 
             h6("Variance Model", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
-            selectInput("varmod_method", "varmod.method",
-                        choices = c("none", "const", "lm", "rlm", "earth",
-                                    "gam", "power", "power0",
-                                    "x.lm", "x.rlm", "x.earth", "x.gam"),
-                        selected = "none"),
-            numericInput("varmod_exponent", "varmod.exponent",
-                         value = 1, min = 0, step = 0.1),
-            numericInput("varmod_conv", "varmod.conv",
-                         value = 1, step = 0.1),
-            numericInput("varmod_clamp", "varmod.clamp",
-                         value = 0.1, min = 0, step = 0.01),
-            numericInput("varmod_minspan", "varmod.minspan",
-                         value = -3, step = 1),
+            param_with_help(
+              selectInput("varmod_method", "varmod.method",
+                          choices = c("none", "const", "lm", "rlm", "earth", "gam",
+                                      "power", "power0", "x.lm", "x.rlm", "x.earth", "x.gam"),
+                          selected = "none"),
+              "Variance model method. Requires nfold and ncross. Use trace=0.3 to trace. 'lm','rlm','earth','gam' regress on predicted response; 'x.*' variants regress on predictors."),
+            param_with_help(
+              numericInput("varmod_exponent", "varmod.exponent", value = 1, min = 0, step = 0.1),
+              "Power transform for residual regression. Default 1. Use 0.5 if std dev increases with square root of response."),
+            param_with_help(
+              numericInput("varmod_conv", "varmod.conv", value = 1, step = 0.1),
+              "Convergence criterion (%) for IRLS in variance model. Default 1. Negative values force that many iterations."),
+            param_with_help(
+              numericInput("varmod_clamp", "varmod.clamp", value = 0.1, min = 0, step = 0.01),
+              "Min estimated std dev = varmod.clamp * mean(sd(residuals)). Default 0.1. Prevents negative or tiny std dev estimates."),
+            param_with_help(
+              numericInput("varmod_minspan", "varmod.minspan", value = -3, step = 1),
+              "minspan for internal earth call in variance model. Default -3 (three evenly spaced knots per predictor)."),
 
             h6("GLM", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
-            selectInput("glm_family", "GLM family",
-                        choices = c("none", "gaussian", "binomial", "poisson"),
-                        selected = "none"),
+            param_with_help(
+              selectInput("glm_family", "GLM family (glm)",
+                          choices = c("none", "gaussian", "binomial", "poisson"),
+                          selected = "none"),
+              "Optional GLM family applied to earth basis functions. Example: 'binomial' for binary outcomes."),
 
             h6("Other", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
-            selectInput("trace", "Trace level",
-                        choices = c("0" = "0", "0.3" = "0.3", "0.5" = "0.5",
-                                    "1" = "1", "2" = "2", "3" = "3",
-                                    "4" = "4", "5" = "5"),
-                        selected = "0"),
-            checkboxInput("keepxy", "Keep x,y in model (keepxy)", value = FALSE),
-            checkboxInput("scale_y", "Scale response (Scale.y)", value = TRUE),
-            numericInput("adjust_endspan", "Adjust.endspan",
-                         value = 2, min = 1, step = 0.5),
-            numericInput("exhaustive_tol", "Exhaustive.tol",
-                         value = 1e-10, min = 0, step = 1e-11),
-            checkboxInput("use_beta_cache", "Use.beta.cache", value = TRUE),
-            checkboxInput("force_xtx_prune", "Force.xtx.prune", value = FALSE),
-            checkboxInput("get_leverages", "Get.leverages", value = TRUE),
-            checkboxInput("force_weights", "Force.weights", value = FALSE)
+            param_with_help(
+              selectInput("trace", "Trace level (trace)",
+                          choices = c("0" = "0", "0.3" = "0.3", "0.5" = "0.5",
+                                      "1" = "1", "2" = "2", "3" = "3",
+                                      "4" = "4", "5" = "5"),
+                          selected = "0"),
+              "0=none, 0.3=variance model, 0.5=CV, 1=overview, 2=forward pass, 3=pruning, 4=model mats/pruning details, 5=full details."),
+            param_with_help(
+              checkboxInput("keepxy", "Keep x,y in model (keepxy)", value = FALSE),
+              "Default FALSE. Retain x, y, subset, weights in model object. Required for some CV statistics. Makes CV slower."),
+            param_with_help(
+              checkboxInput("scale_y", "Scale response (Scale.y)", value = TRUE),
+              "Default TRUE. Scale response internally (subtract mean, divide by sd). Provides better numeric stability."),
+            param_with_help(
+              numericInput("adjust_endspan", "Adjust.endspan", value = 2, min = 1, step = 0.5),
+              "In interaction terms, endspan is multiplied by this value. Default 2. Reduces overfitting at data boundaries."),
+            param_with_help(
+              numericInput("exhaustive_tol", "Exhaustive.tol", value = 1e-10, min = 0, step = 1e-11),
+              "Default 1e-10. If reciprocal condition number < this, forces pmethod='backward'. Only applies with pmethod='exhaustive'."),
+            param_with_help(
+              checkboxInput("use_beta_cache", "Use.beta.cache", value = TRUE),
+              "Default TRUE. Cache regression coefficients in forward pass for 20%+ speed improvement. Uses more memory."),
+            param_with_help(
+              checkboxInput("force_xtx_prune", "Force.xtx.prune", value = FALSE),
+              "Default FALSE. Force X'X-based subset evaluation in pruning instead of QR-based leaps. Advanced use only."),
+            param_with_help(
+              checkboxInput("get_leverages", "Get.leverages", value = TRUE),
+              "Default TRUE (unless >100k cases). Calculate diagonal hat values for diagnostics."),
+            param_with_help(
+              checkboxInput("force_weights", "Force.weights", value = FALSE),
+              "Default FALSE. For testing: force weighted code path even without weights.")
           )
         ),
         hr(),
@@ -204,12 +264,6 @@ fluidPage(
             plotOutput("importance_plot", height = "400px"),
             br(),
             DT::dataTableOutput("importance_table")
-          ),
-          tabPanel(
-            "Partial Dependence",
-            br(),
-            uiOutput("pd_variable_selector"),
-            plotOutput("pd_plot", height = "400px")
           ),
           tabPanel(
             "Contribution",
