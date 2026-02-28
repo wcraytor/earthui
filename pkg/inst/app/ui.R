@@ -302,6 +302,11 @@ fluidPage(
             plotOutput("contrib_plot", height = "400px")
           ),
           tabPanel(
+            "Correlation",
+            br(),
+            plotOutput("correlation_plot", height = "550px")
+          ),
+          tabPanel(
             "Diagnostics",
             br(),
             fluidRow(
@@ -315,6 +320,12 @@ fluidPage(
             "ANOVA",
             br(),
             DT::dataTableOutput("anova_table")
+          ),
+          tabPanel(
+            "Earth Output",
+            br(),
+            div(style = "overflow-x: auto;",
+                verbatimTextOutput("earth_output"))
           )
         )
       )

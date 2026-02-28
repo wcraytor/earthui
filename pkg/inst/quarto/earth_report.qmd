@@ -87,6 +87,12 @@ for (var in top_vars) {
 }
 ```
 
+## Correlation Matrix
+
+```{r correlation-matrix, fig.width=10, fig.height=8}
+plot_correlation_matrix(result)
+```
+
 ## Diagnostics
 
 ### Residuals vs Fitted
@@ -111,6 +117,20 @@ plot_actual_vs_predicted(result)
 
 ```{r anova}
 knitr::kable(format_anova(result), digits = 4)
+```
+
+## Earth Output
+
+```{r earth-output, comment=""}
+model <- result$model
+cat("== Model ==\n\n")
+print(model)
+cat("\n\n== Summary ==\n\n")
+print(summary(model))
+if (!is.null(model$varmod)) {
+  cat("\n\n== Variance Model ==\n\n")
+  print(model$varmod)
+}
 ```
 
 ---

@@ -1,3 +1,15 @@
+# Internal: format axis labels as $1,234 (dollar with commas, no decimals)
+dollar_format_ <- function(x) {
+  ifelse(is.na(x), "",
+         paste0("$", formatC(round(x), format = "f", digits = 0, big.mark = ",")))
+}
+
+# Internal: format axis labels with commas (no dollar sign, no decimals)
+comma_format_ <- function(x) {
+  ifelse(is.na(x), "",
+         formatC(round(x), format = "f", digits = 0, big.mark = ","))
+}
+
 #' Plot variable importance
 #'
 #' Creates a horizontal bar chart of variable importance from a fitted
@@ -191,6 +203,7 @@ plot_contribution <- function(earth_result, variable) {
     ggplot2::ggplot(plot_df, ggplot2::aes(x = .data$x, y = .data$y)) +
       ggplot2::geom_boxplot(fill = "#2c7bb6", alpha = 0.5, outlier.shape = NA) +
       ggplot2::geom_jitter(color = "#2c7bb6", alpha = 0.5, width = 0.2) +
+      ggplot2::scale_y_continuous(labels = dollar_format_) +
       ggplot2::labs(
         title = paste("Contribution:", variable),
         x = variable,
@@ -256,10 +269,10 @@ plot_contribution <- function(earth_result, variable) {
         y_mid  = (break_y[-length(break_y)] + break_y[-1]) / 2,
         slope  = diff(break_y) / diff(breaks)
       )
-      # Format slope labels
+      # Format slope labels as $X,XXX/unit
       seg_df$label <- paste0(
-        ifelse(seg_df$slope >= 0, "+", ""),
-        formatC(seg_df$slope, format = "f", digits = 2),
+        ifelse(seg_df$slope >= 0, "+$", "-$"),
+        formatC(abs(seg_df$slope), format = "f", digits = 2, big.mark = ","),
         "/unit"
       )
     } else {
@@ -295,7 +308,9 @@ plot_contribution <- function(earth_result, variable) {
                                    color = "grey50", alpha = 0.5)
     }
 
-    p + ggplot2::labs(
+    p + ggplot2::scale_x_continuous(labels = comma_format_) +
+      ggplot2::scale_y_continuous(labels = dollar_format_) +
+      ggplot2::labs(
         title = paste("Contribution:", variable),
         x = variable,
         y = paste("Contribution to", earth_result$target)
@@ -305,6 +320,81 @@ plot_contribution <- function(earth_result, variable) {
         plot.title = ggplot2::element_text(face = "bold", size = 14)
       )
   }
+}
+
+#' Plot correlation matrix
+#'
+#' Creates a heatmap of pairwise correlations among the target variable and
+#' numeric predictors, with cells colored by degree of correlation and values
+#' printed in each cell.
+#'
+#' @param earth_result An object of class `"earthui_result"` as returned by
+#'   [fit_earth()].
+#'
+#' @return A [ggplot2::ggplot] object.
+#'
+#' @export
+#' @examples
+#' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
+#' plot_correlation_matrix(result)
+plot_correlation_matrix <- function(earth_result) {
+  validate_earthui_result(earth_result)
+
+  vars <- c(earth_result$target, earth_result$predictors)
+  df <- earth_result$data[, vars, drop = FALSE]
+
+  # Keep only numeric columns
+  numeric_mask <- vapply(df, is.numeric, logical(1))
+  df <- df[, numeric_mask, drop = FALSE]
+
+  if (ncol(df) < 2L) {
+    return(
+      ggplot2::ggplot() +
+        ggplot2::annotate("text", x = 0.5, y = 0.5,
+                          label = "Need at least 2 numeric variables for correlation matrix") +
+        ggplot2::theme_void()
+    )
+  }
+
+  cor_mat <- stats::cor(df, use = "pairwise.complete.obs")
+
+  # Reshape to long format
+  n <- ncol(cor_mat)
+  var_names <- colnames(cor_mat)
+  long_df <- data.frame(
+    Var1 = rep(var_names, each = n),
+    Var2 = rep(var_names, times = n),
+    value = as.vector(cor_mat),
+    stringsAsFactors = FALSE
+  )
+
+  # Preserve variable order
+  long_df$Var1 <- factor(long_df$Var1, levels = var_names)
+  long_df$Var2 <- factor(long_df$Var2, levels = rev(var_names))
+
+  ggplot2::ggplot(long_df,
+                  ggplot2::aes(x = .data$Var1, y = .data$Var2,
+                               fill = .data$value)) +
+    ggplot2::geom_tile(color = "white", linewidth = 0.5) +
+    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", .data$value)),
+                       size = 3.5, color = ifelse(abs(long_df$value) > 0.7,
+                                                   "white", "black")) +
+    ggplot2::scale_fill_gradient2(
+      low = "#2166AC", mid = "white", high = "#B2182B",
+      midpoint = 0, limits = c(-1, 1), name = "Correlation"
+    ) +
+    ggplot2::labs(
+      title = "Correlation Matrix",
+      x = NULL, y = NULL
+    ) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1, size = 10),
+      axis.text.y = ggplot2::element_text(size = 10),
+      panel.grid = ggplot2::element_blank()
+    ) +
+    ggplot2::coord_fixed()
 }
 
 #' Plot residual diagnostics
@@ -335,6 +425,8 @@ plot_residuals <- function(earth_result) {
                   ggplot2::aes(x = .data$fitted, y = .data$residuals)) +
     ggplot2::geom_point(alpha = 0.6, color = "#2c7bb6") +
     ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+    ggplot2::scale_x_continuous(labels = dollar_format_) +
+    ggplot2::scale_y_continuous(labels = dollar_format_) +
     ggplot2::labs(
       title = "Residuals vs Fitted",
       x = "Fitted Values",
@@ -375,6 +467,7 @@ plot_qq <- function(earth_result) {
     ggplot2::geom_abline(slope = stats::sd(resids),
                          intercept = mean(resids),
                          linetype = "dashed", color = "red") +
+    ggplot2::scale_y_continuous(labels = dollar_format_) +
     ggplot2::labs(
       title = "Normal Q-Q Plot",
       x = "Theoretical Quantiles",
@@ -415,6 +508,8 @@ plot_actual_vs_predicted <- function(earth_result) {
     ggplot2::geom_point(alpha = 0.6, color = "#2c7bb6") +
     ggplot2::geom_abline(slope = 1, intercept = 0,
                          linetype = "dashed", color = "red") +
+    ggplot2::scale_x_continuous(labels = dollar_format_) +
+    ggplot2::scale_y_continuous(labels = dollar_format_) +
     ggplot2::labs(
       title = "Actual vs Predicted",
       x = paste("Actual", target),

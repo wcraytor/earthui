@@ -660,6 +660,19 @@ function(input, output, session) {
     )
   })
 
+  # --- Results: Correlation Matrix ---
+  output$correlation_plot <- renderPlot({
+    req(rv$result)
+    tryCatch(
+      plot_correlation_matrix(rv$result),
+      error = function(e) {
+        message("earthui: correlation plot error: ", e$message)
+        plot.new()
+        text(0.5, 0.5, paste("Error:", e$message), cex = 1.2)
+      }
+    )
+  })
+
   # --- Results: Diagnostics ---
   output$residuals_plot <- renderPlot({
     req(rv$result)
@@ -685,6 +698,23 @@ function(input, output, session) {
     numeric_cols <- names(anova_df)[vapply(anova_df, is.numeric, logical(1))]
     if (length(numeric_cols) > 0) dt <- DT::formatRound(dt, numeric_cols, digits = 6)
     dt
+  })
+
+  # --- Results: Earth Output ---
+  output$earth_output <- renderPrint({
+    req(rv$result)
+    model <- rv$result$model
+
+    cat("== Model ==\n\n")
+    print(model)
+
+    cat("\n\n== Summary ==\n\n")
+    print(summary(model))
+
+    if (!is.null(model$varmod)) {
+      cat("\n\n== Variance Model ==\n\n")
+      print(model$varmod)
+    }
   })
 
   # --- Export Report ---
