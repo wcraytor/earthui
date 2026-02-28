@@ -1,7 +1,12 @@
 # Internal: format axis labels as $1,234 (dollar with commas, no decimals)
+# Negative values: -$200,000 (sign before dollar sign)
 dollar_format_ <- function(x) {
   ifelse(is.na(x), "",
-         paste0("$", formatC(round(x), format = "f", digits = 0, big.mark = ",")))
+         ifelse(x < 0,
+                paste0("-$", formatC(abs(round(x)), format = "f",
+                                     digits = 0, big.mark = ",")),
+                paste0("$", formatC(round(x), format = "f",
+                                    digits = 0, big.mark = ","))))
 }
 
 # Internal: format axis labels with commas (no dollar sign, no decimals)

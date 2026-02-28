@@ -24,6 +24,7 @@ fluidPage(
     [data-bs-theme='dark'] #eui-theme-toggle { background: #2c3e50; border-color: #555; }
     [data-bs-theme='dark'] .eui-popup-content { background: #2c3e50; color: #ecf0f1; }
     [data-bs-theme='dark'] details > summary { color: #ecf0f1 !important; }
+    #earth_output { font-family: 'MathJax_Main', 'Computer Modern', Georgia, 'Times New Roman', serif; font-size: 0.9em; line-height: 1.5; }
   "))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -177,7 +178,7 @@ fluidPage(
               selectInput("varmod_method", "varmod.method",
                           choices = c("none", "const", "lm", "rlm", "earth", "gam",
                                       "power", "power0", "x.lm", "x.rlm", "x.earth", "x.gam"),
-                          selected = "none"),
+                          selected = "lm"),
               "Variance model method. Requires nfold and ncross. Use trace=0.3 to trace. 'lm','rlm','earth','gam' regress on predicted response; 'x.*' variants regress on predictors."),
             param_with_help(
               numericInput("varmod_exponent", "varmod.exponent", value = 1, min = 0, step = 0.1),

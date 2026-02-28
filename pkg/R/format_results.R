@@ -334,10 +334,18 @@ format_model_equation <- function(earth_result, digits = 7L) {
       term <- grp$terms[[t_idx]]
       is_first <- (t_idx == 1L)
       term_str <- format_term_latex_(term, is_first, digits)
-      label_tex <- latex_escape_text_(grp$label)
+      # Format label: single var as \text{var}, multi-var as \{\text{v1},\,\text{v2}\}
+      if (grp$degree > 1L) {
+        var_parts <- vapply(grp$base_vars, function(v) {
+          sprintf("\\text{%s}", latex_escape_text_(v))
+        }, character(1))
+        label_latex <- paste0("\\{", paste(var_parts, collapse = ",\\, "), "\\}")
+      } else {
+        label_latex <- sprintf("\\text{%s}", latex_escape_text_(grp$label))
+      }
       if (is_first) {
-        line <- sprintf("  \\text{%s} & %s \\;=\\; %s",
-                        label_tex, g_tex, term_str)
+        line <- sprintf("  %s & %s \\;=\\; %s",
+                        label_latex, g_tex, term_str)
       } else {
         line <- sprintf("  & \\qquad %s", term_str)
       }
