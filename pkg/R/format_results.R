@@ -407,7 +407,6 @@ resolve_columns_ <- function(col_names, categoricals, data) {
 #' @keywords internal
 #' @noRd
 latex_escape_text_ <- function(x) {
-  x <- gsub("_", "\\_", x, fixed = TRUE)
   x <- gsub("%", "\\%", x, fixed = TRUE)
   x <- gsub("&", "\\&", x, fixed = TRUE)
   x <- gsub("#", "\\#", x, fixed = TRUE)
