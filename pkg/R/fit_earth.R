@@ -264,19 +264,25 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   dots <- list(...)
   earth_args <- c(earth_args, dots)
 
-  # --- Fit model ---
-  model <- do.call(earth::earth, earth_args)
+  # --- Fit model (with timing and trace capture) ---
+  start_time <- proc.time()
+  trace_output <- utils::capture.output({
+    model <- do.call(earth::earth, earth_args)
+  })
+  elapsed <- as.numeric((proc.time() - start_time)["elapsed"])
 
   # --- Return structured result ---
   result <- list(
-    model       = model,
-    target      = target,
-    predictors  = predictors,
+    model        = model,
+    target       = target,
+    predictors   = predictors,
     categoricals = if (is.null(categoricals)) character(0) else categoricals,
-    linpreds    = if (is.null(linpreds)) character(0) else linpreds,
-    degree      = degree,
-    cv_enabled  = cv_enabled,
-    data        = model_df
+    linpreds     = if (is.null(linpreds)) character(0) else linpreds,
+    degree       = degree,
+    cv_enabled   = cv_enabled,
+    data         = model_df,
+    elapsed      = elapsed,
+    trace_output = trace_output
   )
   class(result) <- "earthui_result"
   result

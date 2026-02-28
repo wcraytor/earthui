@@ -359,28 +359,64 @@ function(input, output, session) {
       table_rows <- c(table_rows, list(tags$tr(cells)))
     }
 
-    # JavaScript to sync checkboxes with Shiny inputs
+    # JavaScript to sync checkboxes with Shiny inputs + localStorage persistence
+    storage_key <- if (is.null(rv$file_name)) "default" else rv$file_name
     js <- tags$script(HTML(sprintf("
-      $(document).off('change.euimatrix').on('change.euimatrix', '.eui-interaction-cb', function() {
+      (function() {
         var n = %d;
-        for (var i = 1; i < n; i++) {
-          for (var j = i + 1; j <= n; j++) {
-            var id = 'allowed_' + i + '_' + j;
-            Shiny.setInputValue(id, $('#' + id).is(':checked'));
+        var storageKey = 'earthui_interactions_' + %s;
+
+        function saveState() {
+          var state = {};
+          for (var i = 1; i < n; i++) {
+            for (var j = i + 1; j <= n; j++) {
+              state[i + '_' + j] = $('#allowed_' + i + '_' + j).is(':checked');
+            }
+          }
+          try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
+        }
+
+        function restoreState() {
+          var saved = null;
+          try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
+          if (!saved) return;
+          for (var i = 1; i < n; i++) {
+            for (var j = i + 1; j <= n; j++) {
+              var key = i + '_' + j;
+              if (saved[key] !== undefined) {
+                $('#allowed_' + i + '_' + j).prop('checked', saved[key]);
+              }
+            }
           }
         }
-      });
-      // Initial sync
-      setTimeout(function() {
-        var n = %d;
-        for (var i = 1; i < n; i++) {
-          for (var j = i + 1; j <= n; j++) {
-            var id = 'allowed_' + i + '_' + j;
-            Shiny.setInputValue(id, $('#' + id).is(':checked'));
+
+        function syncToShiny() {
+          for (var i = 1; i < n; i++) {
+            for (var j = i + 1; j <= n; j++) {
+              var id = 'allowed_' + i + '_' + j;
+              Shiny.setInputValue(id, $('#' + id).is(':checked'));
+            }
           }
         }
-      }, 200);
-    ", n, n)))
+
+        // Restore saved state, then sync
+        restoreState();
+        setTimeout(function() {
+          syncToShiny();
+          // Update Allow All / Clear All checkboxes
+          var all = $('.eui-interaction-cb').length;
+          var checked = $('.eui-interaction-cb:checked').length;
+          $('#eui_allow_all').prop('checked', checked === all);
+          $('#eui_clear_all').prop('checked', checked === 0);
+        }, 200);
+
+        // On any interaction checkbox change, save and sync
+        $(document).off('change.euimatrix').on('change.euimatrix', '.eui-interaction-cb', function() {
+          saveState();
+          syncToShiny();
+        });
+      })();
+    ", n, jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
 
     div(
       style = "max-height: 300px; overflow: auto; border: 1px solid #ddd; padding: 4px; border-radius: 4px;",
@@ -492,8 +528,13 @@ function(input, output, session) {
           Get.leverages = input$get_leverages,
           Exhaustive.tol = exhaustive_tol
         )
+        elapsed <- rv$result$elapsed
         setProgress(1, detail = "Done")
+        session$sendCustomMessage("fitting_done",
+          list(text = sprintf("Done in %.1fs", elapsed)))
       }, error = function(e) {
+        session$sendCustomMessage("fitting_done",
+          list(text = "Error"))
         showNotification(paste("Model error:", e$message),
                          type = "error", duration = 10)
       })
@@ -742,6 +783,8 @@ function(input, output, session) {
     req(rv$result)
     model <- rv$result$model
 
+    cat(sprintf("== Timing: %.2f seconds ==\n\n", rv$result$elapsed))
+
     cat("== Model ==\n\n")
     print(model)
 
@@ -751,6 +794,17 @@ function(input, output, session) {
     if (!is.null(model$varmod)) {
       cat("\n\n== Variance Model ==\n\n")
       print(model$varmod)
+    }
+
+    if (length(rv$result$trace_output) > 0L) {
+      cat("\n\n== Trace Log ==\n\n")
+      for (line in rv$result$trace_output) {
+        if (nchar(line) > 25L) {
+          cat(substr(line, 1L, 25L), "...\n")
+        } else {
+          cat(line, "\n")
+        }
+      }
     }
   })
 

@@ -66,6 +66,20 @@ fluidPage(
       }
     })();
   ")),
+  tags$script(HTML("
+    $(document).on('click', '#run_model', function() {
+      var start = Date.now();
+      $('<div id=\"eui-timer\" style=\"position:fixed;bottom:20px;right:20px;z-index:10001;background:#2c3e50;color:white;padding:8px 16px;border-radius:4px;font-size:0.9em;box-shadow:0 2px 8px rgba(0,0,0,0.3);\">Fitting... 0s</div>').appendTo('body');
+      window.euiTimerInterval = setInterval(function() {
+        var s = Math.floor((Date.now() - start) / 1000);
+        $('#eui-timer').text('Fitting... ' + s + 's');
+      }, 1000);
+    });
+    Shiny.addCustomMessageHandler('fitting_done', function(msg) {
+      clearInterval(window.euiTimerInterval);
+      $('#eui-timer').text(msg.text).delay(3000).fadeOut(500, function(){ $(this).remove(); });
+    });
+  ")),
   titlePanel("earthui - Interactive Earth Model Builder"),
 
   sidebarLayout(
@@ -108,6 +122,38 @@ fluidPage(
           h5("Allowed Interactions"),
           p("Uncheck pairs to disallow specific interactions.",
             style = "font-size: 0.85em; color: #666;"),
+          div(style = "margin-bottom: 6px;",
+            tags$label(style = "font-size: 0.85em; margin-right: 12px; cursor: pointer;",
+              tags$input(type = "checkbox", id = "eui_allow_all",
+                         class = "eui-interaction-toggle", checked = "checked",
+                         style = "margin-right: 4px;"),
+              "Allow All"),
+            tags$label(style = "font-size: 0.85em; cursor: pointer;",
+              tags$input(type = "checkbox", id = "eui_clear_all",
+                         class = "eui-interaction-toggle",
+                         style = "margin-right: 4px;"),
+              "Clear All")
+          ),
+          tags$script(HTML("
+            $(document).on('change', '#eui_allow_all', function() {
+              if ($(this).is(':checked')) {
+                $('#eui_clear_all').prop('checked', false);
+                $('.eui-interaction-cb').prop('checked', true).trigger('change');
+              }
+            });
+            $(document).on('change', '#eui_clear_all', function() {
+              if ($(this).is(':checked')) {
+                $('#eui_allow_all').prop('checked', false);
+                $('.eui-interaction-cb').prop('checked', false).trigger('change');
+              }
+            });
+            $(document).on('change', '.eui-interaction-cb', function() {
+              var all = $('.eui-interaction-cb').length;
+              var checked = $('.eui-interaction-cb:checked').length;
+              $('#eui_allow_all').prop('checked', checked === all);
+              $('#eui_clear_all').prop('checked', checked === 0);
+            });
+          ")),
           uiOutput("allowed_matrix_ui")
         ),
 
