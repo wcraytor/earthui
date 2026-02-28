@@ -202,12 +202,100 @@ plot_contribution <- function(earth_result, variable) {
       )
   } else {
     plot_df <- data.frame(x = var_col, y = var_contrib)
-    # Sort for line overlay showing the piecewise-linear earth fit
     plot_df <- plot_df[order(plot_df$x), ]
-    ggplot2::ggplot(plot_df, ggplot2::aes(x = .data$x, y = .data$y)) +
+
+    # Compute piecewise-linear slopes from knot points
+    # Get knots for this variable from the selected terms
+    cuts_mat <- model$cuts[model$selected.terms, , drop = FALSE]
+    col_idx <- which(matching_cols)
+    knots <- numeric(0)
+    for (ti in var_terms) {
+      for (ci in col_idx) {
+        if (dirs[ti, ci] != 0 && dirs[ti, ci] != 2) {
+          knots <- c(knots, cuts_mat[ti, ci])
+        }
+      }
+    }
+    knots <- sort(unique(knots))
+
+    # Build evaluation points: data range boundaries + knots
+    x_min <- min(var_col, na.rm = TRUE)
+    x_max <- max(var_col, na.rm = TRUE)
+    knots <- knots[knots > x_min & knots < x_max]
+    breaks <- c(x_min, knots, x_max)
+
+    # Evaluate contribution at each break using the model
+    eval_contrib <- function(x_val) {
+      # Compute basis function values for this x, summing relevant terms
+      total <- 0
+      for (ti in var_terms) {
+        term_val <- coefs[ti]
+        for (ci in col_idx) {
+          d <- dirs[ti, ci]
+          if (d == 0) next
+          if (d == 2) {
+            term_val <- term_val * x_val
+          } else if (d == 1) {
+            term_val <- term_val * max(0, x_val - cuts_mat[ti, ci])
+          } else {
+            term_val <- term_val * max(0, cuts_mat[ti, ci] - x_val)
+          }
+        }
+        total <- total + term_val
+      }
+      total
+    }
+
+    break_y <- vapply(breaks, eval_contrib, numeric(1))
+
+    # Compute slopes and build annotation data
+    n_seg <- length(breaks) - 1L
+    if (n_seg > 0L) {
+      seg_df <- data.frame(
+        x_mid  = (breaks[-length(breaks)] + breaks[-1]) / 2,
+        y_mid  = (break_y[-length(break_y)] + break_y[-1]) / 2,
+        slope  = diff(break_y) / diff(breaks)
+      )
+      # Format slope labels
+      seg_df$label <- paste0(
+        ifelse(seg_df$slope >= 0, "+", ""),
+        formatC(seg_df$slope, format = "f", digits = 2),
+        "/unit"
+      )
+    } else {
+      seg_df <- data.frame(x_mid = numeric(0), y_mid = numeric(0),
+                           slope = numeric(0), label = character(0))
+    }
+
+    # Build the piecewise-linear line from break points
+    line_df <- data.frame(x = breaks, y = break_y)
+
+    p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data$x, y = .data$y)) +
       ggplot2::geom_point(alpha = 0.6, color = "#2c7bb6") +
-      ggplot2::geom_line(color = "#d7191c", linewidth = 0.6, alpha = 0.7) +
-      ggplot2::labs(
+      ggplot2::geom_line(data = line_df, ggplot2::aes(x = .data$x, y = .data$y),
+                         color = "#d7191c", linewidth = 0.8)
+
+    # Add slope labels
+    if (nrow(seg_df) > 0L) {
+      # Offset labels above or below the line
+      y_range <- diff(range(plot_df$y, na.rm = TRUE))
+      if (y_range == 0) y_range <- 1
+      p <- p + ggplot2::geom_label(
+        data = seg_df,
+        ggplot2::aes(x = .data$x_mid, y = .data$y_mid, label = .data$label),
+        size = 3.2, fill = "white", alpha = 0.85,
+        label.padding = ggplot2::unit(0.15, "lines"),
+        label.size = 0.3, color = "#333333"
+      )
+    }
+
+    # Add vertical dashed lines at knot points
+    if (length(knots) > 0L) {
+      p <- p + ggplot2::geom_vline(xintercept = knots, linetype = "dashed",
+                                   color = "grey50", alpha = 0.5)
+    }
+
+    p + ggplot2::labs(
         title = paste("Contribution:", variable),
         x = variable,
         y = paste("Contribution to", earth_result$target)
