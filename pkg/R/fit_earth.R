@@ -54,7 +54,17 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
                       linpreds = NULL, degree = 1L, allowed_func = NULL,
                       nfold = NULL, nprune = NULL, thresh = NULL,
                       penalty = NULL, minspan = NULL, endspan = NULL,
-                      fast.k = NULL, pmethod = NULL, glm = NULL, ...) {
+                      fast.k = NULL, pmethod = NULL, glm = NULL,
+                      trace = NULL, nk = NULL, newvar.penalty = NULL,
+                      fast.beta = NULL, ncross = NULL, stratify = NULL,
+                      varmod.method = NULL, varmod.exponent = NULL,
+                      varmod.conv = NULL, varmod.clamp = NULL,
+                      varmod.minspan = NULL, keepxy = NULL,
+                      Scale.y = NULL, Adjust.endspan = NULL,
+                      Auto.linpreds = NULL, Force.weights = NULL,
+                      Use.beta.cache = NULL, Force.xtx.prune = NULL,
+                      Get.leverages = NULL, Exhaustive.tol = NULL,
+                      wp = NULL, ...) {
 
   # --- Input validation ---
   if (!is.data.frame(df)) {
@@ -182,14 +192,37 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
     }
   }
 
-  if (!is.null(nprune))    earth_args$nprune   <- as.integer(nprune)
-  if (!is.null(thresh))    earth_args$thresh    <- thresh
-  if (!is.null(penalty))   earth_args$penalty   <- penalty
-  if (!is.null(minspan))   earth_args$minspan   <- as.integer(minspan)
-  if (!is.null(endspan))   earth_args$endspan   <- as.integer(endspan)
-  if (!is.null(fast.k))    earth_args$fast.k    <- as.integer(fast.k)
-  if (!is.null(pmethod))   earth_args$pmethod   <- pmethod
-  if (!is.null(glm))       earth_args$glm       <- glm
+  if (!is.null(nprune))          earth_args$nprune          <- as.integer(nprune)
+  if (!is.null(thresh))          earth_args$thresh           <- thresh
+  if (!is.null(penalty))         earth_args$penalty          <- penalty
+  if (!is.null(minspan))         earth_args$minspan          <- as.integer(minspan)
+  if (!is.null(endspan))         earth_args$endspan          <- as.integer(endspan)
+  if (!is.null(fast.k))          earth_args$fast.k           <- as.integer(fast.k)
+  if (!is.null(pmethod))         earth_args$pmethod          <- pmethod
+  if (!is.null(glm))             earth_args$glm              <- glm
+  if (!is.null(trace))           earth_args$trace            <- trace
+  if (!is.null(nk))              earth_args$nk               <- as.integer(nk)
+  if (!is.null(newvar.penalty))  earth_args$newvar.penalty   <- newvar.penalty
+  if (!is.null(fast.beta))       earth_args$fast.beta        <- fast.beta
+  if (!is.null(ncross))          earth_args$ncross           <- as.integer(ncross)
+  if (!is.null(stratify))        earth_args$stratify         <- stratify
+  if (!is.null(varmod.method) && varmod.method != "none") {
+    earth_args$varmod.method <- varmod.method
+  }
+  if (!is.null(varmod.exponent)) earth_args$varmod.exponent  <- varmod.exponent
+  if (!is.null(varmod.conv))     earth_args$varmod.conv      <- varmod.conv
+  if (!is.null(varmod.clamp))    earth_args$varmod.clamp     <- varmod.clamp
+  if (!is.null(varmod.minspan))  earth_args$varmod.minspan   <- as.integer(varmod.minspan)
+  if (!is.null(keepxy))          earth_args$keepxy           <- keepxy
+  if (!is.null(Scale.y))         earth_args$Scale.y          <- Scale.y
+  if (!is.null(Adjust.endspan))  earth_args$Adjust.endspan   <- Adjust.endspan
+  if (!is.null(Auto.linpreds))   earth_args$Auto.linpreds    <- Auto.linpreds
+  if (!is.null(Force.weights))   earth_args$Force.weights    <- Force.weights
+  if (!is.null(Use.beta.cache))  earth_args$Use.beta.cache   <- Use.beta.cache
+  if (!is.null(Force.xtx.prune)) earth_args$Force.xtx.prune  <- Force.xtx.prune
+  if (!is.null(Get.leverages))   earth_args$Get.leverages    <- Get.leverages
+  if (!is.null(Exhaustive.tol))  earth_args$Exhaustive.tol   <- Exhaustive.tol
+  if (!is.null(wp))              earth_args$wp               <- wp
 
   if (degree >= 2L && !is.null(allowed_func)) {
     earth_args$allowed <- allowed_func

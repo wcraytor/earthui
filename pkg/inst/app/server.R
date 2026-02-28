@@ -114,10 +114,17 @@ function(input, output, session) {
     js <- tags$script(HTML(sprintf("
       (function() {
         var storageKey = 'earthui_settings_' + %s;
-        var selectIds = ['target', 'degree', 'pmethod', 'glm_family'];
+        var selectIds = ['target', 'degree', 'pmethod', 'glm_family', 'trace',
+                         'varmod_method'];
         var numericIds = ['nprune', 'thresh', 'penalty', 'minspan', 'endspan',
-                          'fast_k', 'nfold_override'];
-        var allIds = selectIds.concat(numericIds);
+                          'fast_k', 'nfold_override', 'nk', 'newvar_penalty',
+                          'fast_beta', 'ncross', 'varmod_exponent', 'varmod_conv',
+                          'varmod_clamp', 'varmod_minspan', 'adjust_endspan',
+                          'exhaustive_tol'];
+        var checkboxIds = ['stratify', 'keepxy', 'scale_y', 'auto_linpreds',
+                           'use_beta_cache', 'force_xtx_prune', 'get_leverages',
+                           'force_weights'];
+        var allIds = selectIds.concat(numericIds).concat(checkboxIds);
 
         var saved = null;
         try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
@@ -144,6 +151,15 @@ function(input, output, session) {
               if ($el.length) { $el.val(saved[id]).trigger('change'); }
             }
           });
+          checkboxIds.forEach(function(id) {
+            if (saved[id] !== undefined) {
+              var $el = $('#' + id);
+              if ($el.length) {
+                $el.prop('checked', saved[id]);
+                $el.trigger('change');
+              }
+            }
+          });
         }
 
         function saveSettings() {
@@ -154,6 +170,9 @@ function(input, output, session) {
           });
           numericIds.forEach(function(id) {
             state[id] = $('#' + id).val();
+          });
+          checkboxIds.forEach(function(id) {
+            state[id] = $('#' + id).is(':checked');
           });
           try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
         }
@@ -411,11 +430,23 @@ function(input, output, session) {
     endspan <- na_to_null(input$endspan)
     fast_k <- na_to_null(input$fast_k)
     nfold <- na_to_null(input$nfold_override)
+    nk <- na_to_null(input$nk)
+    newvar_penalty <- na_to_null(input$newvar_penalty)
+    fast_beta <- na_to_null(input$fast_beta)
+    ncross <- na_to_null(input$ncross)
+    adjust_endspan <- na_to_null(input$adjust_endspan)
+    exhaustive_tol <- na_to_null(input$exhaustive_tol)
+    varmod_exponent <- na_to_null(input$varmod_exponent)
+    varmod_conv <- na_to_null(input$varmod_conv)
+    varmod_clamp <- na_to_null(input$varmod_clamp)
+    varmod_minspan <- na_to_null(input$varmod_minspan)
 
     glm_arg <- NULL
     if (input$glm_family != "none") {
       glm_arg <- list(family = input$glm_family)
     }
+
+    trace_val <- as.numeric(input$trace)
 
     pmethod <- input$pmethod
     linpreds <- input$linpreds
@@ -437,12 +468,92 @@ function(input, output, session) {
         endspan = endspan,
         fast.k = fast_k,
         pmethod = pmethod,
-        glm = glm_arg
+        glm = glm_arg,
+        trace = trace_val,
+        nk = nk,
+        newvar.penalty = newvar_penalty,
+        fast.beta = fast_beta,
+        ncross = ncross,
+        stratify = input$stratify,
+        varmod.method = input$varmod_method,
+        varmod.exponent = varmod_exponent,
+        varmod.conv = varmod_conv,
+        varmod.clamp = varmod_clamp,
+        varmod.minspan = varmod_minspan,
+        keepxy = input$keepxy,
+        Scale.y = input$scale_y,
+        Adjust.endspan = adjust_endspan,
+        Auto.linpreds = input$auto_linpreds,
+        Force.weights = input$force_weights,
+        Use.beta.cache = input$use_beta_cache,
+        Force.xtx.prune = input$force_xtx_prune,
+        Get.leverages = input$get_leverages,
+        Exhaustive.tol = exhaustive_tol
       )
     }, error = function(e) {
       showNotification(paste("Model error:", e$message),
                        type = "error", duration = 10)
     })
+  })
+
+  # --- Parameter Info Modal ---
+  observeEvent(input$param_info, {
+    showModal(modalDialog(
+      title = "Earth Model Parameters",
+      size = "l",
+      easyClose = TRUE,
+      div(style = "max-height: 70vh; overflow-y: auto; font-size: 0.9em;",
+        h5("Forward Pass"),
+        tags$dl(
+          tags$dt("degree"), tags$dd("Maximum degree of interaction. Default 1 (additive, no interactions)."),
+          tags$dt("nk"), tags$dd("Maximum number of model terms before pruning (includes intercept). Default is semi-automatically calculated."),
+          tags$dt("thresh"), tags$dd("Forward stepping threshold (default 0.001). Forward pass terminates if adding a term changes RSq by less than thresh."),
+          tags$dt("penalty"), tags$dd("GCV penalty per knot. Default is 3 if degree>1, else 2. Values of 0 or -1 have special meaning. Typical range: 2-4."),
+          tags$dt("minspan"), tags$dd("Minimum observations between knots. Default 0 (auto-calculated). Use 1 with endspan=1 to consider all x values. Negative values specify max knots per predictor (e.g., -3 = three evenly spaced knots)."),
+          tags$dt("endspan"), tags$dd("Minimum observations before first and after last knot. Default 0 (auto-calculated). Be wary of reducing this, especially for predictions near data limits."),
+          tags$dt("newvar.penalty"), tags$dd("Penalty for adding a new variable (Friedman's gamma). Default 0. Non-zero values (0.01-0.2) make the model prefer reusing existing variables."),
+          tags$dt("fast.k"), tags$dd("Max parent terms considered per forward step (Fast MARS). Default 20. Set 0 to disable Fast MARS. Lower = faster, higher = potentially better model."),
+          tags$dt("fast.beta"), tags$dd("Fast MARS ageing coefficient. Default 1. A value of 0 sometimes gives better results."),
+          tags$dt("Auto.linpreds"), tags$dd("Default TRUE. If the best knot is at the predictor minimum, add the predictor linearly (no hinge). Only affects predictions outside training data range."),
+          tags$dt("linpreds"), tags$dd("Predictors that enter linearly (no hinge functions), set via the 'Linear' checkbox in Variable Configuration.")
+        ),
+        h5("Pruning"),
+        tags$dl(
+          tags$dt("pmethod"), tags$dd("Pruning method: backward (default), none, exhaustive, forward, seqrep, cv. Use 'cv' with nfold to select terms by cross-validation."),
+          tags$dt("nprune"), tags$dd("Maximum terms (including intercept) in pruned model. Default NULL (all terms from forward pass, after pruning).")
+        ),
+        h5("Cross Validation"),
+        tags$dl(
+          tags$dt("nfold"), tags$dd("Number of CV folds. Default 0 (no CV). Auto-set to 10 when degree >= 2. Use trace=0.5 to trace CV."),
+          tags$dt("ncross"), tags$dd("Number of cross-validations (each has nfold folds). Default 1. Use higher values (e.g., 30) with variance models."),
+          tags$dt("stratify"), tags$dd("Default TRUE. Stratify CV samples so each fold has approximately equal response distribution.")
+        ),
+        h5("Variance Model"),
+        tags$dl(
+          tags$dt("varmod.method"), tags$dd("none (default), const, lm, rlm, earth, gam, power, power0, x.lm, x.rlm, x.earth, x.gam. Requires nfold and ncross. Use trace=0.3 to trace. See 'Variance models in earth' by Stephen Milborrow."),
+          tags$dt("varmod.exponent"), tags$dd("Power transform for residual regression. Default 1. Use 0.5 if std dev increases with square root of response."),
+          tags$dt("varmod.conv"), tags$dd("Convergence criterion (percent) for IRLS in variance model. Default 1. Negative values force that many iterations."),
+          tags$dt("varmod.clamp"), tags$dd("Minimum estimated std dev = varmod.clamp * mean(sd(residuals)). Default 0.1. Prevents negative or tiny std dev estimates."),
+          tags$dt("varmod.minspan"), tags$dd("minspan for internal earth call in variance model. Default -3 (three evenly spaced knots per predictor).")
+        ),
+        h5("GLM"),
+        tags$dl(
+          tags$dt("glm family"), tags$dd("Optional GLM family applied to earth basis functions. Choices: none, gaussian, binomial, poisson. Example use: binomial for binary outcomes.")
+        ),
+        h5("Other"),
+        tags$dl(
+          tags$dt("trace"), tags$dd("Trace level: 0=none, 0.3=variance model, 0.5=CV, 1=overview, 2=forward pass, 3=pruning, 4=model mats/pruning details, 5=full details."),
+          tags$dt("keepxy"), tags$dd("Default FALSE. Set TRUE to retain x, y, subset, weights in the model object. Required for some cv. statistics. Makes CV slower."),
+          tags$dt("Scale.y"), tags$dd("Default TRUE. Scale response internally (subtract mean, divide by sd). Provides better numeric stability."),
+          tags$dt("Adjust.endspan"), tags$dd("In interaction terms, endspan is multiplied by this value. Default 2. Reduces overfitting at data boundaries."),
+          tags$dt("Exhaustive.tol"), tags$dd("Default 1e-10. If reciprocal condition number of bx < this, forces pmethod='backward'. Only applies with pmethod='exhaustive'."),
+          tags$dt("Use.beta.cache"), tags$dd("Default TRUE. Caches regression coefficients in forward pass for speed (20%+ faster). Uses more memory."),
+          tags$dt("Force.xtx.prune"), tags$dd("Default FALSE. Force use of X'X-based subset evaluation in pruning (instead of QR-based leaps). Only for advanced use."),
+          tags$dt("Get.leverages"), tags$dd("Default TRUE (unless >100k cases). Calculate diagonal hat values for linear regression of y on bx. Needed for some diagnostics."),
+          tags$dt("Force.weights"), tags$dd("Default FALSE. For testing: force weighted code path even without weights.")
+        )
+      )
+    ))
   })
 
   # --- Results: Summary ---
