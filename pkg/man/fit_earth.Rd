@@ -21,6 +21,27 @@ fit_earth(
   fast.k = NULL,
   pmethod = NULL,
   glm = NULL,
+  trace = NULL,
+  nk = NULL,
+  newvar.penalty = NULL,
+  fast.beta = NULL,
+  ncross = NULL,
+  stratify = NULL,
+  varmod.method = NULL,
+  varmod.exponent = NULL,
+  varmod.conv = NULL,
+  varmod.clamp = NULL,
+  varmod.minspan = NULL,
+  keepxy = NULL,
+  Scale.y = NULL,
+  Adjust.endspan = NULL,
+  Auto.linpreds = NULL,
+  Force.weights = NULL,
+  Use.beta.cache = NULL,
+  Force.xtx.prune = NULL,
+  Get.leverages = NULL,
+  Exhaustive.tol = NULL,
+  wp = NULL,
   ...
 )
 }
@@ -68,6 +89,59 @@ step of the forward pass. Default is earth's default (20).}
 
 \item{glm}{List or \code{NULL}. If provided, passed to earth's \code{glm} argument
 to fit a GLM on the earth basis functions.}
+
+\item{trace}{Numeric. Trace earth's execution. 0 (default) = none,
+0.3 = variance model, 0.5 = cross validation, 1-5 = increasing detail.}
+
+\item{nk}{Integer or \code{NULL}. Maximum number of model terms before pruning.}
+
+\item{newvar.penalty}{Numeric or \code{NULL}. Penalty for adding a new variable
+in the forward pass (Friedman's gamma). Default 0.}
+
+\item{fast.beta}{Numeric or \code{NULL}. Fast MARS ageing coefficient. Default 1.}
+
+\item{ncross}{Integer or \code{NULL}. Number of cross-validations. Default 1.}
+
+\item{stratify}{Logical or \code{NULL}. Stratify cross-validation samples.
+Default \code{TRUE}.}
+
+\item{varmod.method}{Character or \code{NULL}. Variance model method. One of
+\code{"none"}, \code{"const"}, \code{"lm"}, \code{"rlm"}, \code{"earth"}, \code{"gam"}, \code{"power"},
+\code{"power0"}, \code{"x.lm"}, \code{"x.rlm"}, \code{"x.earth"}, \code{"x.gam"}.}
+
+\item{varmod.exponent}{Numeric or \code{NULL}. Power transform for variance model.}
+
+\item{varmod.conv}{Numeric or \code{NULL}. Convergence criterion for IRLS.}
+
+\item{varmod.clamp}{Numeric or \code{NULL}. Minimum estimated standard deviation.}
+
+\item{varmod.minspan}{Integer or \code{NULL}. minspan for internal variance model.}
+
+\item{keepxy}{Logical or \code{NULL}. Retain x, y in model object. Default \code{FALSE}.}
+
+\item{Scale.y}{Logical or \code{NULL}. Scale response internally. Default \code{TRUE}.}
+
+\item{Adjust.endspan}{Numeric or \code{NULL}. Interaction endspan multiplier.
+Default 2.}
+
+\item{Auto.linpreds}{Logical or \code{NULL}. Auto-detect linear predictors.
+Default \code{TRUE}.}
+
+\item{Force.weights}{Logical or \code{NULL}. Force weighted code path. Default
+\code{FALSE}.}
+
+\item{Use.beta.cache}{Logical or \code{NULL}. Cache coefficients in forward pass.
+Default \code{TRUE}.}
+
+\item{Force.xtx.prune}{Logical or \code{NULL}. Force X'X-based pruning. Default
+\code{FALSE}.}
+
+\item{Get.leverages}{Logical or \code{NULL}. Calculate hat values. Default \code{TRUE}.}
+
+\item{Exhaustive.tol}{Numeric or \code{NULL}. Condition number threshold for
+exhaustive pruning. Default 1e-10.}
+
+\item{wp}{Numeric vector or \code{NULL}. Response weights.}
 
 \item{...}{Additional arguments passed to \code{\link[earth:earth]{earth::earth()}}.}
 }

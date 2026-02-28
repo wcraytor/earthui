@@ -31,6 +31,38 @@
 #'   `"exhaustive"`, `"forward"`, `"seqrep"`, `"cv"`. Default is `"backward"`.
 #' @param glm List or `NULL`. If provided, passed to earth's `glm` argument
 #'   to fit a GLM on the earth basis functions.
+#' @param trace Numeric. Trace earth's execution. 0 (default) = none,
+#'   0.3 = variance model, 0.5 = cross validation, 1-5 = increasing detail.
+#' @param nk Integer or `NULL`. Maximum number of model terms before pruning.
+#' @param newvar.penalty Numeric or `NULL`. Penalty for adding a new variable
+#'   in the forward pass (Friedman's gamma). Default 0.
+#' @param fast.beta Numeric or `NULL`. Fast MARS ageing coefficient. Default 1.
+#' @param ncross Integer or `NULL`. Number of cross-validations. Default 1.
+#' @param stratify Logical or `NULL`. Stratify cross-validation samples.
+#'   Default `TRUE`.
+#' @param varmod.method Character or `NULL`. Variance model method. One of
+#'   `"none"`, `"const"`, `"lm"`, `"rlm"`, `"earth"`, `"gam"`, `"power"`,
+#'   `"power0"`, `"x.lm"`, `"x.rlm"`, `"x.earth"`, `"x.gam"`.
+#' @param varmod.exponent Numeric or `NULL`. Power transform for variance model.
+#' @param varmod.conv Numeric or `NULL`. Convergence criterion for IRLS.
+#' @param varmod.clamp Numeric or `NULL`. Minimum estimated standard deviation.
+#' @param varmod.minspan Integer or `NULL`. minspan for internal variance model.
+#' @param keepxy Logical or `NULL`. Retain x, y in model object. Default `FALSE`.
+#' @param Scale.y Logical or `NULL`. Scale response internally. Default `TRUE`.
+#' @param Adjust.endspan Numeric or `NULL`. Interaction endspan multiplier.
+#'   Default 2.
+#' @param Auto.linpreds Logical or `NULL`. Auto-detect linear predictors.
+#'   Default `TRUE`.
+#' @param Force.weights Logical or `NULL`. Force weighted code path. Default
+#'   `FALSE`.
+#' @param Use.beta.cache Logical or `NULL`. Cache coefficients in forward pass.
+#'   Default `TRUE`.
+#' @param Force.xtx.prune Logical or `NULL`. Force X'X-based pruning. Default
+#'   `FALSE`.
+#' @param Get.leverages Logical or `NULL`. Calculate hat values. Default `TRUE`.
+#' @param Exhaustive.tol Numeric or `NULL`. Condition number threshold for
+#'   exhaustive pruning. Default 1e-10.
+#' @param wp Numeric vector or `NULL`. Response weights.
 #' @param ... Additional arguments passed to [earth::earth()].
 #'
 #' @return A list with class `"earthui_result"` containing:
