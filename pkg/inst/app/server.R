@@ -552,7 +552,14 @@ function(input, output, session) {
 
   output$contrib_plot <- renderPlot({
     req(rv$result, input$contrib_variable)
-    plot_contribution(rv$result, input$contrib_variable)
+    tryCatch(
+      plot_contribution(rv$result, input$contrib_variable),
+      error = function(e) {
+        message("earthui: contribution plot error: ", e$message)
+        plot.new()
+        text(0.5, 0.5, paste("Error:", e$message), cex = 1.2)
+      }
+    )
   })
 
   # --- Results: Diagnostics ---

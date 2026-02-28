@@ -202,10 +202,11 @@ plot_contribution <- function(earth_result, variable) {
       )
   } else {
     plot_df <- data.frame(x = var_col, y = var_contrib)
+    # Sort for line overlay showing the piecewise-linear earth fit
+    plot_df <- plot_df[order(plot_df$x), ]
     ggplot2::ggplot(plot_df, ggplot2::aes(x = .data$x, y = .data$y)) +
       ggplot2::geom_point(alpha = 0.6, color = "#2c7bb6") +
-      ggplot2::geom_smooth(method = "loess", se = FALSE, color = "#d7191c",
-                           linewidth = 0.8, formula = y ~ x) +
+      ggplot2::geom_line(color = "#d7191c", linewidth = 0.6, alpha = 0.7) +
       ggplot2::labs(
         title = paste("Contribution:", variable),
         x = variable,
