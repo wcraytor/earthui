@@ -298,69 +298,63 @@ format_model_equation <- function(earth_result, digits = 7L) {
   group_degrees <- vapply(groups, `[[`, integer(1), "degree")
   groups <- groups[order(group_degrees)]
 
-  # Assign labels
+  # Assign labels (space-separated for interactions, matching RCA Figure 1)
   for (g_idx in seq_along(groups)) {
     j <- groups[[g_idx]]$degree
     if (j == 0L) {
       groups[[g_idx]]$label <- "Basis"
     } else {
-      groups[[g_idx]]$label <- paste(groups[[g_idx]]$base_vars, collapse = ", ")
+      groups[[g_idx]]$label <- paste(groups[[g_idx]]$base_vars, collapse = " ")
     }
   }
 
-  # Build HTML two-column table
-  html_rows <- character(0)
+  # Assign g-function indices: {}^{f}g^{j}_{k}
+  # j = degree, k = sequential position within degree, f = number of factors
+  degree_counters <- integer(0)
   for (g_idx in seq_along(groups)) {
-    grp <- groups[[g_idx]]
-    eq_parts <- character(0)
-    for (t_idx in seq_along(grp$terms)) {
-      term <- grp$terms[[t_idx]]
-      is_first <- (t_idx == 1L)
-      eq_parts <- c(eq_parts, format_term_html_(term, is_first, digits))
+    j <- groups[[g_idx]]$degree
+    j_key <- as.character(j)
+    if (is.na(degree_counters[j_key])) {
+      degree_counters[j_key] <- 1L
+    } else {
+      degree_counters[j_key] <- degree_counters[j_key] + 1L
     }
-    eq_str <- paste(eq_parts, collapse = "<br>")
-    label_html <- html_escape_(grp$label)
-    html_rows <- c(html_rows, sprintf(
-      "<tr><td class=\"eui-eq-label\">%s:</td><td class=\"eui-eq-expr\">%s</td></tr>",
-      label_html, eq_str
-    ))
+    groups[[g_idx]]$g_j <- j
+    groups[[g_idx]]$g_k <- as.integer(degree_counters[j_key])
+    groups[[g_idx]]$g_f <- groups[[g_idx]]$n_factors
   }
 
-  html <- paste0(
-    "<table class=\"eui-equation\">\n",
-    paste(html_rows, collapse = "\n"),
-    "\n</table>"
-  )
-
-  # Build LaTeX (for Quarto/PDF reports)
+  # Build LaTeX with g-function notation (for MathJax + Quarto/PDF)
   latex_lines <- character(0)
   for (g_idx in seq_along(groups)) {
     grp <- groups[[g_idx]]
+    g_tex <- sprintf("{}^{%d}g^{%d}_{%d}", grp$g_f, grp$g_j, grp$g_k)
+
     for (t_idx in seq_along(grp$terms)) {
       term <- grp$terms[[t_idx]]
       is_first <- (t_idx == 1L)
       term_str <- format_term_latex_(term, is_first, digits)
       label_tex <- latex_escape_text_(grp$label)
       if (is_first) {
-        line <- sprintf("  \\text{%s:} & %s", label_tex, term_str)
+        line <- sprintf("  \\text{%s} & %s \\;=\\; %s",
+                        label_tex, g_tex, term_str)
       } else {
-        line <- sprintf("  & %s", term_str)
+        line <- sprintf("  & \\qquad %s", term_str)
       }
-      latex_lines <- c(latex_lines, paste0(line, " \\\\"))
+      latex_lines <- c(latex_lines, paste0(line, " \\\\[4pt]"))
     }
   }
   if (length(latex_lines) > 0L) {
-    latex_lines[length(latex_lines)] <- sub(" \\\\\\\\$", "",
+    latex_lines[length(latex_lines)] <- sub(" \\\\\\\\\\[4pt\\]$", "",
                                             latex_lines[length(latex_lines)])
   }
   latex <- paste0(
-    "\\begin{array}{l l}\n",
+    "\\small\n\\begin{array}{l@{\\;=\\;\\,}l}\n",
     paste(latex_lines, collapse = "\n"),
     "\n\\end{array}"
   )
 
   result <- list(
-    html         = html,
     latex        = latex,
     latex_inline = paste0("$$\n", latex, "\n$$"),
     groups       = groups

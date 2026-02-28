@@ -1,6 +1,13 @@
 fluidPage(
+  withMathJax(),
   theme = bslib::bs_theme(version = 5, bootswatch = "flatly"),
-  tags$head(tags$style(HTML("
+  tags$head(
+    tags$script(type = "text/x-mathjax-config", HTML("
+      MathJax.Hub.Config({
+        'HTML-CSS': { preferredFont: 'TeX', scale: 90 }
+      });
+    ")),
+    tags$style(HTML("
     .dataTable td, .dataTable th { padding: 4px 8px !important; }
     .dataTables_wrapper { font-size: 0.9em; }
     .dataTable td { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -9,9 +16,7 @@ fluidPage(
     .eui-popup-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border-radius: 8px; padding: 20px; max-width: 80vw; max-height: 70vh; overflow: auto; z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
     .eui-popup-content pre { white-space: pre-wrap; word-wrap: break-word; margin-bottom: 12px; font-size: 0.9em; }
     .eui-popup-close { float: right; }
-    .eui-equation { margin-left: 1in; border-collapse: collapse; font-family: 'Cambria Math', 'Latin Modern Math', 'STIX Two Math', 'Times New Roman', Georgia, serif; font-size: 1.05em; }
-    .eui-eq-label { vertical-align: top; white-space: nowrap; padding-right: 2em; text-align: left; font-weight: bold; padding-bottom: 0.4em; }
-    .eui-eq-expr { text-align: left; vertical-align: top; padding-bottom: 0.4em; }
+    .MathJax_Display { text-align: left !important; margin-left: 1em !important; }
     .eui-param-help { position: absolute; top: 0; right: 0; width: 18px; height: 18px; border-radius: 50%; background: #5bc0de; color: #fff; font-size: 11px; font-weight: bold; text-align: center; line-height: 18px; cursor: pointer; z-index: 10; }
     .eui-param-help:hover { background: #31b0d5; }
     #eui-theme-toggle { position: fixed; top: 12px; right: 20px; z-index: 10000; width: 38px; height: 38px; border-radius: 50%; border: 2px solid #ccc; background: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.15); transition: all 0.3s; }
@@ -19,7 +24,7 @@ fluidPage(
     [data-bs-theme='dark'] #eui-theme-toggle { background: #2c3e50; border-color: #555; }
     [data-bs-theme='dark'] .eui-popup-content { background: #2c3e50; color: #ecf0f1; }
     [data-bs-theme='dark'] details > summary { color: #ecf0f1 !important; }
-  ")),
+  "))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
       function initPopovers() {
@@ -34,7 +39,7 @@ fluidPage(
       var obs = new MutationObserver(function() { setTimeout(initPopovers, 200); });
       obs.observe(document.body, { childList: true, subtree: true });
     });
-  "))),
+  ")),
   tags$button(id = "eui-theme-toggle", onclick = "toggleTheme()", HTML("&#9790;")),
   tags$script(HTML("
     function toggleTheme() {
@@ -278,7 +283,7 @@ fluidPage(
           tabPanel(
             "Equation",
             br(),
-            div(style = "overflow-x: auto; padding: 10px;",
+            div(style = "overflow-x: auto; padding: 10px 10px 10px 0;",
                 uiOutput("model_equation"))
           ),
           tabPanel(

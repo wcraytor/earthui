@@ -372,13 +372,18 @@ plot_correlation_matrix <- function(earth_result) {
   long_df$Var1 <- factor(long_df$Var1, levels = var_names)
   long_df$Var2 <- factor(long_df$Var2, levels = rev(var_names))
 
+  # Scale text size based on number of variables
+  txt_size <- if (n <= 6) 4.5 else if (n <= 10) 3.5 else if (n <= 15) 2.8 else 2.2
+  axis_size <- if (n <= 10) 11 else if (n <= 15) 9 else 7
+
+  text_color <- ifelse(abs(long_df$value) > 0.65, "white", "black")
+
   ggplot2::ggplot(long_df,
                   ggplot2::aes(x = .data$Var1, y = .data$Var2,
                                fill = .data$value)) +
-    ggplot2::geom_tile(color = "white", linewidth = 0.5) +
+    ggplot2::geom_tile(color = "white", linewidth = 1.2) +
     ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", .data$value)),
-                       size = 3.5, color = ifelse(abs(long_df$value) > 0.7,
-                                                   "white", "black")) +
+                       size = txt_size, color = text_color) +
     ggplot2::scale_fill_gradient2(
       low = "#2166AC", mid = "white", high = "#B2182B",
       midpoint = 0, limits = c(-1, 1), name = "Correlation"
@@ -390,11 +395,12 @@ plot_correlation_matrix <- function(earth_result) {
     ggplot2::theme_minimal() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(face = "bold", size = 14),
-      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1, size = 10),
-      axis.text.y = ggplot2::element_text(size = 10),
-      panel.grid = ggplot2::element_blank()
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1, size = axis_size),
+      axis.text.y = ggplot2::element_text(size = axis_size),
+      panel.grid = ggplot2::element_blank(),
+      legend.position = "right"
     ) +
-    ggplot2::coord_fixed()
+    ggplot2::coord_fixed(expand = FALSE)
 }
 
 #' Plot residual diagnostics
