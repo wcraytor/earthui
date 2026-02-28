@@ -303,8 +303,8 @@ fluidPage(
           tabPanel(
             "Contribution",
             br(),
-            uiOutput("contrib_variable_selector"),
-            plotOutput("contrib_plot", height = "400px")
+            uiOutput("contrib_g_selector"),
+            uiOutput("contrib_plot_container")
           ),
           tabPanel(
             "Correlation",

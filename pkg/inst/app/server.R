@@ -640,29 +640,62 @@ function(input, output, session) {
     dt
   })
 
-  # --- Results: Contribution ---
-  output$contrib_variable_selector <- renderUI({
+  # --- Results: Contribution (g-function plots) ---
+  output$contrib_g_selector <- renderUI({
     req(rv$result)
-    imp <- format_variable_importance(rv$result)
-    vars <- if (nrow(imp) > 0) {
-      imp$variable[imp$variable %in% names(rv$result$data)]
-    } else {
-      rv$result$predictors
-    }
-    selectInput("contrib_variable", "Select variable", choices = vars)
+    gf <- list_g_functions(rv$result)
+    if (nrow(gf) == 0L) return(p("No g-functions in model."))
+
+    # Build display labels: "1: sq_ft_total" or "6: sq_ft_total x beds [3D]"
+    display_label <- ifelse(
+      gf$d >= 2L,
+      gsub(" ", " \u00d7 ", gf$label),
+      gf$label
+    )
+    labels <- paste0(gf$index, ": ", display_label,
+                     ifelse(gf$d >= 2L, " [3D]", ""))
+    choices <- stats::setNames(gf$index, labels)
+    selectInput("contrib_g_index", "Select g-function", choices = choices)
   })
 
-  output$contrib_plot <- renderPlot({
-    req(rv$result, input$contrib_variable)
+  output$contrib_plot_container <- renderUI({
+    req(rv$result, input$contrib_g_index)
+    gf <- list_g_functions(rv$result)
+    idx <- as.integer(input$contrib_g_index)
+    if (idx < 1L || idx > nrow(gf)) return(NULL)
+
+    if (gf$d[idx] >= 2L && requireNamespace("plotly", quietly = TRUE)) {
+      plotly::plotlyOutput("contrib_plot_3d", height = "500px")
+    } else {
+      plotOutput("contrib_plot_2d", height = "400px")
+    }
+  })
+
+  output$contrib_plot_2d <- renderPlot({
+    req(rv$result, input$contrib_g_index)
     tryCatch(
-      plot_contribution(rv$result, input$contrib_variable),
+      plot_g_function(rv$result, as.integer(input$contrib_g_index)),
       error = function(e) {
-        message("earthui: contribution plot error: ", e$message)
+        message("earthui: g-function 2D plot error: ", e$message)
         plot.new()
         text(0.5, 0.5, paste("Error:", e$message), cex = 1.2)
       }
     )
   })
+
+  if (requireNamespace("plotly", quietly = TRUE)) {
+    output$contrib_plot_3d <- plotly::renderPlotly({
+      req(rv$result, input$contrib_g_index)
+      tryCatch(
+        plot_g_function(rv$result, as.integer(input$contrib_g_index)),
+        error = function(e) {
+          message("earthui: g-function 3D plot error: ", e$message)
+          plotly::plot_ly() |>
+            plotly::layout(title = paste("Error:", e$message))
+        }
+      )
+    })
+  }
 
   # --- Results: Correlation Matrix ---
   output$correlation_plot <- renderPlot({

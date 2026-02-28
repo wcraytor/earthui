@@ -73,15 +73,16 @@ plot_variable_importance(result)
 knitr::kable(format_variable_importance(result), digits = 4)
 ```
 
-## Variable Contribution
+## g-Function Contributions
 
-```{r contribution, fig.width=8, fig.height=4, results='asis'}
-imp <- format_variable_importance(result)
-top_vars <- head(imp$variable[imp$variable %in% names(result$data)], 4)
+```{r g-functions, fig.width=8, fig.height=5, results='asis'}
+gf <- list_g_functions(result)
 
-for (var in top_vars) {
-  cat(sprintf("\n### %s\n\n", var))
-  p <- plot_contribution(result, var)
+for (i in seq_len(nrow(gf))) {
+  label <- gf$label[i]
+  if (gf$d[i] >= 2) label <- gsub(" ", " \u00d7 ", label)
+  cat(sprintf("\n### %s\n\n", label))
+  p <- plot_g_contour(result, i)
   print(p)
   cat("\n\n")
 }

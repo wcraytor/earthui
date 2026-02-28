@@ -526,3 +526,421 @@ plot_actual_vs_predicted <- function(earth_result) {
       plot.title = ggplot2::element_text(face = "bold", size = 14)
     )
 }
+
+#' List g-function groups from a fitted earth model
+#'
+#' Returns a data frame describing each non-intercept g-function group from the
+#' model equation, including degree, factor count, graph dimensionality, and
+#' the number of terms. The g-function notation is
+#' \eqn{{}^{f}g^{j}_{k}}{(f)g(j,k)} where f = number of factor variables
+#' (top-left), j = degree of interaction (top-right), k = position within the
+#' degree group (bottom-right).
+#'
+#' @param earth_result An object of class `"earthui_result"` as returned by
+#'   [fit_earth()].
+#'
+#' @return A data frame with columns:
+#'   \describe{
+#'     \item{index}{Integer. Sequential index (1-based).}
+#'     \item{label}{Character. Variable names in the group.}
+#'     \item{g_j}{Integer. Degree of the g-function (top-right superscript).}
+#'     \item{g_k}{Integer. Position within the degree (bottom-right subscript).}
+#'     \item{g_f}{Integer. Number of factor variables (top-left superscript).}
+#'     \item{d}{Integer. Graph dimensionality (degree minus factor count).}
+#'     \item{n_terms}{Integer. Number of terms in the group.}
+#'   }
+#'
+#' @export
+#' @examples
+#' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
+#' list_g_functions(result)
+list_g_functions <- function(earth_result) {
+  validate_earthui_result(earth_result)
+  eq <- format_model_equation(earth_result)
+  groups <- eq$groups
+  non_intercept <- Filter(function(g) g$degree > 0L, groups)
+
+  if (length(non_intercept) == 0L) {
+    return(data.frame(
+      index = integer(0), label = character(0),
+      g_j = integer(0), g_k = integer(0), g_f = integer(0),
+      d = integer(0), n_terms = integer(0),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  data.frame(
+    index = seq_along(non_intercept),
+    label = vapply(non_intercept, `[[`, character(1), "label"),
+    g_j = vapply(non_intercept, `[[`, integer(1), "g_j"),
+    g_k = vapply(non_intercept, `[[`, integer(1), "g_k"),
+    g_f = vapply(non_intercept, `[[`, integer(1), "g_f"),
+    d = vapply(non_intercept, function(g) g$degree - g$n_factors, integer(1)),
+    n_terms = vapply(non_intercept, function(g) length(g$terms), integer(1)),
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Plot g-function contribution
+#'
+#' Creates a contribution plot for a specific g-function group. For degree-1
+#' groups (single variable), produces a 2D scatter + piecewise-linear plot with
+#' slope labels and knot markers. For degree-2 groups (two variables), produces
+#' a 3D surface plot using plotly if available, or a filled contour plot.
+#'
+#' @param earth_result An object of class `"earthui_result"` as returned by
+#'   [fit_earth()].
+#' @param group_index Integer. Index of the g-function group (1-based, from
+#'   [list_g_functions()]).
+#'
+#' @return A [ggplot2::ggplot] object for d <= 1, or a plotly widget for d >= 2
+#'   (when plotly is installed). Falls back to ggplot2 contour if plotly is not
+#'   available.
+#'
+#' @export
+#' @examples
+#' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
+#' plot_g_function(result, 1)
+plot_g_function <- function(earth_result, group_index) {
+  validate_earthui_result(earth_result)
+  eq <- format_model_equation(earth_result)
+  non_intercept <- Filter(function(g) g$degree > 0L, eq$groups)
+
+  group_index <- as.integer(group_index)
+  if (group_index < 1L || group_index > length(non_intercept)) {
+    stop("group_index must be between 1 and ", length(non_intercept),
+         call. = FALSE)
+  }
+
+  grp <- non_intercept[[group_index]]
+  d <- grp$degree - grp$n_factors
+
+  if (d >= 2L) {
+    plot_g_3d_(earth_result, grp)
+  } else {
+    plot_g_2d_(earth_result, grp)
+  }
+}
+
+#' Plot g-function as a static contour (for reports)
+#'
+#' Creates a ggplot2 visualization for any g-function group. For d <= 1,
+#' produces a 2D scatter plot (same as [plot_g_function()]). For d >= 2,
+#' produces a filled contour plot suitable for static formats like PDF and Word.
+#'
+#' @inheritParams plot_g_function
+#'
+#' @return A [ggplot2::ggplot] object.
+#'
+#' @export
+#' @examples
+#' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
+#' plot_g_contour(result, 1)
+plot_g_contour <- function(earth_result, group_index) {
+  validate_earthui_result(earth_result)
+  eq <- format_model_equation(earth_result)
+  non_intercept <- Filter(function(g) g$degree > 0L, eq$groups)
+
+  group_index <- as.integer(group_index)
+  if (group_index < 1L || group_index > length(non_intercept)) {
+    stop("group_index must be between 1 and ", length(non_intercept),
+         call. = FALSE)
+  }
+
+  grp <- non_intercept[[group_index]]
+  d <- grp$degree - grp$n_factors
+
+  if (d >= 2L) {
+    plot_g_contour_(earth_result, grp)
+  } else {
+    plot_g_2d_(earth_result, grp)
+  }
+}
+
+# --- Internal: Evaluate g-function group on new data ---
+# Returns numeric vector, one value per row of newdata
+eval_g_function_ <- function(model, group, newdata) {
+  coefs <- as.numeric(stats::coef(model))
+  n <- nrow(newdata)
+  total <- numeric(n)
+
+  for (term in group$terms) {
+    ti <- term$index
+    term_val <- rep(coefs[ti], n)
+    for (comp in term$components) {
+      if (comp$is_factor) {
+        x <- as.character(newdata[[comp$base_var]])
+        term_val <- term_val * as.numeric(x == comp$level)
+      } else {
+        x <- newdata[[comp$base_var]]
+        if (comp$dir == 2) {
+          term_val <- term_val * x
+        } else if (comp$dir == 1) {
+          term_val <- term_val * pmax(0, x - comp$cut)
+        } else {
+          term_val <- term_val * pmax(0, comp$cut - x)
+        }
+      }
+    }
+    total <- total + term_val
+  }
+  total
+}
+
+# --- Internal: 2D plot for d <= 1 g-functions ---
+plot_g_2d_ <- function(earth_result, grp) {
+  model <- earth_result$model
+  data <- earth_result$data
+  target <- earth_result$target
+
+  title <- sprintf("%s  (%d term%s)", grp$label,
+                   length(grp$terms), if (length(grp$terms) > 1L) "s" else "")
+
+  numeric_vars <- grp$base_vars[!grp$base_vars %in% earth_result$categoricals]
+
+  if (length(numeric_vars) == 0L) {
+    # All factors: bar chart
+    contrib <- eval_g_function_(model, grp, data)
+    fvar <- grp$base_vars[1]
+    plot_df <- data.frame(x = as.character(data[[fvar]]), y = contrib,
+                          stringsAsFactors = FALSE)
+    return(
+      ggplot2::ggplot(plot_df, ggplot2::aes(x = .data$x, y = .data$y)) +
+        ggplot2::geom_boxplot(fill = "#2c7bb6", alpha = 0.5,
+                              outlier.shape = NA) +
+        ggplot2::geom_jitter(color = "#2c7bb6", alpha = 0.5, width = 0.2) +
+        ggplot2::scale_y_continuous(labels = dollar_format_) +
+        ggplot2::labs(title = title, x = fvar,
+                      y = paste("Contribution to", target)) +
+        ggplot2::theme_minimal() +
+        ggplot2::theme(
+          plot.title = ggplot2::element_text(face = "bold", size = 13))
+    )
+  }
+
+  var <- numeric_vars[1]
+  var_col <- data[[var]]
+
+  # Compute training-data contributions using bx (exact match to model)
+  term_indices <- vapply(grp$terms, function(t) t$index, integer(1))
+  bx <- model$bx
+  coefs <- as.numeric(stats::coef(model))
+  contrib <- rowSums(sweep(bx[, term_indices, drop = FALSE], 2,
+                           coefs[term_indices], "*"))
+
+  plot_df <- data.frame(x = var_col, y = contrib)
+  plot_df <- plot_df[order(plot_df$x), ]
+
+  # Collect knots for this variable from the group's terms
+  dirs <- model$dirs[model$selected.terms, , drop = FALSE]
+  cuts <- model$cuts[model$selected.terms, , drop = FALSE]
+  col_names <- colnames(dirs)
+
+  matching_cols <- col_names == var
+  if (!any(matching_cols)) {
+    for (cn in col_names) {
+      if (startsWith(cn, var) && cn != var) {
+        matching_cols[col_names == cn] <- TRUE
+      }
+    }
+  }
+
+  knots <- numeric(0)
+  for (ti in term_indices) {
+    for (ci in which(matching_cols)) {
+      if (dirs[ti, ci] != 0 && dirs[ti, ci] != 2) {
+        knots <- c(knots, cuts[ti, ci])
+      }
+    }
+  }
+  knots <- sort(unique(knots))
+
+  x_min <- min(var_col, na.rm = TRUE)
+  x_max <- max(var_col, na.rm = TRUE)
+  knots <- knots[knots > x_min & knots < x_max]
+
+  # Evaluate g-function on a fine grid for the line
+  grid_x <- seq(x_min, x_max, length.out = 200)
+  eps <- (x_max - x_min) * 1e-6
+  for (k in knots) {
+    grid_x <- c(grid_x, k - eps, k, k + eps)
+  }
+  grid_x <- sort(unique(grid_x))
+  grid_x <- grid_x[grid_x >= x_min & grid_x <= x_max]
+
+  eval_row <- data[1L, , drop = FALSE]
+  grid_y <- vapply(grid_x, function(xv) {
+    eval_row[[var]] <- xv
+    eval_g_function_(model, grp, eval_row)
+  }, numeric(1))
+
+  line_df <- data.frame(x = grid_x, y = grid_y)
+
+  # Compute slopes between knot segments
+  breaks <- c(x_min, knots, x_max)
+  break_y <- vapply(breaks, function(xv) {
+    eval_row[[var]] <- xv
+    eval_g_function_(model, grp, eval_row)
+  }, numeric(1))
+
+  n_seg <- length(breaks) - 1L
+  if (n_seg > 0L) {
+    seg_df <- data.frame(
+      x_mid = (breaks[-length(breaks)] + breaks[-1]) / 2,
+      y_mid = (break_y[-length(break_y)] + break_y[-1]) / 2,
+      slope = diff(break_y) / diff(breaks)
+    )
+    seg_df$label <- paste0(
+      ifelse(seg_df$slope >= 0, "+$", "-$"),
+      formatC(abs(seg_df$slope), format = "f", digits = 2, big.mark = ","),
+      "/unit"
+    )
+  } else {
+    seg_df <- data.frame(x_mid = numeric(0), y_mid = numeric(0),
+                         slope = numeric(0), label = character(0))
+  }
+
+  p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data$x, y = .data$y)) +
+    ggplot2::geom_point(alpha = 0.6, color = "#2c7bb6") +
+    ggplot2::geom_line(data = line_df, ggplot2::aes(x = .data$x, y = .data$y),
+                       color = "#d7191c", linewidth = 0.8)
+
+  if (nrow(seg_df) > 0L) {
+    p <- p + ggplot2::geom_label(
+      data = seg_df,
+      ggplot2::aes(x = .data$x_mid, y = .data$y_mid, label = .data$label),
+      size = 3.2, fill = "white", alpha = 0.85,
+      label.padding = ggplot2::unit(0.15, "lines"),
+      label.size = 0.3, color = "#333333"
+    )
+  }
+
+  if (length(knots) > 0L) {
+    p <- p + ggplot2::geom_vline(xintercept = knots, linetype = "dashed",
+                                 color = "grey50", alpha = 0.5)
+  }
+
+  p + ggplot2::scale_x_continuous(labels = comma_format_) +
+    ggplot2::scale_y_continuous(labels = dollar_format_) +
+    ggplot2::labs(title = title, x = var,
+                  y = paste("Contribution to", target)) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 13)
+    )
+}
+
+# --- Internal: 3D plotly surface for d >= 2 g-functions ---
+plot_g_3d_ <- function(earth_result, grp) {
+  model <- earth_result$model
+  data <- earth_result$data
+  target <- earth_result$target
+
+  numeric_vars <- grp$base_vars[!grp$base_vars %in% earth_result$categoricals]
+  if (length(numeric_vars) < 2L) {
+    return(plot_g_2d_(earth_result, grp))
+  }
+
+  var1 <- numeric_vars[1]
+  var2 <- numeric_vars[2]
+  title <- sprintf("%s  (%d term%s)", grp$label,
+                   length(grp$terms), if (length(grp$terms) > 1L) "s" else "")
+
+  n_grid <- 50L
+  x1_seq <- seq(min(data[[var1]], na.rm = TRUE),
+                max(data[[var1]], na.rm = TRUE), length.out = n_grid)
+  x2_seq <- seq(min(data[[var2]], na.rm = TRUE),
+                max(data[[var2]], na.rm = TRUE), length.out = n_grid)
+  grid <- expand.grid(x1 = x1_seq, x2 = x2_seq)
+
+  eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
+  eval_data[[var1]] <- grid$x1
+  eval_data[[var2]] <- grid$x2
+  z_vals <- eval_g_function_(model, grp, eval_data)
+  z_mat <- matrix(z_vals, nrow = n_grid, ncol = n_grid)
+
+  if (!requireNamespace("plotly", quietly = TRUE)) {
+    grid$z <- z_vals
+    return(
+      ggplot2::ggplot(grid, ggplot2::aes(x = .data$x1, y = .data$x2)) +
+        ggplot2::geom_contour_filled(ggplot2::aes(z = .data$z), bins = 15) +
+        ggplot2::scale_x_continuous(labels = comma_format_) +
+        ggplot2::scale_y_continuous(labels = comma_format_) +
+        ggplot2::labs(title = title, x = var1, y = var2,
+                      fill = paste("Contribution\nto", target)) +
+        ggplot2::theme_minimal() +
+        ggplot2::theme(
+          plot.title = ggplot2::element_text(face = "bold", size = 13))
+    )
+  }
+
+  # Training data contributions for scatter overlay
+  term_indices <- vapply(grp$terms, function(t) t$index, integer(1))
+  bx <- model$bx
+  coefs <- as.numeric(stats::coef(model))
+  contrib <- rowSums(sweep(bx[, term_indices, drop = FALSE], 2,
+                           coefs[term_indices], "*"))
+
+  plotly::plot_ly() |>
+    plotly::add_surface(
+      x = x1_seq, y = x2_seq, z = z_mat,
+      colorscale = list(c(0, "#2166AC"), c(0.5, "#f7f7f7"), c(1, "#B2182B")),
+      opacity = 0.85,
+      colorbar = list(title = paste("Contribution\nto", target)),
+      name = "Surface",
+      showlegend = FALSE
+    ) |>
+    plotly::add_markers(
+      x = data[[var1]], y = data[[var2]], z = contrib,
+      marker = list(size = 3, color = "#333333", opacity = 0.4),
+      name = "Data"
+    ) |>
+    plotly::layout(
+      title = list(text = title, font = list(size = 14)),
+      scene = list(
+        xaxis = list(title = var1),
+        yaxis = list(title = var2),
+        zaxis = list(title = paste("Contribution to", target))
+      )
+    )
+}
+
+# --- Internal: Static contour for d >= 2 (PDF/Word reports) ---
+plot_g_contour_ <- function(earth_result, grp) {
+  model <- earth_result$model
+  data <- earth_result$data
+  target <- earth_result$target
+
+  numeric_vars <- grp$base_vars[!grp$base_vars %in% earth_result$categoricals]
+  if (length(numeric_vars) < 2L) {
+    return(plot_g_2d_(earth_result, grp))
+  }
+
+  var1 <- numeric_vars[1]
+  var2 <- numeric_vars[2]
+  title <- sprintf("%s  (%d term%s)", grp$label,
+                   length(grp$terms), if (length(grp$terms) > 1L) "s" else "")
+
+  n_grid <- 80L
+  x1_seq <- seq(min(data[[var1]], na.rm = TRUE),
+                max(data[[var1]], na.rm = TRUE), length.out = n_grid)
+  x2_seq <- seq(min(data[[var2]], na.rm = TRUE),
+                max(data[[var2]], na.rm = TRUE), length.out = n_grid)
+
+  grid <- expand.grid(x1 = x1_seq, x2 = x2_seq)
+  eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
+  eval_data[[var1]] <- grid$x1
+  eval_data[[var2]] <- grid$x2
+  grid$z <- eval_g_function_(model, grp, eval_data)
+
+  ggplot2::ggplot(grid, ggplot2::aes(x = .data$x1, y = .data$x2)) +
+    ggplot2::geom_contour_filled(ggplot2::aes(z = .data$z), bins = 15) +
+    ggplot2::scale_x_continuous(labels = comma_format_) +
+    ggplot2::scale_y_continuous(labels = comma_format_) +
+    ggplot2::labs(title = title, x = var1, y = var2,
+                  fill = paste("Contribution\nto", target)) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 13)
+    )
+}
