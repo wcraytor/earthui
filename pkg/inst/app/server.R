@@ -451,48 +451,52 @@ function(input, output, session) {
     pmethod <- input$pmethod
     linpreds <- input$linpreds
 
-    tryCatch({
-      rv$result <- fit_earth(
-        df = rv$data,
-        target = input$target,
-        predictors = input$predictors,
-        categoricals = input$categoricals,
-        linpreds = linpreds,
-        degree = degree,
-        allowed_func = allowed_func,
-        nfold = nfold,
-        nprune = nprune,
-        thresh = thresh,
-        penalty = penalty,
-        minspan = minspan,
-        endspan = endspan,
-        fast.k = fast_k,
-        pmethod = pmethod,
-        glm = glm_arg,
-        trace = trace_val,
-        nk = nk,
-        newvar.penalty = newvar_penalty,
-        fast.beta = fast_beta,
-        ncross = ncross,
-        stratify = input$stratify,
-        varmod.method = input$varmod_method,
-        varmod.exponent = varmod_exponent,
-        varmod.conv = varmod_conv,
-        varmod.clamp = varmod_clamp,
-        varmod.minspan = varmod_minspan,
-        keepxy = input$keepxy,
-        Scale.y = input$scale_y,
-        Adjust.endspan = adjust_endspan,
-        Auto.linpreds = input$auto_linpreds,
-        Force.weights = input$force_weights,
-        Use.beta.cache = input$use_beta_cache,
-        Force.xtx.prune = input$force_xtx_prune,
-        Get.leverages = input$get_leverages,
-        Exhaustive.tol = exhaustive_tol
-      )
-    }, error = function(e) {
-      showNotification(paste("Model error:", e$message),
-                       type = "error", duration = 10)
+    withProgress(message = "Fitting Earth model...", value = 0.2, {
+      tryCatch({
+        setProgress(0.3, detail = "Running forward pass")
+        rv$result <- fit_earth(
+          df = rv$data,
+          target = input$target,
+          predictors = input$predictors,
+          categoricals = input$categoricals,
+          linpreds = linpreds,
+          degree = degree,
+          allowed_func = allowed_func,
+          nfold = nfold,
+          nprune = nprune,
+          thresh = thresh,
+          penalty = penalty,
+          minspan = minspan,
+          endspan = endspan,
+          fast.k = fast_k,
+          pmethod = pmethod,
+          glm = glm_arg,
+          trace = trace_val,
+          nk = nk,
+          newvar.penalty = newvar_penalty,
+          fast.beta = fast_beta,
+          ncross = ncross,
+          stratify = input$stratify,
+          varmod.method = input$varmod_method,
+          varmod.exponent = varmod_exponent,
+          varmod.conv = varmod_conv,
+          varmod.clamp = varmod_clamp,
+          varmod.minspan = varmod_minspan,
+          keepxy = input$keepxy,
+          Scale.y = input$scale_y,
+          Adjust.endspan = adjust_endspan,
+          Auto.linpreds = input$auto_linpreds,
+          Force.weights = input$force_weights,
+          Use.beta.cache = input$use_beta_cache,
+          Force.xtx.prune = input$force_xtx_prune,
+          Get.leverages = input$get_leverages,
+          Exhaustive.tol = exhaustive_tol
+        )
+        setProgress(1, detail = "Done")
+      }, error = function(e) {
+        showNotification(paste("Model error:", e$message),
+                         type = "error", duration = 10)
+      })
     })
   })
 
