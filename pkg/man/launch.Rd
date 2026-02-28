@@ -4,9 +4,13 @@
 \alias{launch}
 \title{Launch the earthui Shiny application}
 \usage{
-launch(...)
+launch(port = 7878L, ...)
 }
 \arguments{
+\item{port}{Integer. Port number for the Shiny app. Defaults to 7878.
+A fixed port ensures browser localStorage (saved settings) persists
+across sessions.}
+
 \item{...}{Additional arguments passed to \code{\link[shiny:runApp]{shiny::runApp()}}.}
 }
 \value{
