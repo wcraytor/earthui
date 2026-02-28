@@ -14,6 +14,11 @@ fluidPage(
     .eui-eq-expr { text-align: left; vertical-align: top; padding-bottom: 0.4em; }
     .eui-param-help { position: absolute; top: 0; right: 0; width: 18px; height: 18px; border-radius: 50%; background: #5bc0de; color: #fff; font-size: 11px; font-weight: bold; text-align: center; line-height: 18px; cursor: pointer; z-index: 10; }
     .eui-param-help:hover { background: #31b0d5; }
+    #eui-theme-toggle { position: fixed; top: 12px; right: 20px; z-index: 10000; width: 38px; height: 38px; border-radius: 50%; border: 2px solid #ccc; background: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.15); transition: all 0.3s; }
+    #eui-theme-toggle:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.25); }
+    [data-bs-theme='dark'] #eui-theme-toggle { background: #2c3e50; border-color: #555; }
+    [data-bs-theme='dark'] .eui-popup-content { background: #2c3e50; color: #ecf0f1; }
+    [data-bs-theme='dark'] details > summary { color: #ecf0f1 !important; }
   ")),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -30,6 +35,31 @@ fluidPage(
       obs.observe(document.body, { childList: true, subtree: true });
     });
   "))),
+  tags$button(id = "eui-theme-toggle", onclick = "toggleTheme()", HTML("&#9790;")),
+  tags$script(HTML("
+    function toggleTheme() {
+      var html = document.documentElement;
+      var btn = document.getElementById('eui-theme-toggle');
+      if (html.getAttribute('data-bs-theme') === 'dark') {
+        html.removeAttribute('data-bs-theme');
+        btn.innerHTML = '\\u263E';
+        try { localStorage.setItem('earthui_theme', 'light'); } catch(e) {}
+      } else {
+        html.setAttribute('data-bs-theme', 'dark');
+        btn.innerHTML = '\\u2600';
+        try { localStorage.setItem('earthui_theme', 'dark'); } catch(e) {}
+      }
+    }
+    (function() {
+      var saved = null;
+      try { saved = localStorage.getItem('earthui_theme'); } catch(e) {}
+      if (saved === 'dark') {
+        document.documentElement.setAttribute('data-bs-theme', 'dark');
+        var btn = document.getElementById('eui-theme-toggle');
+        if (btn) btn.innerHTML = '\\u2600';
+      }
+    })();
+  ")),
   titlePanel("earthui - Interactive Earth Model Builder"),
 
   sidebarLayout(
