@@ -1200,12 +1200,17 @@ function(input, output, session) {
     }
 
     if (length(rv$result$trace_output) > 0L) {
-      cat("\n\n== Trace Log ==\n\n")
-      for (line in rv$result$trace_output) {
-        if (nchar(line) > 25L) {
-          cat(substr(line, 1L, 25L), "...\n")
-        } else {
-          cat(line, "\n")
+      trace_lines <- rv$result$trace_output
+      trace_lines <- trace_lines[!grepl("^Removed .* rows with miss", trace_lines)]
+      trace_lines <- trace_lines[!grepl("^CV fold ", trace_lines)]
+      if (length(trace_lines) > 0L) {
+        cat("\n\n== Trace Log ==\n\n")
+        for (line in trace_lines) {
+          if (nchar(line) > 25L) {
+            cat(substr(line, 1L, 25L), "...\n")
+          } else {
+            cat(line, "\n")
+          }
         }
       }
     }
