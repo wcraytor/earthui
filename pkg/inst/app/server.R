@@ -328,7 +328,9 @@ function(input, output, session) {
     header_cells <- list(tags$th(style = "padding: 2px;", ""))
     for (j in seq_len(n)) {
       header_cells <- c(header_cells, list(
-        tags$th(style = "padding: 2px 4px; font-size: 0.75em; text-align: center; writing-mode: vertical-lr; transform: rotate(180deg); max-height: 100px; overflow: hidden;",
+        tags$th(class = "eui-matrix-varlabel",
+                `data-var-idx` = j,
+                style = "padding: 2px 4px; font-size: 0.75em; text-align: center; writing-mode: vertical-lr; transform: rotate(180deg); max-height: 100px; overflow: hidden; cursor: pointer;",
                 title = preds[j], preds[j])
       ))
     }
@@ -338,8 +340,9 @@ function(input, output, session) {
     body_rows <- list()
     for (i in seq_len(n)) {
       cells <- list(
-        tags$td(class = "eui-matrix-rowlabel",
-                style = "padding: 2px 4px; font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;",
+        tags$td(class = "eui-matrix-rowlabel eui-matrix-varlabel",
+                `data-var-idx` = i,
+                style = "padding: 2px 4px; font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; cursor: pointer;",
                 title = preds[i], preds[i])
       )
       for (j in seq_len(n)) {
@@ -418,6 +421,25 @@ function(input, output, session) {
         $(document).off('change.euimatrix').on('change.euimatrix', '.eui-interaction-cb', function() {
           saveState();
           syncToShiny();
+        });
+
+        // Click variable name (row or column header) to toggle all its interactions
+        $(document).off('click.euivarlabel').on('click.euivarlabel', '.eui-matrix-varlabel', function() {
+          var k = parseInt($(this).attr('data-var-idx'));
+          if (isNaN(k)) return;
+          // Collect all checkboxes involving variable k
+          var cbs = [];
+          for (var i = 1; i <= n; i++) {
+            if (i === k) continue;
+            var lo = Math.min(i, k), hi = Math.max(i, k);
+            var $cb = $('#allowed_' + lo + '_' + hi);
+            if ($cb.length) cbs.push($cb);
+          }
+          // Toggle: if all checked, uncheck all; otherwise check all
+          var allChecked = cbs.every(function($cb) { return $cb.is(':checked'); });
+          cbs.forEach(function($cb) { $cb.prop('checked', !allChecked); });
+          // Trigger change to save and sync
+          if (cbs.length > 0) cbs[0].trigger('change');
         });
       })();
     ", n, jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
