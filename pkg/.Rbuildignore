@@ -8,3 +8,4 @@
 ^pkgdown$
 ^AUTHOR\.md$
 \.DS_Store$
+^\.lintr$

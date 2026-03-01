@@ -825,12 +825,18 @@ eval_g_function_ <- function(model, group, newdata, response_idx = NULL) {
     for (comp in term$components) {
       if (comp$is_factor) {
         col_data <- newdata[[comp$base_var]]
-        if (is.null(col_data)) { term_val <- rep(0, n); break }
+        if (is.null(col_data)) {
+          term_val <- rep(0, n)
+          break
+        }
         x <- as.character(col_data)
         term_val <- term_val * as.numeric(x == comp$level)
       } else {
         x <- newdata[[comp$base_var]]
-        if (is.null(x)) { term_val <- rep(0, n); break }
+        if (is.null(x)) {
+          term_val <- rep(0, n)
+          break
+        }
         if (comp$dir == 2) {
           term_val <- term_val * x
         } else if (comp$dir == 1) {
@@ -939,7 +945,7 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
   grid_x <- sort(unique(grid_x))
   grid_x <- grid_x[grid_x >= x_min & grid_x <= x_max]
 
-  eval_row <- data[1L, , drop = FALSE]
+  eval_row <- data[1L, , drop = FALSE] # nolint: object_usage_linter. Used in closures below.
   grid_y <- vapply(grid_x, function(xv) {
     eval_row[[var]] <- xv
     eval_g_function_(model, grp, eval_row, response_idx = ri)
