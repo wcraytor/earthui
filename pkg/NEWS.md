@@ -18,6 +18,15 @@
 * Click variable name to toggle all its interactions (symmetric toggle).
 * Allow All / Clear All buttons.
 
+## Multivariate Models
+
+* Multi-response model support: select multiple target variables to fit
+  `cbind()` earth models.
+* Per-response equation display, summary metrics, and ANOVA decomposition.
+* All plot functions accept `response_idx` to select which response to
+  visualize.
+* Observation weights via the `weights` parameter in `fit_earth()`.
+
 ## Model Fitting
 
 * Asynchronous background fitting via `callr::r_bg()` with real-time trace

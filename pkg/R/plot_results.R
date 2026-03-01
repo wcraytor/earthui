@@ -44,6 +44,16 @@ comma_format_ <- function(x) {
          formatC(x, format = "f", digits = d, big.mark = ","))
 }
 
+# Internal: return font family with fallback for environments without showtext
+eui_font_family_ <- function() {
+  if (requireNamespace("sysfonts", quietly = TRUE) &&
+      "Roboto Condensed" %in% sysfonts::font_families()) {
+    "Roboto Condensed"
+  } else {
+    "sans"
+  }
+}
+
 #' Plot variable importance
 #'
 #' Creates a horizontal bar chart of variable importance from a fitted
@@ -337,7 +347,7 @@ plot_contribution <- function(earth_result, variable, response_idx = NULL) {
         size = 3.2, fill = "white", alpha = 0.85,
         label.padding = ggplot2::unit(0.15, "lines"),
         label.size = 0.3, color = "#333333",
-        family = "Roboto Condensed"
+        family = eui_font_family_()
       )
     }
 
@@ -428,7 +438,7 @@ plot_correlation_matrix <- function(earth_result) {
     ggplot2::geom_tile(color = "white", linewidth = 1.2) +
     ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", .data$value)),
                        size = txt_size, color = text_color,
-                       family = "Roboto Condensed") +
+                       family = eui_font_family_()) +
     ggplot2::scale_fill_gradient2(
       low = "#2166AC", mid = "white", high = "#B2182B",
       midpoint = 0, limits = c(-1, 1), name = "Correlation"
@@ -984,7 +994,7 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
       size = 3.2, fill = "white", alpha = 0.85,
       label.padding = ggplot2::unit(0.15, "lines"),
       label.size = 0.3, color = "#333333",
-      family = "Roboto Condensed"
+      family = eui_font_family_()
     )
   }
 
@@ -1073,8 +1083,8 @@ plot_g_3d_ <- function(earth_result, grp, response_idx = NULL) {
       name = "Data"
     ) |>
     plotly::layout(
-      font = list(family = "Roboto Condensed"),
-      title = list(text = title, font = list(family = "Roboto Condensed",
+      font = list(family = eui_font_family_()),
+      title = list(text = title, font = list(family = eui_font_family_(),
                                               size = 14)),
       scene = list(
         xaxis = list(title = var1),
@@ -1182,7 +1192,7 @@ plot_g_persp_ <- function(earth_result, grp, theta = 30, phi = 25,
   # Save and restore par
   old_par <- graphics::par(no.readonly = TRUE)
   on.exit(graphics::par(old_par), add = TRUE)
-  graphics::par(mar = c(2, 2, 3, 2), family = "Roboto Condensed")
+  graphics::par(mar = c(2, 2, 3, 2), family = eui_font_family_())
 
   graphics::persp(
     x = x1_seq, y = x2_seq, z = z_mat,

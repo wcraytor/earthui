@@ -9,3 +9,4 @@
 ^AUTHOR\.md$
 \.DS_Store$
 ^\.lintr$
+^cran-comments\.md$
