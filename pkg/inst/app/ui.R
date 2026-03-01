@@ -1,7 +1,9 @@
 fluidPage(
   withMathJax(),
-  theme = bslib::bs_theme(version = 5, bootswatch = "flatly"),
+  theme = bslib::bs_theme(version = 5, bootswatch = "flatly",
+                          base_font = bslib::font_google("Roboto Condensed")),
   tags$head(
+    tags$link(rel = "icon", type = "image/png", href = "favicon.png"),
     tags$script(type = "text/x-mathjax-config", HTML("
       MathJax.Hub.Config({
         'HTML-CSS': { preferredFont: 'TeX', scale: 90 }
@@ -24,7 +26,7 @@ fluidPage(
     [data-bs-theme='dark'] #eui-theme-toggle { background: #2c3e50; border-color: #555; }
     [data-bs-theme='dark'] .eui-popup-content { background: #2c3e50; color: #ecf0f1; }
     [data-bs-theme='dark'] details > summary { color: #ecf0f1 !important; }
-    #earth_output { font-family: 'MathJax_Main', 'Computer Modern', Georgia, 'Times New Roman', serif; font-size: 0.9em; line-height: 1.5; }
+    #earth_output { font-family: 'Roboto Condensed', sans-serif; font-size: 0.9em; line-height: 1.5; }
     .eui-matrix-header th { position: sticky; top: 0; z-index: 2; background: var(--bs-body-bg, #fff); }
     .eui-matrix-header th:first-child { position: sticky; left: 0; z-index: 3; }
     .eui-matrix-rowlabel { position: sticky; left: 0; z-index: 1; background: var(--bs-body-bg, #fff); }
@@ -103,7 +105,16 @@ fluidPage(
       $('#eui-trace-log').delay(2000).fadeOut(500, function(){ $(this).remove(); });
     });
   ")),
-  titlePanel("earthui - Interactive Earth Model Builder"),
+  tags$div(
+    style = "padding: 10px 15px;",
+    tags$h2(
+      tags$img(src = "logo.png", height = "32px",
+               style = "margin-right: 8px; vertical-align: middle;"),
+      "earthui",
+      tags$small(" - Interactive Earth Model Builder",
+                 style = "font-size: 0.6em; color: #7f8c8d;")
+    )
+  ),
 
   sidebarLayout(
     sidebarPanel(

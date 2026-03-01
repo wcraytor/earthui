@@ -1,18 +1,47 @@
-# Internal: format axis labels as $1,234 (dollar with commas, no decimals)
-# Negative values: -$200,000 (sign before dollar sign)
-dollar_format_ <- function(x) {
-  ifelse(is.na(x), "",
-         ifelse(x < 0,
-                paste0("-$", formatC(abs(round(x)), format = "f",
-                                     digits = 0, big.mark = ",")),
-                paste0("$", formatC(round(x), format = "f",
-                                    digits = 0, big.mark = ","))))
+# Internal: choose decimal places based on axis range
+auto_digits_ <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) < 2L) return(0L)
+  rng <- diff(range(x))
+  if (rng < 1)   3L
+  else if (rng < 10)  2L
+  else if (rng < 100) 1L
+  else 0L
 }
 
-# Internal: format axis labels with commas (no dollar sign, no decimals)
-comma_format_ <- function(x) {
+# Internal: format slope labels adapting the unit to x-axis range.
+# For lat/long-scale variables (range < 1) the unit becomes 0.001.
+format_slope_labels_ <- function(slopes, x_breaks) {
+  d <- auto_digits_(x_breaks)
+  unit_size <- 10^(-d)          # 1, 0.1, 0.01, or 0.001
+  scaled <- slopes * unit_size
+  unit_label <- if (d == 0L) "/unit" else paste0("/", format(unit_size, scientific = FALSE))
+  paste0(
+    ifelse(scaled >= 0, "+$", "-$"),
+    formatC(abs(scaled), format = "f", digits = 2, big.mark = ","),
+    unit_label
+  )
+}
+
+# Internal: format axis labels as $1,234 (dollar with commas)
+# Adapts decimal places to value range (e.g. lat/long gets 3 dp)
+# Negative values: -$200,000 (sign before dollar sign)
+dollar_format_ <- function(x) {
+  d <- auto_digits_(x)
   ifelse(is.na(x), "",
-         formatC(round(x), format = "f", digits = 0, big.mark = ","))
+         ifelse(x < 0,
+                paste0("-$", formatC(abs(x), format = "f",
+                                     digits = d, big.mark = ",")),
+                paste0("$", formatC(x, format = "f",
+                                    digits = d, big.mark = ","))))
+}
+
+# Internal: format axis labels with commas (no dollar sign)
+# Adapts decimal places to value range (e.g. lat/long gets 3 dp)
+comma_format_ <- function(x) {
+  d <- auto_digits_(x)
+  ifelse(is.na(x), "",
+         formatC(x, format = "f", digits = d, big.mark = ","))
 }
 
 #' Plot variable importance
@@ -274,12 +303,7 @@ plot_contribution <- function(earth_result, variable) {
         y_mid  = (break_y[-length(break_y)] + break_y[-1]) / 2,
         slope  = diff(break_y) / diff(breaks)
       )
-      # Format slope labels as $X,XXX/unit
-      seg_df$label <- paste0(
-        ifelse(seg_df$slope >= 0, "+$", "-$"),
-        formatC(abs(seg_df$slope), format = "f", digits = 2, big.mark = ","),
-        "/unit"
-      )
+      seg_df$label <- format_slope_labels_(seg_df$slope, breaks)
     } else {
       seg_df <- data.frame(x_mid = numeric(0), y_mid = numeric(0),
                            slope = numeric(0), label = character(0))
@@ -303,7 +327,8 @@ plot_contribution <- function(earth_result, variable) {
         ggplot2::aes(x = .data$x_mid, y = .data$y_mid, label = .data$label),
         size = 3.2, fill = "white", alpha = 0.85,
         label.padding = ggplot2::unit(0.15, "lines"),
-        label.size = 0.3, color = "#333333"
+        label.size = 0.3, color = "#333333",
+        family = "Roboto Condensed"
       )
     }
 
@@ -388,7 +413,8 @@ plot_correlation_matrix <- function(earth_result) {
                                fill = .data$value)) +
     ggplot2::geom_tile(color = "white", linewidth = 1.2) +
     ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", .data$value)),
-                       size = txt_size, color = text_color) +
+                       size = txt_size, color = text_color,
+                       family = "Roboto Condensed") +
     ggplot2::scale_fill_gradient2(
       low = "#2166AC", mid = "white", high = "#B2182B",
       midpoint = 0, limits = c(-1, 1), name = "Correlation"
@@ -641,6 +667,58 @@ plot_g_function <- function(earth_result, group_index) {
 #' @examples
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_g_contour(result, 1)
+#' Plot g-function as a static 3D perspective (for reports)
+#'
+#' Creates a base R `persp()` 3D surface plot for g-function groups with d >= 2.
+#' For d <= 1, produces a 2D scatter plot (same as [plot_g_function()]).
+#' The surface is colored by contribution value using a blue-white-red scale.
+#' Suitable for PDF and Word output where interactive plotly is not available.
+#'
+#' @inheritParams plot_g_function
+#' @param theta Numeric. Azimuthal rotation angle in degrees. Default 30.
+#' @param phi Numeric. Elevation angle in degrees. Default 25.
+#'
+#' @return Invisible `NULL` (base graphics). For d <= 1, returns a ggplot object.
+#'
+#' @export
+#' @examples
+#' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"), degree = 2L)
+#' plot_g_persp(result, 1)
+plot_g_persp <- function(earth_result, group_index, theta = 30, phi = 25) {
+  validate_earthui_result(earth_result)
+  eq <- format_model_equation(earth_result)
+  non_intercept <- Filter(function(g) g$degree > 0L, eq$groups)
+
+  group_index <- as.integer(group_index)
+  if (group_index < 1L || group_index > length(non_intercept)) {
+    stop("group_index must be between 1 and ", length(non_intercept),
+         call. = FALSE)
+  }
+
+  grp <- non_intercept[[group_index]]
+  d <- grp$degree - grp$n_factors
+
+  if (d < 2L) {
+    return(plot_g_2d_(earth_result, grp))
+  }
+
+  plot_g_persp_(earth_result, grp, theta = theta, phi = phi)
+}
+
+#' Plot g-function as a static contour (for reports)
+#'
+#' Creates a ggplot2 visualization for any g-function group. For d <= 1,
+#' produces a 2D scatter plot (same as [plot_g_function()]). For d >= 2,
+#' produces a filled contour plot suitable for static formats like PDF and Word.
+#'
+#' @inheritParams plot_g_function
+#'
+#' @return A [ggplot2::ggplot] object.
+#'
+#' @export
+#' @examples
+#' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
+#' plot_g_contour(result, 1)
 plot_g_contour <- function(earth_result, group_index) {
   validate_earthui_result(earth_result)
   eq <- format_model_equation(earth_result)
@@ -795,11 +873,7 @@ plot_g_2d_ <- function(earth_result, grp) {
       y_mid = (break_y[-length(break_y)] + break_y[-1]) / 2,
       slope = diff(break_y) / diff(breaks)
     )
-    seg_df$label <- paste0(
-      ifelse(seg_df$slope >= 0, "+$", "-$"),
-      formatC(abs(seg_df$slope), format = "f", digits = 2, big.mark = ","),
-      "/unit"
-    )
+    seg_df$label <- format_slope_labels_(seg_df$slope, breaks)
   } else {
     seg_df <- data.frame(x_mid = numeric(0), y_mid = numeric(0),
                          slope = numeric(0), label = character(0))
@@ -816,7 +890,8 @@ plot_g_2d_ <- function(earth_result, grp) {
       ggplot2::aes(x = .data$x_mid, y = .data$y_mid, label = .data$label),
       size = 3.2, fill = "white", alpha = 0.85,
       label.padding = ggplot2::unit(0.15, "lines"),
-      label.size = 0.3, color = "#333333"
+      label.size = 0.3, color = "#333333",
+      family = "Roboto Condensed"
     )
   }
 
@@ -901,7 +976,9 @@ plot_g_3d_ <- function(earth_result, grp) {
       name = "Data"
     ) |>
     plotly::layout(
-      title = list(text = title, font = list(size = 14)),
+      font = list(family = "Roboto Condensed"),
+      title = list(text = title, font = list(family = "Roboto Condensed",
+                                              size = 14)),
       scene = list(
         xaxis = list(title = var1),
         yaxis = list(title = var2),
@@ -948,4 +1025,71 @@ plot_g_contour_ <- function(earth_result, grp) {
     ggplot2::theme(
       plot.title = ggplot2::element_text(face = "bold", size = 13)
     )
+}
+
+# --- Internal: Static 3D perspective for d >= 2 (PDF/Word reports) ---
+plot_g_persp_ <- function(earth_result, grp, theta = 30, phi = 25) {
+  model <- earth_result$model
+  data <- earth_result$data
+  target <- earth_result$target
+
+  numeric_vars <- grp$base_vars[!grp$base_vars %in% earth_result$categoricals]
+  if (length(numeric_vars) < 2L) {
+    return(plot_g_2d_(earth_result, grp))
+  }
+
+  var1 <- numeric_vars[1]
+  var2 <- numeric_vars[2]
+  title <- sprintf("%s  (%d term%s)", grp$label,
+                   length(grp$terms), if (length(grp$terms) > 1L) "s" else "")
+
+  n_grid <- 50L
+  x1_seq <- seq(min(data[[var1]], na.rm = TRUE),
+                max(data[[var1]], na.rm = TRUE), length.out = n_grid)
+  x2_seq <- seq(min(data[[var2]], na.rm = TRUE),
+                max(data[[var2]], na.rm = TRUE), length.out = n_grid)
+
+  grid <- expand.grid(x1 = x1_seq, x2 = x2_seq)
+  eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
+  eval_data[[var1]] <- grid$x1
+  eval_data[[var2]] <- grid$x2
+  z_vals <- eval_g_function_(model, grp, eval_data)
+  z_mat <- matrix(z_vals, nrow = n_grid, ncol = n_grid)
+
+  # Color the surface facets by z-value (blue -> white -> red)
+  z_facet <- z_mat[-1, -1] + z_mat[-n_grid, -1] +
+             z_mat[-1, -n_grid] + z_mat[-n_grid, -n_grid]
+  z_facet <- z_facet / 4  # average of 4 corners
+
+  z_range <- range(z_facet, na.rm = TRUE)
+  if (diff(z_range) == 0) {
+    z_norm <- rep(0.5, length(z_facet))
+  } else {
+    z_norm <- (z_facet - z_range[1]) / diff(z_range)
+  }
+
+  # Blue (#2166AC) -> White (#F7F7F7) -> Red (#B2182B)
+  n_cols <- 256L
+  col_ramp <- grDevices::colorRampPalette(
+    c("#2166AC", "#F7F7F7", "#B2182B")
+  )(n_cols)
+  facet_col <- col_ramp[pmax(1L, pmin(n_cols, as.integer(z_norm * (n_cols - 1L)) + 1L))]
+
+  # Save and restore par
+  old_par <- graphics::par(no.readonly = TRUE)
+  on.exit(graphics::par(old_par), add = TRUE)
+  graphics::par(mar = c(2, 2, 3, 2), family = "Roboto Condensed")
+
+  graphics::persp(
+    x = x1_seq, y = x2_seq, z = z_mat,
+    theta = theta, phi = phi,
+    col = facet_col, shade = 0.3, border = NA,
+    xlab = var1, ylab = var2,
+    zlab = paste("Contribution to", target),
+    main = title,
+    cex.main = 1.1, font.main = 2,
+    ticktype = "detailed", nticks = 5
+  )
+
+  invisible(NULL)
 }

@@ -5,10 +5,18 @@ format:
     toc: true
     theme: flatly
     embed-resources: true
+    mainfont: "Roboto Condensed"
+    include-in-header:
+      text: |
+        <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
+        <style>body { font-family: 'Roboto Condensed', sans-serif; }</style>
   pdf:
     toc: true
+    mainfont: "Roboto Condensed"
+    sansfont: "Roboto Condensed"
   docx:
     toc: true
+    mainfont: "Roboto Condensed"
 params:
   result_file: ""
 ---
@@ -17,6 +25,14 @@ params:
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 library(earthui)
 library(ggplot2)
+
+# Load Roboto Condensed for plots in reports
+if (requireNamespace("sysfonts", quietly = TRUE) &&
+    requireNamespace("showtext", quietly = TRUE)) {
+  sysfonts::font_add_google("Roboto Condensed", "Roboto Condensed")
+  showtext::showtext_auto()
+}
+theme_set(theme_minimal(base_family = "Roboto Condensed"))
 
 result <- readRDS(params$result_file)
 summary_info <- format_summary(result)
@@ -75,15 +91,25 @@ knitr::kable(format_variable_importance(result), digits = 4)
 
 ## g-Function Contributions
 
-```{r g-functions, fig.width=8, fig.height=5, results='asis'}
+```{r g-functions, fig.width=8, fig.height=6, results='asis'}
 gf <- list_g_functions(result)
 
 for (i in seq_len(nrow(gf))) {
   label <- gf$label[i]
   if (gf$d[i] >= 2) label <- gsub(" ", " \u00d7 ", label)
   cat(sprintf("\n### %s\n\n", label))
-  p <- plot_g_contour(result, i)
-  print(p)
+
+  if (gf$d[i] >= 2) {
+    # 3D perspective view
+    plot_g_persp(result, i)
+    cat("\n\n")
+    # Contour map below
+    p <- plot_g_contour(result, i)
+    print(p)
+  } else {
+    p <- plot_g_contour(result, i)
+    print(p)
+  }
   cat("\n\n")
 }
 ```

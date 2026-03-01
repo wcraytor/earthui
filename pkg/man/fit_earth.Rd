@@ -42,7 +42,8 @@ fit_earth(
   Get.leverages = NULL,
   Exhaustive.tol = NULL,
   wp = NULL,
-  ...
+  ...,
+  .capture_trace = TRUE
 )
 }
 \arguments{

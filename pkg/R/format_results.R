@@ -415,6 +415,8 @@ resolve_columns_ <- function(col_names, categoricals, data) {
 #' @keywords internal
 #' @noRd
 latex_escape_text_ <- function(x) {
+  x <- gsub("_", "\\_", x, fixed = TRUE)
+  x <- gsub("$", "\\$", x, fixed = TRUE)
   x <- gsub("%", "\\%", x, fixed = TRUE)
   x <- gsub("&", "\\&", x, fixed = TRUE)
   x <- gsub("#", "\\#", x, fixed = TRUE)
@@ -436,7 +438,8 @@ format_component_latex_ <- function(comp) {
   var_tex <- latex_escape_text_(comp$base_var)
 
   if (comp$is_factor) {
-    sprintf("I\\{\\text{%s} = %s\\}", var_tex, comp$level)
+    sprintf("I\\{\\text{%s} = \\text{%s}\\}", var_tex,
+            latex_escape_text_(comp$level))
   } else if (comp$dir == 2) {
     # Linear predictor (no hinge)
     sprintf("\\text{%s}", var_tex)
