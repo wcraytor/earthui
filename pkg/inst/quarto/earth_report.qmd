@@ -36,6 +36,9 @@ theme_set(theme_minimal(base_family = "Roboto Condensed"))
 
 result <- readRDS(params$result_file)
 summary_info <- format_summary(result)
+multi <- isTRUE(summary_info$multi)
+targets <- result$target
+gf <- list_g_functions(result)
 ```
 
 ## Dataset Description
@@ -43,7 +46,7 @@ summary_info <- format_summary(result)
 | Property | Value |
 |----------|-------|
 | Observations | `r summary_info$n_obs` |
-| Target variable | `r result$target` |
+| Target variable(s) | `r paste(targets, collapse = ", ")` |
 | Predictors used | `r paste(result$predictors, collapse = ", ")` |
 | Categorical predictors | `r if (length(result$categoricals) > 0) paste(result$categoricals, collapse = ", ") else "None"` |
 
@@ -55,29 +58,28 @@ summary_info <- format_summary(result)
 | Cross-validation | `r if (result$cv_enabled) "Yes (10-fold)" else "No"` |
 | Number of terms | `r summary_info$n_terms` |
 | Predictors in model | `r summary_info$n_predictors` |
+`r if (multi) paste0("| Response variables | ", length(targets), " |")`
 
-## Results Summary
+```{r single-response-results, results='asis', eval=!multi}
+cat("\n## Results Summary\n\n")
+cat("| Metric | Value |\n|--------|-------|\n")
+cat(sprintf("| R² | %.4f |\n", summary_info$r_squared))
+cat(sprintf("| GRSq | %.4f |\n", summary_info$grsq))
+cat(sprintf("| GCV | %.4f |\n", summary_info$gcv))
+cat(sprintf("| RSS | %.2f |\n", summary_info$rss))
+if (result$cv_enabled && !is.na(summary_info$cv_rsq)) {
+  cat(sprintf("| CV R² | %.4f |\n", summary_info$cv_rsq))
+}
+```
 
-| Metric | Value |
-|--------|-------|
-| R² | `r sprintf("%.4f", summary_info$r_squared)` |
-| GRSq | `r sprintf("%.4f", summary_info$grsq)` |
-| GCV | `r sprintf("%.4f", summary_info$gcv)` |
-| RSS | `r sprintf("%.2f", summary_info$rss)` |
-`r if (result$cv_enabled && !is.na(summary_info$cv_rsq)) paste0("| CV R² | ", sprintf("%.4f", summary_info$cv_rsq), " |")`
-
-## Model Equation
-
-```{r model-equation, results='asis'}
+```{r single-response-equation, results='asis', eval=!multi}
+cat("\n## Model Equation\n\n")
 eq <- format_model_equation(result)
 if (knitr::is_latex_output()) {
-  # Native LaTeX for PDF — array environment with PDF-safe escaping
   cat("$$\n", eq$latex_pdf, "\n$$\n")
 } else if (!is.null(knitr::pandoc_to()) && knitr::pandoc_to() == "docx") {
-  # Word — Pandoc OMML only supports aligned environment
   cat("$$\n", eq$latex_word, "\n$$\n")
 } else {
-  # HTML — MathJax/KaTeX supports array environment
   cat("$$\n", eq$latex, "\n$$\n")
 }
 ```
@@ -98,21 +100,15 @@ plot_variable_importance(result)
 knitr::kable(format_variable_importance(result), digits = 4)
 ```
 
-## g-Function Contributions
-
-```{r g-functions, fig.width=8, fig.height=6, results='asis'}
-gf <- list_g_functions(result)
-
+```{r single-response-gfunctions, fig.width=8, fig.height=6, results='asis', eval=!multi}
+cat("\n## g-Function Contributions\n\n")
 for (i in seq_len(nrow(gf))) {
   label <- gf$label[i]
   if (gf$d[i] >= 2) label <- gsub(" ", " \u00d7 ", label)
   cat(sprintf("\n### %s\n\n", label))
-
   if (gf$d[i] >= 2) {
-    # 3D perspective view
     plot_g_persp(result, i)
     cat("\n\n")
-    # Contour map below
     p <- plot_g_contour(result, i)
     print(p)
   } else {
@@ -129,24 +125,79 @@ for (i in seq_len(nrow(gf))) {
 plot_correlation_matrix(result)
 ```
 
-## Diagnostics
-
-### Residuals vs Fitted
-
-```{r residuals, fig.width=8, fig.height=5}
-plot_residuals(result)
+```{r single-response-diagnostics, fig.width=8, fig.height=5, results='asis', eval=!multi}
+cat("\n## Diagnostics\n\n")
+cat("\n### Residuals vs Fitted\n\n")
+print(plot_residuals(result))
+cat("\n\n### Normal Q-Q Plot\n\n")
+print(plot_qq(result))
+cat("\n\n### Actual vs Predicted\n\n")
+print(plot_actual_vs_predicted(result))
 ```
 
-### Normal Q-Q Plot
+```{r multi-response-sections, fig.width=8, fig.height=5, results='asis', eval=multi}
+eq <- format_model_equation(result)
+render_eq <- function(e) {
+  if (knitr::is_latex_output()) {
+    cat("$$\n", e$latex_pdf, "\n$$\n")
+  } else if (!is.null(knitr::pandoc_to()) && knitr::pandoc_to() == "docx") {
+    cat("$$\n", e$latex_word, "\n$$\n")
+  } else {
+    cat("$$\n", e$latex, "\n$$\n")
+  }
+}
 
-```{r qq, fig.width=8, fig.height=5}
-plot_qq(result)
-```
+for (ri in seq_along(targets)) {
+  tgt <- targets[ri]
+  cat(sprintf("\n## Response: %s\n\n", tgt))
 
-### Actual vs Predicted
+  # --- Summary metrics ---
+  cat("\n### Summary\n\n")
+  cat("| Metric | Value |\n|--------|-------|\n")
+  cat(sprintf("| R² | %.4f |\n", summary_info$r_squared[ri]))
+  cat(sprintf("| GRSq | %.4f |\n", summary_info$grsq[ri]))
+  cat(sprintf("| GCV | %.4f |\n", summary_info$gcv[ri]))
+  cat(sprintf("| RSS | %.2f |\n", summary_info$rss[ri]))
+  if (result$cv_enabled && !is.na(summary_info$cv_rsq[ri])) {
+    cat(sprintf("| CV R² | %.4f |\n", summary_info$cv_rsq[ri]))
+  }
+  cat("\n")
 
-```{r actual-vs-predicted, fig.width=8, fig.height=5}
-plot_actual_vs_predicted(result)
+  # --- Equation ---
+  cat("\n### Model Equation\n\n")
+  render_eq(eq$equations[[ri]])
+  cat("\n")
+
+  # --- g-Function contributions ---
+  if (nrow(gf) > 0) {
+    cat("\n### g-Function Contributions\n\n")
+    for (i in seq_len(nrow(gf))) {
+      label <- gf$label[i]
+      if (gf$d[i] >= 2) label <- gsub(" ", " \u00d7 ", label)
+      cat(sprintf("\n#### %s\n\n", label))
+      if (gf$d[i] >= 2) {
+        plot_g_persp(result, i, response_idx = ri)
+        cat("\n\n")
+        p <- plot_g_contour(result, i, response_idx = ri)
+        print(p)
+      } else {
+        p <- plot_g_contour(result, i, response_idx = ri)
+        print(p)
+      }
+      cat("\n\n")
+    }
+  }
+
+  # --- Diagnostics ---
+  cat("\n### Diagnostics\n\n")
+  cat("\n#### Residuals vs Fitted\n\n")
+  print(plot_residuals(result, response_idx = ri))
+  cat("\n\n#### Normal Q-Q Plot\n\n")
+  print(plot_qq(result, response_idx = ri))
+  cat("\n\n#### Actual vs Predicted\n\n")
+  print(plot_actual_vs_predicted(result, response_idx = ri))
+  cat("\n\n")
+}
 ```
 
 ## ANOVA Decomposition

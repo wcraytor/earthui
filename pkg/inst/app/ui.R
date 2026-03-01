@@ -26,6 +26,9 @@ fluidPage(
     [data-bs-theme='dark'] #eui-theme-toggle { background: #2c3e50; border-color: #555; }
     [data-bs-theme='dark'] .eui-popup-content { background: #2c3e50; color: #ecf0f1; }
     [data-bs-theme='dark'] details > summary { color: #ecf0f1 !important; }
+    [data-bs-theme='dark'] .nav-tabs .nav-link.active { color: #ecf0f1 !important; background-color: #2c3e50 !important; border-color: #555 #555 #2c3e50 !important; }
+    [data-bs-theme='dark'] .nav-tabs .nav-link { color: #95a5a6; }
+    [data-bs-theme='dark'] .nav-tabs .nav-link:hover { color: #ecf0f1; border-color: #555; }
     #earth_output { font-family: 'Roboto Condensed', sans-serif; font-size: 0.9em; line-height: 1.5; }
     .eui-matrix-header th { position: sticky; top: 0; z-index: 2; background: var(--bs-body-bg, #fff); }
     .eui-matrix-header th:first-child { position: sticky; left: 0; z-index: 3; }
@@ -132,7 +135,7 @@ fluidPage(
 
     // --- SQLite settings bridge ---
 
-    // Restore settings from SQLite into localStorage
+    // Restore settings from SQLite into localStorage (and optionally apply to DOM)
     Shiny.addCustomMessageHandler('restore_all_settings', function(msg) {
       var fn = msg.filename;
       if (msg.settings && Object.keys(msg.settings).length > 0) {
@@ -143,6 +146,73 @@ fluidPage(
       }
       if (msg.interactions && Object.keys(msg.interactions).length > 0) {
         try { localStorage.setItem('earthui_interactions_' + fn, JSON.stringify(msg.interactions)); } catch(e) {}
+      }
+
+      // If apply flag set, push settings directly into Shiny inputs
+      if (msg.apply) {
+        setTimeout(function() {
+          // Apply model parameters
+          if (msg.settings) {
+            var s = msg.settings;
+            // Selectize inputs
+            ['target','degree','pmethod','glm_family','trace','varmod_method'].forEach(function(id) {
+              if (s[id] !== undefined) {
+                var el = document.getElementById(id);
+                if (el && el.selectize) el.selectize.setValue(s[id], true);
+              }
+            });
+            // Numeric inputs
+            ['nprune','thresh','penalty','minspan','endspan','fast_k','nfold_override',
+             'nk','newvar_penalty','fast_beta','ncross','varmod_exponent','varmod_conv',
+             'varmod_clamp','varmod_minspan','adjust_endspan','exhaustive_tol'].forEach(function(id) {
+              if (s[id] !== undefined) $('#' + id).val(s[id]).trigger('change');
+            });
+            // Checkbox inputs
+            ['stratify','keepxy','scale_y','auto_linpreds','use_beta_cache',
+             'force_xtx_prune','get_leverages','force_weights'].forEach(function(id) {
+              if (s[id] !== undefined) $('#' + id).prop('checked', s[id]).trigger('change');
+            });
+          }
+          // Apply variable checkboxes
+          if (msg.variables) {
+            var v = msg.variables;
+            var cols = [];
+            $('[id^=eui_inc_]').each(function() { cols.push(this.id.replace('eui_inc_','')); });
+            // Get column names from the table
+            var $rows = $('#variable_table .eui-var-cb');
+            // Simpler: trigger restore by re-reading localStorage
+            var storageKey = 'earthui_vars_' + fn;
+            var saved = null;
+            try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
+            if (saved) {
+              var n = $('[id^=eui_inc_]').length;
+              for (var i = 1; i <= n; i++) {
+                var colName = $('#eui_inc_' + i).closest('tr').find('td:first').text().trim();
+                if (!colName) continue;
+                var sv = saved[colName];
+                if (sv) {
+                  $('#eui_inc_' + i).prop('checked', sv.inc);
+                  $('#eui_fac_' + i).prop('checked', sv.fac);
+                  $('#eui_lin_' + i).prop('checked', sv.lin);
+                }
+              }
+              $('.eui-var-cb').first().trigger('change');
+            }
+          }
+          // Apply interaction matrix
+          if (msg.interactions) {
+            var storageKey2 = 'earthui_interactions_' + fn;
+            var saved2 = null;
+            try { saved2 = JSON.parse(localStorage.getItem(storageKey2)); } catch(e) {}
+            if (saved2) {
+              for (var key in saved2) {
+                var $cb = $('#allowed_' + key);
+                if ($cb.length) $cb.prop('checked', saved2[key]);
+              }
+              $('.eui-interaction-cb').first().trigger('change');
+            }
+          }
+        }, 300);
       }
     });
 
@@ -158,6 +228,60 @@ fluidPage(
         Shiny.setInputValue('eui_save_trigger', payload, {priority: 'deferred'});
       }, 2000);
     };
+
+    // Apply earth() factory defaults to all parameter inputs
+    Shiny.addCustomMessageHandler('apply_earth_defaults', function(msg) {
+      // Selectize inputs (includes new params 1-4)
+      var selects = {
+        subset_arg: 'null', weights_col: 'null', wp_col: 'null', na_action: 'na.fail',
+        degree: '1', pmethod: 'backward', glm_family: 'none',
+        trace: '0', varmod_method: 'lm'
+      };
+      for (var id in selects) {
+        var el = document.getElementById(id);
+        if (el && el.selectize) el.selectize.setValue(selects[id], true);
+      }
+      // Numeric inputs ('' = NA/auto)
+      var nInc = $('[id^=eui_inc_]:checked').length || 1;
+      var nkVal = Math.max(1, 3 * nInc);
+      var numerics = {
+        penalty: 2, nk: nkVal, thresh: 0.001, minspan: 0, endspan: 0,
+        newvar_penalty: 0, fast_k: 20, fast_beta: 1,
+        nprune: '', nfold_override: 10, ncross: 20,
+        varmod_exponent: 1, varmod_conv: 1, varmod_clamp: 0.1, varmod_minspan: -3,
+        adjust_endspan: 2, exhaustive_tol: 1e-10
+      };
+      for (var id in numerics) {
+        $('#' + id).val(numerics[id]).trigger('change');
+      }
+      // Checkbox inputs
+      var checks = {
+        keepxy: false, stratify: true, scale_y: true, auto_linpreds: true,
+        use_beta_cache: true, force_xtx_prune: false, get_leverages: true,
+        force_weights: false
+      };
+      for (var id in checks) {
+        $('#' + id).prop('checked', checks[id]).trigger('change');
+      }
+      // Reset linpreds: uncheck all Linear checkboxes
+      $('[id^=eui_lin_]').prop('checked', false);
+      // Check all interaction checkboxes (allowed = NULL)
+      $('.eui-interaction-cb').prop('checked', true);
+      // Trigger change events
+      if ($('.eui-var-cb').length) $('.eui-var-cb').first().trigger('change');
+      if ($('.eui-interaction-cb').length) $('.eui-interaction-cb').first().trigger('change');
+    });
+
+    // Collect current settings from localStorage and save as defaults
+    Shiny.addCustomMessageHandler('collect_and_save_defaults', function(msg) {
+      var fn = msg.filename;
+      var payload = { filename: '__defaults__', settings: null, variables: null, interactions: null };
+      try { payload.settings     = localStorage.getItem('earthui_settings_' + fn); } catch(e) {}
+      try { payload.variables    = localStorage.getItem('earthui_vars_' + fn); } catch(e) {}
+      try { payload.interactions = localStorage.getItem('earthui_interactions_' + fn); } catch(e) {}
+      Shiny.setInputValue('eui_save_trigger', payload, {priority: 'deferred'});
+    });
+
   ")),
   tags$div(
     style = "padding: 10px 15px;",
@@ -188,16 +312,133 @@ fluidPage(
         h4("2. Variable Configuration"),
         uiOutput("target_selector"),
         h5("Predictor Settings"),
-        tags$p(style = "font-size: 0.8em; color: #666; margin-bottom: 5px;",
+        tags$p(class = "text-muted", style = "font-size: 0.8em; margin-bottom: 5px;",
                "Inc = include as predictor, Factor = treat as categorical, Linear = linear-only (no hinges)"),
         div(style = "max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 4px;",
             uiOutput("variable_table")),
         hr(),
 
-        # --- Model Configuration ---
-        h4("3. Model Configuration"),
-        selectInput("degree", "Max interaction order (degree)",
-                    choices = 1:4, selected = 1),
+        # --- Earth Call Parameters ---
+        h4("3. Earth Call Parameters"),
+        tags$div(
+          style = "margin-bottom: 8px; font-size: 0.85em; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;",
+          radioButtons("eui_defaults_action", NULL,
+                       choices = c("Use last settings for input file" = "last",
+                                   "Use default settings" = "use_default",
+                                   "Earth defaults" = "earth_defaults"),
+                       selected = "last", inline = TRUE),
+          actionButton("eui_save_defaults", "Save current as default",
+                       class = "btn-outline-secondary btn-sm",
+                       style = "padding: 2px 8px; font-size: 0.85em;")
+        ),
+        actionButton("param_info", "Parameter Info",
+                     class = "btn-info btn-sm",
+                     style = "margin-bottom: 10px; width: 100%;"),
+
+        # 1. subset
+        param_with_help(
+          selectInput("subset_arg", "subset",
+                      choices = c("NULL (all rows)" = "null"),
+                      selected = "null"),
+          "Row subset. Default NULL uses all rows."),
+
+        # 2. weights
+        param_with_help(
+          selectInput("weights_col", "weights",
+                      choices = c("NULL (none)" = "null"),
+                      selected = "null"),
+          "Case weights. Select a numeric column or NULL for no weighting."),
+
+        # 3. wp
+        param_with_help(
+          selectInput("wp_col", "wp (response weights)",
+                      choices = c("NULL (none)" = "null"),
+                      selected = "null"),
+          "Response weights for estimating the variance model. Default NULL."),
+
+        # 4. na.action
+        param_with_help(
+          selectInput("na_action", "na.action",
+                      choices = c("na.fail" = "na.fail"),
+                      selected = "na.fail"),
+          "Only na.fail is allowed. Rows with NAs are removed before fitting."),
+
+        # 5. keepxy
+        param_with_help(
+          checkboxInput("keepxy", "Keep x,y in model (keepxy)", value = FALSE),
+          "Default FALSE. Retain x, y, subset, weights in model object. Required for some CV statistics. Makes CV slower."),
+
+        # 6. trace
+        param_with_help(
+          selectInput("trace", "Trace level (trace)",
+                      choices = c("0" = "0", "0.3" = "0.3", "0.5" = "0.5",
+                                  "1" = "1", "2" = "2", "3" = "3",
+                                  "4" = "4", "5" = "5"),
+                      selected = "0"),
+          "0=none, 0.3=variance model, 0.5=CV, 1=overview, 2=forward pass, 3=pruning, 4=model mats/pruning details, 5=full details."),
+
+        # 7. glm
+        param_with_help(
+          selectInput("glm_family", "GLM family (glm)",
+                      choices = c("none", "gaussian", "binomial", "poisson"),
+                      selected = "none"),
+          "Optional GLM family applied to earth basis functions. Example: 'binomial' for binary outcomes."),
+
+        # 8. degree
+        param_with_help(
+          selectInput("degree", "Max interaction order (degree)",
+                      choices = 1:4, selected = 1),
+          "Maximum degree of interaction. 1 = no interactions. When >= 2, cross-validation is automatically enabled."),
+
+        # 9. penalty
+        param_with_help(
+          numericInput("penalty", "GCV penalty per knot (penalty)", value = 2, min = -1, step = 0.5),
+          "GCV penalty per knot. Default is 3 if degree>1, else 2. Use 0 to penalize only terms. Use -1 for no penalty (GCV = RSS/n)."),
+
+        # 10. nk
+        param_with_help(
+          numericInput("nk", "Max terms before pruning (nk)", value = NA, min = 1, step = 1),
+          "Maximum number of model terms before pruning. Default = 3 x number of selected predictors."),
+
+        # 11. thresh
+        param_with_help(
+          numericInput("thresh", "Forward step threshold (thresh)", value = 0.001, min = 0, step = 0.0001),
+          "Forward pass terminates if adding a term changes RSq by less than this value. Default 0.001."),
+
+        # 12. minspan
+        param_with_help(
+          numericInput("minspan", "Min span (minspan)", value = 0, step = 1),
+          "Minimum observations between knots. 0 = auto-calculated. Negative values specify max knots per predictor (e.g., -3 = three evenly spaced knots)."),
+
+        # 13. endspan
+        param_with_help(
+          numericInput("endspan", "End span (endspan)", value = 0, min = 0, step = 1),
+          "Minimum observations before first and after last knot. 0 = auto-calculated. Be wary of reducing this for predictions near data limits."),
+
+        # 14. newvar.penalty
+        param_with_help(
+          numericInput("newvar_penalty", "New variable penalty (newvar.penalty)", value = 0, min = 0, step = 0.01),
+          "Penalty for adding a new variable (Friedman's gamma). Default 0. Non-zero values (0.01-0.2) prefer reusing existing variables, simplifying interpretation."),
+
+        # 15. fast.k
+        param_with_help(
+          numericInput("fast_k", "fast.k", value = 20, min = 0, step = 1),
+          "Max parent terms per forward step (Fast MARS). Default 20. Set 0 to disable. Lower = faster, higher = potentially better model."),
+
+        # 16. fast.beta
+        param_with_help(
+          numericInput("fast_beta", "fast.beta", value = 1, min = 0, step = 0.1),
+          "Fast MARS ageing coefficient. Default 1. A value of 0 sometimes gives better results."),
+
+        # 17. linpreds
+        tags$div(
+          style = "position: relative; margin-bottom: 10px;",
+          tags$label("linpreds", style = "font-weight: bold; font-size: 0.85em;"),
+          tags$p(class = "text-muted", style = "font-size: 0.8em; margin: 0;",
+                 "Controlled by the Linear column in Variable Configuration above. Default FALSE (no forced linear predictors).")
+        ),
+
+        # 18. allowed
         conditionalPanel(
           condition = "input.degree >= 2",
           div(
@@ -207,9 +448,9 @@ fluidPage(
             "Interaction terms increase the risk of overfitting.",
             "Cross-validation has been enabled (10-fold)."
           ),
-          h5("Allowed Interactions"),
-          p("Uncheck pairs to disallow specific interactions.",
-            style = "font-size: 0.85em; color: #666;"),
+          h6("allowed (Interaction Matrix)", style = "border-bottom: 1px solid #ccc;"),
+          p("Uncheck pairs to disallow specific interactions. Default NULL (all allowed).",
+            class = "text-muted", style = "font-size: 0.85em;"),
           div(style = "margin-bottom: 6px;",
             tags$label(style = "font-size: 0.85em; margin-right: 12px; cursor: pointer;",
               tags$input(type = "checkbox", id = "eui_allow_all",
@@ -245,127 +486,112 @@ fluidPage(
           uiOutput("allowed_matrix_ui")
         ),
 
-        # Advanced parameters (collapsible)
+        # --- For Pruning Pass (collapsible) ---
         tags$details(
-          tags$summary(
-            style = "cursor: pointer; color: #2c3e50; font-weight: bold;",
-            "Advanced Parameters"
-          ),
-          div(
-            style = "padding-top: 10px;",
-            actionButton("param_info", "Parameter Info",
-                         class = "btn-info btn-sm",
-                         style = "margin-bottom: 10px; width: 100%;"),
-
-            h6("Forward Pass", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
-            param_with_help(
-              numericInput("nk", "Max terms before pruning (nk)", value = NA, min = 1, step = 1),
-              "Maximum number of model terms before pruning (includes intercept). Default is semi-automatically calculated from the number of predictors."),
-            param_with_help(
-              numericInput("thresh", "Forward step threshold (thresh)", value = 0.001, min = 0, step = 0.0001),
-              "Forward pass terminates if adding a term changes RSq by less than this value. Default 0.001."),
-            param_with_help(
-              numericInput("penalty", "GCV penalty per knot (penalty)", value = NA, min = -1, step = 0.5),
-              "GCV penalty per knot. Default is 3 if degree>1, else 2. Use 0 to penalize only terms. Use -1 for no penalty (GCV = RSS/n)."),
-            param_with_help(
-              numericInput("minspan", "Min span (minspan)", value = NA, step = 1),
-              "Minimum observations between knots. Default 0 = auto-calculated. Negative values specify max knots per predictor (e.g., -3 = three evenly spaced knots)."),
-            param_with_help(
-              numericInput("endspan", "End span (endspan)", value = NA, min = 0, step = 1),
-              "Minimum observations before first and after last knot. Default 0 = auto-calculated. Be wary of reducing this for predictions near data limits."),
-            param_with_help(
-              numericInput("newvar_penalty", "New variable penalty (newvar.penalty)", value = 0, min = 0, step = 0.01),
-              "Penalty for adding a new variable (Friedman's gamma). Default 0. Non-zero values (0.01-0.2) prefer reusing existing variables, simplifying interpretation."),
-            param_with_help(
-              numericInput("fast_k", "fast.k", value = 20, min = 0, step = 1),
-              "Max parent terms per forward step (Fast MARS). Default 20. Set 0 to disable. Lower = faster, higher = potentially better model."),
-            param_with_help(
-              numericInput("fast_beta", "fast.beta", value = 1, min = 0, step = 0.1),
-              "Fast MARS ageing coefficient. Default 1. A value of 0 sometimes gives better results."),
-            param_with_help(
-              checkboxInput("auto_linpreds", "Auto.linpreds", value = TRUE),
-              "Default TRUE. If the best knot is at the predictor minimum, add the predictor linearly (no hinge). Only affects predictions outside training data range."),
-
-            h6("Pruning", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
+          tags$summary(style = "cursor: pointer; font-weight: bold; margin-top: 8px;",
+                       class = "text-body", "For Pruning Pass"),
+          div(style = "padding-top: 6px;",
+            # 19. pmethod
             param_with_help(
               selectInput("pmethod", "Pruning method (pmethod)",
                           choices = c("backward", "none", "exhaustive", "forward", "seqrep", "cv"),
                           selected = "backward"),
               "Pruning method. Default 'backward'. Use 'cv' with nfold to select terms by cross-validation. Use 'none' to retain all forward pass terms."),
+            # 20. nprune
             param_with_help(
               numericInput("nprune", "Max terms after pruning (nprune)", value = NA, min = 1, step = 1),
-              "Maximum terms (including intercept) in pruned model. Default NULL = all terms from forward pass, after pruning."),
+              "Maximum terms (including intercept) in pruned model. Default NULL = all terms from forward pass, after pruning.")
+          )
+        ),
 
-            h6("Cross Validation", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
+        # --- For Cross Validation (collapsible) ---
+        tags$details(
+          tags$summary(style = "cursor: pointer; font-weight: bold; margin-top: 8px;",
+                       class = "text-body", "For Cross Validation"),
+          div(style = "padding-top: 6px;",
+            # 21. nfold
             param_with_help(
-              numericInput("nfold_override", "CV folds (nfold)", value = NA, min = 0, step = 1),
-              "Number of CV folds. Default 0 (no CV). Auto-set to 10 when degree >= 2. Use trace=0.5 to trace CV."),
+              numericInput("nfold_override", "CV folds (nfold)", value = 10, min = 0, step = 1),
+              "Number of CV folds. Default 10. Auto-set to 10 when degree >= 2. Use trace=0.5 to trace CV."),
+            # 22. ncross
             param_with_help(
-              numericInput("ncross", "ncross", value = 1, min = 1, step = 1),
-              "Number of cross-validations (each has nfold folds). Default 1. Use higher values (e.g., 30) with variance models."),
+              numericInput("ncross", "ncross", value = 20, min = 1, step = 1),
+              "Number of cross-validations (each has nfold folds). Default 20. Use higher values with variance models."),
+            # 23. stratify
             param_with_help(
               checkboxInput("stratify", "Stratify CV samples (stratify)", value = TRUE),
-              "Default TRUE. Stratify CV samples so each fold has approximately equal response distribution."),
+              "Default TRUE. Stratify CV samples so each fold has approximately equal response distribution.")
+          )
+        ),
 
-            h6("Variance Model", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
+        # --- For Variance Models (collapsible) ---
+        tags$details(
+          tags$summary(style = "cursor: pointer; font-weight: bold; margin-top: 8px;",
+                       class = "text-body", "For Variance Models"),
+          div(style = "padding-top: 6px;",
+            # 24. varmod.method
             param_with_help(
               selectInput("varmod_method", "varmod.method",
                           choices = c("none", "const", "lm", "rlm", "earth", "gam",
                                       "power", "power0", "x.lm", "x.rlm", "x.earth", "x.gam"),
                           selected = "lm"),
               "Variance model method. Requires nfold and ncross. Use trace=0.3 to trace. 'lm','rlm','earth','gam' regress on predicted response; 'x.*' variants regress on predictors."),
+            # 25. varmod.exponent
             param_with_help(
               numericInput("varmod_exponent", "varmod.exponent", value = 1, min = 0, step = 0.1),
               "Power transform for residual regression. Default 1. Use 0.5 if std dev increases with square root of response."),
+            # 26. varmod.conv
             param_with_help(
               numericInput("varmod_conv", "varmod.conv", value = 1, step = 0.1),
               "Convergence criterion (%) for IRLS in variance model. Default 1. Negative values force that many iterations."),
+            # 27. varmod.clamp
             param_with_help(
               numericInput("varmod_clamp", "varmod.clamp", value = 0.1, min = 0, step = 0.01),
               "Min estimated std dev = varmod.clamp * mean(sd(residuals)). Default 0.1. Prevents negative or tiny std dev estimates."),
+            # 28. varmod.minspan
             param_with_help(
               numericInput("varmod_minspan", "varmod.minspan", value = -3, step = 1),
-              "minspan for internal earth call in variance model. Default -3 (three evenly spaced knots per predictor)."),
+              "minspan for internal earth call in variance model. Default -3 (three evenly spaced knots per predictor).")
+          )
+        ),
 
-            h6("GLM", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
-            param_with_help(
-              selectInput("glm_family", "GLM family (glm)",
-                          choices = c("none", "gaussian", "binomial", "poisson"),
-                          selected = "none"),
-              "Optional GLM family applied to earth basis functions. Example: 'binomial' for binary outcomes."),
-
-            h6("Other", style = "margin-top: 8px; border-bottom: 1px solid #ccc;"),
-            param_with_help(
-              selectInput("trace", "Trace level (trace)",
-                          choices = c("0" = "0", "0.3" = "0.3", "0.5" = "0.5",
-                                      "1" = "1", "2" = "2", "3" = "3",
-                                      "4" = "4", "5" = "5"),
-                          selected = "0"),
-              "0=none, 0.3=variance model, 0.5=CV, 1=overview, 2=forward pass, 3=pruning, 4=model mats/pruning details, 5=full details."),
-            param_with_help(
-              checkboxInput("keepxy", "Keep x,y in model (keepxy)", value = FALSE),
-              "Default FALSE. Retain x, y, subset, weights in model object. Required for some CV statistics. Makes CV slower."),
+        # --- Advanced Use (collapsible) ---
+        tags$details(
+          tags$summary(style = "cursor: pointer; font-weight: bold; margin-top: 8px;",
+                       class = "text-body", "Advanced Use"),
+          div(style = "padding-top: 6px;",
+            # 29. Scale.y
             param_with_help(
               checkboxInput("scale_y", "Scale response (Scale.y)", value = TRUE),
               "Default TRUE. Scale response internally (subtract mean, divide by sd). Provides better numeric stability."),
+            # 30. Adjust.endspan
             param_with_help(
               numericInput("adjust_endspan", "Adjust.endspan", value = 2, min = 1, step = 0.5),
               "In interaction terms, endspan is multiplied by this value. Default 2. Reduces overfitting at data boundaries."),
+            # 31. Auto.linpreds
             param_with_help(
-              numericInput("exhaustive_tol", "Exhaustive.tol", value = 1e-10, min = 0, step = 1e-11),
-              "Default 1e-10. If reciprocal condition number < this, forces pmethod='backward'. Only applies with pmethod='exhaustive'."),
+              checkboxInput("auto_linpreds", "Auto.linpreds", value = TRUE),
+              "Default TRUE. If the best knot is at the predictor minimum, add the predictor linearly (no hinge). Only affects predictions outside training data range."),
+            # 32. Force.weights
+            param_with_help(
+              checkboxInput("force_weights", "Force.weights", value = FALSE),
+              "Default FALSE. For testing: force weighted code path even without weights."),
+            # 33. Use.beta.cache
             param_with_help(
               checkboxInput("use_beta_cache", "Use.beta.cache", value = TRUE),
               "Default TRUE. Cache regression coefficients in forward pass for 20%+ speed improvement. Uses more memory."),
+            # 34. Force.xtx.prune
             param_with_help(
               checkboxInput("force_xtx_prune", "Force.xtx.prune", value = FALSE),
               "Default FALSE. Force X'X-based subset evaluation in pruning instead of QR-based leaps. Advanced use only."),
+            # 35. Get.leverages
             param_with_help(
               checkboxInput("get_leverages", "Get.leverages", value = TRUE),
               "Default TRUE (unless >100k cases). Calculate diagonal hat values for diagnostics."),
+            # 36. Exhaustive.tol
             param_with_help(
-              checkboxInput("force_weights", "Force.weights", value = FALSE),
-              "Default FALSE. For testing: force weighted code path even without weights.")
+              numericInput("exhaustive_tol", "Exhaustive.tol", value = 1e-10, min = 0, step = 1e-11),
+              "Default 1e-10. If reciprocal condition number < this, forces pmethod='backward'. Only applies with pmethod='exhaustive'.")
           )
         ),
         hr(),
@@ -395,7 +621,8 @@ fluidPage(
       conditionalPanel(
         condition = "!output.data_loaded",
         div(
-          style = "text-align: center; padding: 80px 20px; color: #888;",
+          class = "text-muted",
+          style = "text-align: center; padding: 80px 20px;",
           h3("Welcome to earthui"),
           p("Upload a CSV or Excel file to get started."),
           p("Build and explore Earth (MARS-style) models interactively.")
@@ -438,6 +665,7 @@ fluidPage(
           tabPanel(
             "Contribution",
             br(),
+            uiOutput("response_selector_contrib"),
             uiOutput("contrib_g_selector"),
             uiOutput("contrib_plot_container")
           ),
@@ -449,6 +677,7 @@ fluidPage(
           tabPanel(
             "Diagnostics",
             br(),
+            uiOutput("response_selector_diag"),
             fluidRow(
               column(6, plotOutput("residuals_plot", height = "350px")),
               column(6, plotOutput("qq_plot", height = "350px"))

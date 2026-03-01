@@ -32,7 +32,7 @@ test_that("format_anova returns data frame", {
   expect_s3_class(anova_df, "data.frame")
   expect_true("term" %in% names(anova_df))
   expect_true("description" %in% names(anova_df))
-  expect_true("coefficient" %in% names(anova_df))
+  expect_true("mpg" %in% names(anova_df))
   expect_true(nrow(anova_df) > 0L)
 })
 

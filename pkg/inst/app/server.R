@@ -72,6 +72,15 @@ function(input, output, session) {
     rv$result <- NULL
   })
 
+  # Update weights/wp dropdowns with numeric column names when data loads
+  observe({
+    req(rv$data)
+    num_cols <- names(rv$data)[vapply(rv$data, is.numeric, logical(1))]
+    choices <- c("NULL (none)" = "null", stats::setNames(num_cols, num_cols))
+    updateSelectInput(session, "weights_col", choices = choices, selected = "null")
+    updateSelectInput(session, "wp_col", choices = choices, selected = "null")
+  })
+
   output$data_loaded <- reactive(!is.null(rv$data))
   outputOptions(output, "data_loaded", suspendWhenHidden = FALSE)
 
@@ -94,6 +103,52 @@ function(input, output, session) {
       message("earthui: SQLite save error: ", e$message)
     })
   }, ignoreInit = TRUE)
+
+  # --- Default settings (save/restore via SQLite with key "__defaults__") ---
+
+  # Radio: choose mode (last per-file settings vs saved defaults)
+  observeEvent(input$eui_defaults_action, {
+    action <- input$eui_defaults_action
+    message("earthui: defaults radio changed to: '", action, "'")
+    req(rv$file_name)
+
+    if (action == "use_default") {
+      defaults <- earthui:::settings_db_read_(settings_con, "__defaults__")
+      if (!is.null(defaults)) {
+        session$sendCustomMessage("restore_all_settings", list(
+          filename     = rv$file_name,
+          settings     = defaults$settings,
+          variables    = defaults$variables,
+          interactions = defaults$interactions,
+          apply        = TRUE
+        ))
+        showNotification("Default settings applied.", type = "message",
+                         duration = 3)
+      } else {
+        showNotification("No default settings saved yet. Use 'Save current as default' first.",
+                         type = "warning", duration = 4)
+        updateRadioButtons(session, "eui_defaults_action", selected = "last")
+      }
+
+    } else if (action == "earth_defaults") {
+      session$sendCustomMessage("apply_earth_defaults", list())
+      showNotification("Earth default parameters applied.", type = "message",
+                       duration = 3)
+      updateRadioButtons(session, "eui_defaults_action", selected = "last")
+    }
+    # "last" = do nothing, use whatever localStorage has
+  }, ignoreInit = TRUE)
+
+  # Button: save current settings as the default
+  observeEvent(input$eui_save_defaults, {
+    req(rv$file_name)
+    message("earthui: saving current settings as defaults for: ", rv$file_name)
+    session$sendCustomMessage("collect_and_save_defaults", list(
+      filename = rv$file_name
+    ))
+    showNotification("Current settings saved as defaults.", type = "message",
+                     duration = 3)
+  })
 
   output$data_preview_info <- renderUI({
     req(rv$data)
@@ -153,7 +208,8 @@ function(input, output, session) {
     js <- tags$script(HTML(sprintf("
       (function() {
         var storageKey = 'earthui_settings_' + %s;
-        var selectIds = ['target', 'degree', 'pmethod', 'glm_family', 'trace',
+        var selectIds = ['target', 'subset_arg', 'weights_col', 'wp_col', 'na_action',
+                         'degree', 'pmethod', 'glm_family', 'trace',
                          'varmod_method'];
         var numericIds = ['nprune', 'thresh', 'penalty', 'minspan', 'endspan',
                           'fast_k', 'nfold_override', 'nk', 'newvar_penalty',
@@ -242,8 +298,8 @@ function(input, output, session) {
        jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
 
     tagList(
-      selectInput("target", "Target (response) variable",
-                  choices = names(rv$data)),
+      selectInput("target", "Target (response) variable(s)",
+                  choices = names(rv$data), multiple = TRUE),
       js
     )
   })
@@ -534,6 +590,20 @@ function(input, output, session) {
       glm_arg <- list(family = input$glm_family)
     }
 
+    # Weights column → numeric vector (or NULL)
+    weights_arg <- NULL
+    if (!is.null(input$weights_col) && input$weights_col != "null" &&
+        input$weights_col %in% names(rv$data)) {
+      weights_arg <- rv$data[[input$weights_col]]
+    }
+
+    # wp column → numeric vector (or NULL)
+    wp_arg <- NULL
+    if (!is.null(input$wp_col) && input$wp_col != "null" &&
+        input$wp_col %in% names(rv$data)) {
+      wp_arg <- rv$data[[input$wp_col]]
+    }
+
     list(
       df              = rv$data,
       target          = input$target,
@@ -570,7 +640,9 @@ function(input, output, session) {
       Use.beta.cache  = input$use_beta_cache,
       Force.xtx.prune = input$force_xtx_prune,
       Get.leverages   = input$get_leverages,
-      Exhaustive.tol  = na_to_null(input$exhaustive_tol)
+      Exhaustive.tol  = na_to_null(input$exhaustive_tol),
+      wp              = wp_arg,
+      weights         = weights_arg
     )
   }
 
@@ -652,7 +724,9 @@ function(input, output, session) {
             Use.beta.cache = fit_args$Use.beta.cache,
             Force.xtx.prune = fit_args$Force.xtx.prune,
             Get.leverages = fit_args$Get.leverages,
-            Exhaustive.tol = fit_args$Exhaustive.tol
+            Exhaustive.tol = fit_args$Exhaustive.tol,
+            wp = fit_args$wp,
+            weights = fit_args$weights
           )
           elapsed <- rv$result$elapsed
           setProgress(1, detail = "Done")
@@ -812,43 +886,103 @@ function(input, output, session) {
     req(rv$result)
     s <- format_summary(rv$result)
 
-    metrics <- tagList(
-      tags$div(
-        class = "row",
-        style = "margin-bottom: 15px;",
-        tags$div(class = "col-md-3",
-                 tags$div(class = "card text-center",
-                          style = "padding: 10px;",
-                          tags$h6("R\u00b2"), tags$h4(sprintf("%.4f", s$r_squared)))),
-        tags$div(class = "col-md-3",
-                 tags$div(class = "card text-center",
-                          style = "padding: 10px;",
-                          tags$h6("GRSq"), tags$h4(sprintf("%.4f", s$grsq)))),
-        tags$div(class = "col-md-3",
-                 tags$div(class = "card text-center",
-                          style = "padding: 10px;",
-                          tags$h6("GCV"), tags$h4(sprintf("%.2f", s$gcv)))),
-        tags$div(class = "col-md-3",
-                 tags$div(class = "card text-center",
-                          style = "padding: 10px;",
-                          tags$h6("Terms"), tags$h4(s$n_terms)))
-      )
-    )
+    if (isTRUE(s$multi)) {
+      # Per-response metrics cards
+      targets <- rv$result$target
+      resp_cards <- lapply(seq_along(targets), function(i) {
+        tgt <- targets[i]
+        tagList(
+          tags$h6(tgt, style = "margin-top: 10px; font-weight: bold;"),
+          tags$div(
+            class = "row", style = "margin-bottom: 10px;",
+            tags$div(class = "col-md-3",
+                     tags$div(class = "card text-center",
+                              style = "padding: 8px;",
+                              tags$h6("R\u00b2"),
+                              tags$h4(sprintf("%.4f", s$r_squared[i])))),
+            tags$div(class = "col-md-3",
+                     tags$div(class = "card text-center",
+                              style = "padding: 8px;",
+                              tags$h6("GRSq"),
+                              tags$h4(sprintf("%.4f", s$grsq[i])))),
+            tags$div(class = "col-md-3",
+                     tags$div(class = "card text-center",
+                              style = "padding: 8px;",
+                              tags$h6("GCV"),
+                              tags$h4(sprintf("%.2f", s$gcv[i])))),
+            tags$div(class = "col-md-3",
+                     tags$div(class = "card text-center",
+                              style = "padding: 8px;",
+                              tags$h6("Terms"),
+                              tags$h4(s$n_terms)))
+          )
+        )
+      })
 
-    if (rv$result$cv_enabled && !is.na(s$cv_rsq)) {
-      metrics <- tagList(
-        metrics,
-        tags$div(
-          class = "alert alert-info",
-          style = "font-size: 0.9em;",
-          sprintf("Cross-validated R\u00b2: %.4f  |  Training R\u00b2: %.4f",
-                  s$cv_rsq, s$r_squared),
-          if (s$r_squared - s$cv_rsq > 0.1) {
-            tags$span(style = "color: red; font-weight: bold;",
-                      " \u26a0 Possible overfitting detected")
+      metrics <- tagList(resp_cards)
+
+      # CV info (per-response)
+      if (rv$result$cv_enabled && !all(is.na(s$cv_rsq))) {
+        cv_lines <- vapply(seq_along(targets), function(i) {
+          if (!is.na(s$cv_rsq[i])) {
+            sprintf("%s: CV R\u00b2 = %.4f | Training R\u00b2 = %.4f",
+                    targets[i], s$cv_rsq[i], s$r_squared[i])
+          } else {
+            ""
           }
+        }, character(1))
+        cv_lines <- cv_lines[nzchar(cv_lines)]
+        if (length(cv_lines) > 0L) {
+          metrics <- tagList(
+            metrics,
+            tags$div(
+              class = "alert alert-info",
+              style = "font-size: 0.9em;",
+              HTML(paste(cv_lines, collapse = "<br>"))
+            )
+          )
+        }
+      }
+    } else {
+      # Single-response metrics
+      metrics <- tagList(
+        tags$div(
+          class = "row",
+          style = "margin-bottom: 15px;",
+          tags$div(class = "col-md-3",
+                   tags$div(class = "card text-center",
+                            style = "padding: 10px;",
+                            tags$h6("R\u00b2"), tags$h4(sprintf("%.4f", s$r_squared)))),
+          tags$div(class = "col-md-3",
+                   tags$div(class = "card text-center",
+                            style = "padding: 10px;",
+                            tags$h6("GRSq"), tags$h4(sprintf("%.4f", s$grsq)))),
+          tags$div(class = "col-md-3",
+                   tags$div(class = "card text-center",
+                            style = "padding: 10px;",
+                            tags$h6("GCV"), tags$h4(sprintf("%.2f", s$gcv)))),
+          tags$div(class = "col-md-3",
+                   tags$div(class = "card text-center",
+                            style = "padding: 10px;",
+                            tags$h6("Terms"), tags$h4(s$n_terms)))
         )
       )
+
+      if (rv$result$cv_enabled && !is.na(s$cv_rsq)) {
+        metrics <- tagList(
+          metrics,
+          tags$div(
+            class = "alert alert-info",
+            style = "font-size: 0.9em;",
+            sprintf("Cross-validated R\u00b2: %.4f  |  Training R\u00b2: %.4f",
+                    s$cv_rsq, s$r_squared),
+            if (s$r_squared - s$cv_rsq > 0.1) {
+              tags$span(style = "color: red; font-weight: bold;",
+                        " \u26a0 Possible overfitting detected")
+            }
+          )
+        )
+      }
     }
 
     metrics
@@ -858,7 +992,19 @@ function(input, output, session) {
   output$model_equation <- renderUI({
     req(rv$result)
     eq <- format_model_equation(rv$result)
-    withMathJax(HTML(eq$latex_inline))
+    if (inherits(eq, "earthui_equation_multi")) {
+      # Show one equation per response with a heading
+      eq_blocks <- lapply(seq_along(eq$targets), function(i) {
+        sub_eq <- eq$equations[[i]]
+        tagList(
+          tags$h5(eq$targets[i], style = "margin-top: 16px;"),
+          withMathJax(HTML(sub_eq$latex_inline))
+        )
+      })
+      do.call(tagList, eq_blocks)
+    } else {
+      withMathJax(HTML(eq$latex_inline))
+    }
   })
 
   output$summary_table <- DT::renderDataTable({
@@ -869,6 +1015,25 @@ function(input, output, session) {
     numeric_cols <- names(s$coefficients)[vapply(s$coefficients, is.numeric, logical(1))]
     if (length(numeric_cols) > 0) dt <- DT::formatRound(dt, numeric_cols, digits = 6)
     dt
+  })
+
+  # --- Response selector for multivariate models ---
+  output$response_selector_diag <- renderUI({
+    req(rv$result)
+    targets <- rv$result$target
+    if (length(targets) <= 1L) return(NULL)
+    choices <- stats::setNames(seq_along(targets), targets)
+    selectInput("diag_response", "Response variable",
+                choices = choices, selected = 1L)
+  })
+
+  output$response_selector_contrib <- renderUI({
+    req(rv$result)
+    targets <- rv$result$target
+    if (length(targets) <= 1L) return(NULL)
+    choices <- stats::setNames(seq_along(targets), targets)
+    selectInput("contrib_response", "Response variable",
+                choices = choices, selected = 1L)
   })
 
   # --- Results: Variable Importance ---
@@ -920,8 +1085,14 @@ function(input, output, session) {
 
   output$contrib_plot_2d <- renderPlot({
     req(rv$result, input$contrib_g_index)
+    ri <- if (length(rv$result$target) > 1L && !is.null(input$contrib_response)) {
+      as.integer(input$contrib_response)
+    } else {
+      NULL
+    }
     tryCatch(
-      plot_g_function(rv$result, as.integer(input$contrib_g_index)),
+      plot_g_function(rv$result, as.integer(input$contrib_g_index),
+                      response_idx = ri),
       error = function(e) {
         message("earthui: g-function 2D plot error: ", e$message)
         plot.new()
@@ -933,8 +1104,14 @@ function(input, output, session) {
   if (requireNamespace("plotly", quietly = TRUE)) {
     output$contrib_plot_3d <- plotly::renderPlotly({
       req(rv$result, input$contrib_g_index)
+      ri <- if (length(rv$result$target) > 1L && !is.null(input$contrib_response)) {
+        as.integer(input$contrib_response)
+      } else {
+        NULL
+      }
       tryCatch(
-        plot_g_function(rv$result, as.integer(input$contrib_g_index)),
+        plot_g_function(rv$result, as.integer(input$contrib_g_index),
+                        response_idx = ri),
         error = function(e) {
           message("earthui: g-function 3D plot error: ", e$message)
           plotly::plot_ly() |>
@@ -965,17 +1142,32 @@ function(input, output, session) {
   # --- Results: Diagnostics ---
   output$residuals_plot <- renderPlot({
     req(rv$result)
-    plot_residuals(rv$result)
+    ri <- if (length(rv$result$target) > 1L && !is.null(input$diag_response)) {
+      as.integer(input$diag_response)
+    } else {
+      NULL
+    }
+    plot_residuals(rv$result, response_idx = ri)
   })
 
   output$qq_plot <- renderPlot({
     req(rv$result)
-    plot_qq(rv$result)
+    ri <- if (length(rv$result$target) > 1L && !is.null(input$diag_response)) {
+      as.integer(input$diag_response)
+    } else {
+      NULL
+    }
+    plot_qq(rv$result, response_idx = ri)
   })
 
   output$actual_vs_predicted_plot <- renderPlot({
     req(rv$result)
-    plot_actual_vs_predicted(rv$result)
+    ri <- if (length(rv$result$target) > 1L && !is.null(input$diag_response)) {
+      as.integer(input$diag_response)
+    } else {
+      NULL
+    }
+    plot_actual_vs_predicted(rv$result, response_idx = ri)
   })
 
   # --- Results: ANOVA ---

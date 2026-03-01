@@ -27,23 +27,33 @@
 format_summary <- function(earth_result) {
   validate_earthui_result(earth_result)
   model <- earth_result$model
+  targets <- earth_result$target
+  multi <- length(targets) > 1L
 
-  # Extract coefficients
-  coefs <- as.data.frame(stats::coef(model))
-  names(coefs) <- earth_result$target
-  coefs$term <- rownames(coefs)
+  # Extract coefficients (use model$coefficients for multivariate safety)
+  coef_mat <- model$coefficients
+  coefs <- as.data.frame(coef_mat)
+  if (!multi) names(coefs) <- targets
+  coefs$term <- rownames(coef_mat)
   rownames(coefs) <- NULL
-  coefs <- coefs[, c("term", earth_result$target)]
-  coefs[[earth_result$target]] <- round(coefs[[earth_result$target]], 6)
+  coefs <- coefs[, c("term", targets), drop = FALSE]
+  for (tgt in targets) coefs[[tgt]] <- round(coefs[[tgt]], 6)
 
-  # Model statistics
+  # Model statistics (per-response for multivariate)
   model_summary <- summary(model)
-  rsq <- model_summary$rsq
-  gcv <- model_summary$gcv
-  grsq <- model_summary$grsq
-
-  # RSS
-  rss <- sum(stats::residuals(model)^2)
+  if (multi) {
+    rsq  <- as.numeric(model$rsq.per.response)
+    gcv  <- as.numeric(model$gcv.per.response)
+    grsq <- as.numeric(model$grsq.per.response)
+    rss_mat <- stats::residuals(model)
+    rss  <- colSums(rss_mat^2)
+    names(rsq) <- names(gcv) <- names(grsq) <- names(rss) <- targets
+  } else {
+    rsq  <- as.numeric(model_summary$rsq)
+    gcv  <- as.numeric(model_summary$gcv)
+    grsq <- as.numeric(model_summary$grsq)
+    rss  <- sum(stats::residuals(model)^2)
+  }
 
   # Number of terms and predictors
   n_terms <- length(model$selected.terms)
@@ -58,8 +68,10 @@ format_summary <- function(earth_result) {
   if (earth_result$cv_enabled && !is.null(model$cv.rsq.tab)) {
     tab <- model$cv.rsq.tab
     last_row <- tab[nrow(tab), , drop = TRUE]
-    # Column may be named "mean", "cv.rsq", or the target variable name
-    if ("mean" %in% names(last_row)) {
+    if (multi) {
+      cv_rsq <- as.numeric(last_row[targets])
+      names(cv_rsq) <- targets
+    } else if ("mean" %in% names(last_row)) {
       cv_rsq <- as.numeric(last_row["mean"])
     } else if (length(last_row) > 0L) {
       cv_rsq <- as.numeric(last_row[length(last_row)])
@@ -68,14 +80,15 @@ format_summary <- function(earth_result) {
 
   list(
     coefficients  = coefs,
-    r_squared     = as.numeric(rsq),
-    gcv           = as.numeric(gcv),
-    grsq          = as.numeric(grsq),
+    r_squared     = rsq,
+    gcv           = gcv,
+    grsq          = grsq,
     rss           = rss,
     n_terms       = n_terms,
     n_predictors  = n_preds,
     n_obs         = nrow(earth_result$data),
-    cv_rsq        = cv_rsq
+    cv_rsq        = cv_rsq,
+    multi         = multi
   )
 }
 
@@ -96,13 +109,11 @@ format_summary <- function(earth_result) {
 format_anova <- function(earth_result) {
   validate_earthui_result(earth_result)
   model <- earth_result$model
-
-  # Capture the ANOVA output from earth
-  anova_obj <- summary(model, style = "pmax")
+  targets <- earth_result$target
 
   # Extract the dirs matrix to build our own ANOVA-like table
   dirs <- model$dirs[model$selected.terms, , drop = FALSE]
-  coefs <- stats::coef(model)
+  coef_mat <- model$coefficients  # matrix for multivariate
   cuts <- model$cuts[model$selected.terms, , drop = FALSE]
 
   # Build basis function descriptions
@@ -129,13 +140,19 @@ format_anova <- function(earth_result) {
     paste(colnames(dirs)[active], collapse = ", ")
   }, character(1))
 
-  data.frame(
+  result <- data.frame(
     term        = seq_len(nrow(dirs)),
     description = terms_desc,
     variables   = vars_involved,
-    coefficient = round(as.numeric(coefs), 6),
     stringsAsFactors = FALSE
   )
+
+  # Add coefficient column(s) — one per response
+  for (tgt in targets) {
+    result[[tgt]] <- round(as.numeric(coef_mat[, tgt]), 6)
+  }
+
+  result
 }
 
 #' Format variable importance
@@ -217,14 +234,37 @@ format_variable_importance <- function(earth_result) {
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' eq <- format_model_equation(result)
 #' cat(eq$latex)
-format_model_equation <- function(earth_result, digits = 7L) {
+format_model_equation <- function(earth_result, digits = 7L,
+                                  response_idx = NULL) {
   validate_earthui_result(earth_result)
   model <- earth_result$model
+  targets <- earth_result$target
+  multi <- length(targets) > 1L
+
+  # For multivariate, generate equations for all responses (or specific one)
+  if (multi && is.null(response_idx)) {
+    eqs <- lapply(seq_along(targets), function(i) {
+      format_model_equation(earth_result, digits = digits, response_idx = i)
+    })
+    names(eqs) <- targets
+    result <- list(
+      equations    = eqs,
+      multi        = TRUE,
+      targets      = targets
+    )
+    class(result) <- "earthui_equation_multi"
+    return(result)
+  }
 
   # Extract matrices for selected terms
   dirs  <- model$dirs[model$selected.terms, , drop = FALSE]
   cuts  <- model$cuts[model$selected.terms, , drop = FALSE]
-  coefs <- as.numeric(stats::coef(model))
+  coef_mat <- model$coefficients
+  if (multi) {
+    coefs <- as.numeric(coef_mat[, response_idx])
+  } else {
+    coefs <- as.numeric(coef_mat)
+  }
   col_names <- colnames(dirs)
 
   # Resolve dummy columns to base variables
@@ -437,17 +477,47 @@ resolve_columns_ <- function(col_names, categoricals, data) {
       sort(unique(as.character(factor_col)))
 
     for (lvl in lvls) {
-      for (sep in c("", ".")) {
-        dummy_name <- paste0(cat_var, sep, lvl)
-        idx <- which(info$col_name == dummy_name & !info$is_factor)
+      lvl_str <- as.character(lvl)
+      # R's model.matrix may replace spaces with dots in dummy column names
+      clean_lvl <- gsub("[[:space:]]+", ".", lvl_str)
+      candidates <- unique(c(
+        paste0(cat_var, lvl_str),
+        paste0(cat_var, ".", lvl_str),
+        paste0(cat_var, clean_lvl),
+        paste0(cat_var, ".", clean_lvl)
+      ))
+      for (cand in candidates) {
+        idx <- which(info$col_name == cand & !info$is_factor)
         if (length(idx) == 1L) {
           info$base_var[idx]  <- cat_var
-          info$level[idx]     <- as.character(lvl)
+          info$level[idx]     <- lvl_str
           info$is_factor[idx] <- TRUE
+          break
         }
       }
     }
   }
+
+  # Fallback: columns not present in the actual data that remain unresolved
+  # are likely dummy variables — try startsWith matching
+  actual_cols <- names(data)
+  for (i in which(!info$is_factor)) {
+    cn <- info$col_name[i]
+    if (cn %in% actual_cols) next
+    for (cat_var in categoricals) {
+      if (cat_var %in% actual_cols &&
+          nchar(cn) > nchar(cat_var) &&
+          startsWith(cn, cat_var)) {
+        info$base_var[i] <- cat_var
+        remainder <- substring(cn, nchar(cat_var) + 1L)
+        if (startsWith(remainder, ".")) remainder <- substring(remainder, 2L)
+        info$level[i] <- remainder
+        info$is_factor[i] <- TRUE
+        break
+      }
+    }
+  }
+
   info
 }
 

@@ -107,6 +107,8 @@ plot_variable_importance <- function(earth_result, type = "nsubsets") {
 #' @param variable Character string. Name of the predictor variable to plot.
 #' @param n_grid Integer. Number of grid points for the partial dependence
 #'   calculation. Default is 50.
+#' @param response_idx Integer or `NULL`. For multivariate models, which
+#'   response column to plot (1-based). Default `NULL` uses the first response.
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
@@ -114,7 +116,8 @@ plot_variable_importance <- function(earth_result, type = "nsubsets") {
 #' @examples
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_partial_dependence(result, "wt")
-plot_partial_dependence <- function(earth_result, variable, n_grid = 50L) {
+plot_partial_dependence <- function(earth_result, variable, n_grid = 50L,
+                                    response_idx = NULL) {
   validate_earthui_result(earth_result)
 
   if (!is.character(variable) || length(variable) != 1L) {
@@ -126,12 +129,14 @@ plot_partial_dependence <- function(earth_result, variable, n_grid = 50L) {
 
   model <- earth_result$model
   data <- earth_result$data
-  target <- earth_result$target
+  targets <- earth_result$target
+  multi <- length(targets) > 1L
+  ri <- if (is.null(response_idx)) 1L else response_idx
+  target_label <- targets[ri]
 
   var_col <- data[[variable]]
 
   if (is.factor(var_col) || is.character(var_col)) {
-    # Categorical variable: use unique levels
     grid_vals <- sort(unique(var_col))
   } else {
     grid_vals <- seq(min(var_col, na.rm = TRUE),
@@ -139,11 +144,11 @@ plot_partial_dependence <- function(earth_result, variable, n_grid = 50L) {
                      length.out = n_grid)
   }
 
-  # Compute partial dependence by averaging predictions over all observations
   pd_values <- vapply(grid_vals, function(val) {
     temp_data <- data
     temp_data[[variable]] <- val
-    mean(stats::predict(model, newdata = temp_data))
+    preds <- stats::predict(model, newdata = temp_data)
+    if (multi) mean(preds[, ri]) else mean(preds)
   }, numeric(1))
 
   pd_df <- data.frame(x = grid_vals, y = pd_values)
@@ -160,7 +165,7 @@ plot_partial_dependence <- function(earth_result, variable, n_grid = 50L) {
     ggplot2::labs(
       title = paste("Partial Dependence:", variable),
       x = variable,
-      y = paste("Predicted", target)
+      y = paste("Predicted", target_label)
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(
@@ -180,11 +185,14 @@ plot_partial_dependence <- function(earth_result, variable, n_grid = 50L) {
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
+#' @param response_idx Integer or `NULL`. For multivariate models, which
+#'   response column to plot (1-based). Default `NULL` uses the first response.
+#'
 #' @export
 #' @examples
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_contribution(result, "wt")
-plot_contribution <- function(earth_result, variable) {
+plot_contribution <- function(earth_result, variable, response_idx = NULL) {
   validate_earthui_result(earth_result)
 
   if (!is.character(variable) || length(variable) != 1L) {
@@ -193,6 +201,10 @@ plot_contribution <- function(earth_result, variable) {
 
   model <- earth_result$model
   data <- earth_result$data
+  targets <- earth_result$target
+  multi <- length(targets) > 1L
+  ri <- if (is.null(response_idx)) 1L else response_idx
+  target_label <- targets[ri]
 
   # Identify which basis-function columns involve this variable
   dirs <- model$dirs[model$selected.terms, , drop = FALSE]
@@ -223,7 +235,8 @@ plot_contribution <- function(earth_result, variable) {
 
   # Compute per-term contributions: bx * coefficient
   bx <- model$bx
-  coefs <- as.numeric(stats::coef(model))
+  coef_mat <- model$coefficients
+  coefs <- if (multi) as.numeric(coef_mat[, ri]) else as.numeric(coef_mat)
   contributions <- sweep(bx, 2, coefs, "*")
 
   # Sum contributions for terms involving this variable
@@ -241,7 +254,7 @@ plot_contribution <- function(earth_result, variable) {
       ggplot2::labs(
         title = paste("Contribution:", variable),
         x = variable,
-        y = paste("Contribution to", earth_result$target)
+        y = paste("Contribution to", target_label)
       ) +
       ggplot2::theme_minimal() +
       ggplot2::theme(
@@ -251,8 +264,6 @@ plot_contribution <- function(earth_result, variable) {
     plot_df <- data.frame(x = var_col, y = var_contrib)
     plot_df <- plot_df[order(plot_df$x), ]
 
-    # Compute piecewise-linear slopes from knot points
-    # Get knots for this variable from the selected terms
     cuts_mat <- model$cuts[model$selected.terms, , drop = FALSE]
     col_idx <- which(matching_cols)
     knots <- numeric(0)
@@ -265,15 +276,12 @@ plot_contribution <- function(earth_result, variable) {
     }
     knots <- sort(unique(knots))
 
-    # Build evaluation points: data range boundaries + knots
     x_min <- min(var_col, na.rm = TRUE)
     x_max <- max(var_col, na.rm = TRUE)
     knots <- knots[knots > x_min & knots < x_max]
     breaks <- c(x_min, knots, x_max)
 
-    # Evaluate contribution at each break using the model
     eval_contrib <- function(x_val) {
-      # Compute basis function values for this x, summing relevant terms
       total <- 0
       for (ti in var_terms) {
         term_val <- coefs[ti]
@@ -295,7 +303,6 @@ plot_contribution <- function(earth_result, variable) {
 
     break_y <- vapply(breaks, eval_contrib, numeric(1))
 
-    # Compute slopes and build annotation data
     n_seg <- length(breaks) - 1L
     if (n_seg > 0L) {
       seg_df <- data.frame(
@@ -309,7 +316,6 @@ plot_contribution <- function(earth_result, variable) {
                            slope = numeric(0), label = character(0))
     }
 
-    # Build the piecewise-linear line from break points
     line_df <- data.frame(x = breaks, y = break_y)
 
     p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data$x, y = .data$y)) +
@@ -317,9 +323,7 @@ plot_contribution <- function(earth_result, variable) {
       ggplot2::geom_line(data = line_df, ggplot2::aes(x = .data$x, y = .data$y),
                          color = "#d7191c", linewidth = 0.8)
 
-    # Add slope labels
     if (nrow(seg_df) > 0L) {
-      # Offset labels above or below the line
       y_range <- diff(range(plot_df$y, na.rm = TRUE))
       if (y_range == 0) y_range <- 1
       p <- p + ggplot2::geom_label(
@@ -332,7 +336,6 @@ plot_contribution <- function(earth_result, variable) {
       )
     }
 
-    # Add vertical dashed lines at knot points
     if (length(knots) > 0L) {
       p <- p + ggplot2::geom_vline(xintercept = knots, linetype = "dashed",
                                    color = "grey50", alpha = 0.5)
@@ -343,7 +346,7 @@ plot_contribution <- function(earth_result, variable) {
       ggplot2::labs(
         title = paste("Contribution:", variable),
         x = variable,
-        y = paste("Contribution to", earth_result$target)
+        y = paste("Contribution to", target_label)
       ) +
       ggplot2::theme_minimal() +
       ggplot2::theme(
@@ -370,7 +373,9 @@ plot_contribution <- function(earth_result, variable) {
 plot_correlation_matrix <- function(earth_result) {
   validate_earthui_result(earth_result)
 
+  # target may be a vector for multivariate models
   vars <- c(earth_result$target, earth_result$predictors)
+  vars <- unique(vars)
   df <- earth_result$data[, vars, drop = FALSE]
 
   # Keep only numeric columns
@@ -449,18 +454,29 @@ plot_correlation_matrix <- function(earth_result) {
 #' @return A [ggplot2::ggplot] object showing residuals vs fitted values.
 #'   Use [plot_qq()] for the Q-Q plot separately.
 #'
+#' @param response_idx Integer or `NULL`. For multivariate models, which
+#'   response column to plot (1-based). Default `NULL` uses the first response.
+#'
 #' @export
 #' @examples
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_residuals(result)
-plot_residuals <- function(earth_result) {
+plot_residuals <- function(earth_result, response_idx = NULL) {
   validate_earthui_result(earth_result)
   model <- earth_result$model
+  targets <- earth_result$target
+  multi <- length(targets) > 1L
+  ri <- if (is.null(response_idx)) 1L else response_idx
+  target_label <- targets[ri]
 
+  fitted_mat <- stats::fitted(model)
+  resid_mat <- stats::residuals(model)
   resid_df <- data.frame(
-    fitted = as.numeric(stats::fitted(model)),
-    residuals = as.numeric(stats::residuals(model))
+    fitted = if (multi) as.numeric(fitted_mat[, ri]) else as.numeric(fitted_mat),
+    residuals = if (multi) as.numeric(resid_mat[, ri]) else as.numeric(resid_mat)
   )
+
+  title <- if (multi) paste0("Residuals vs Fitted: ", target_label) else "Residuals vs Fitted"
 
   ggplot2::ggplot(resid_df,
                   ggplot2::aes(x = .data$fitted, y = .data$residuals)) +
@@ -469,7 +485,7 @@ plot_residuals <- function(earth_result) {
     ggplot2::scale_x_continuous(labels = dollar_format_) +
     ggplot2::scale_y_continuous(labels = dollar_format_) +
     ggplot2::labs(
-      title = "Residuals vs Fitted",
+      title = title,
       x = "Fitted Values",
       y = "Residuals"
     ) +
@@ -488,19 +504,30 @@ plot_residuals <- function(earth_result) {
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
+#' @param response_idx Integer or `NULL`. For multivariate models, which
+#'   response column to plot (1-based). Default `NULL` uses the first response.
+#'
 #' @export
 #' @examples
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_qq(result)
-plot_qq <- function(earth_result) {
+plot_qq <- function(earth_result, response_idx = NULL) {
   validate_earthui_result(earth_result)
   model <- earth_result$model
-  resids <- as.numeric(stats::residuals(model))
+  targets <- earth_result$target
+  multi <- length(targets) > 1L
+  ri <- if (is.null(response_idx)) 1L else response_idx
+  target_label <- targets[ri]
+
+  resid_mat <- stats::residuals(model)
+  resids <- if (multi) as.numeric(resid_mat[, ri]) else as.numeric(resid_mat)
 
   qq_data <- data.frame(
     theoretical = stats::qqnorm(resids, plot.it = FALSE)$x,
     sample = sort(resids)
   )
+
+  title <- if (multi) paste0("Normal Q-Q Plot: ", target_label) else "Normal Q-Q Plot"
 
   ggplot2::ggplot(qq_data,
                   ggplot2::aes(x = .data$theoretical, y = .data$sample)) +
@@ -510,7 +537,7 @@ plot_qq <- function(earth_result) {
                          linetype = "dashed", color = "red") +
     ggplot2::scale_y_continuous(labels = dollar_format_) +
     ggplot2::labs(
-      title = "Normal Q-Q Plot",
+      title = title,
       x = "Theoretical Quantiles",
       y = "Sample Quantiles"
     ) +
@@ -530,19 +557,28 @@ plot_qq <- function(earth_result) {
 #'
 #' @return A [ggplot2::ggplot] object.
 #'
+#' @param response_idx Integer or `NULL`. For multivariate models, which
+#'   response column to plot (1-based). Default `NULL` uses the first response.
+#'
 #' @export
 #' @examples
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_actual_vs_predicted(result)
-plot_actual_vs_predicted <- function(earth_result) {
+plot_actual_vs_predicted <- function(earth_result, response_idx = NULL) {
   validate_earthui_result(earth_result)
   model <- earth_result$model
-  target <- earth_result$target
+  targets <- earth_result$target
+  multi <- length(targets) > 1L
+  ri <- if (is.null(response_idx)) 1L else response_idx
+  target_label <- targets[ri]
 
+  fitted_mat <- stats::fitted(model)
   plot_df <- data.frame(
-    actual = earth_result$data[[target]],
-    predicted = as.numeric(stats::fitted(model))
+    actual = earth_result$data[[target_label]],
+    predicted = if (multi) as.numeric(fitted_mat[, ri]) else as.numeric(fitted_mat)
   )
+
+  title <- if (multi) paste0("Actual vs Predicted: ", target_label) else "Actual vs Predicted"
 
   ggplot2::ggplot(plot_df,
                   ggplot2::aes(x = .data$actual, y = .data$predicted)) +
@@ -552,9 +588,9 @@ plot_actual_vs_predicted <- function(earth_result) {
     ggplot2::scale_x_continuous(labels = dollar_format_) +
     ggplot2::scale_y_continuous(labels = dollar_format_) +
     ggplot2::labs(
-      title = "Actual vs Predicted",
-      x = paste("Actual", target),
-      y = paste("Predicted", target)
+      title = title,
+      x = paste("Actual", target_label),
+      y = paste("Predicted", target_label)
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(
@@ -591,8 +627,13 @@ plot_actual_vs_predicted <- function(earth_result) {
 #' list_g_functions(result)
 list_g_functions <- function(earth_result) {
   validate_earthui_result(earth_result)
-  eq <- format_model_equation(earth_result)
-  groups <- eq$groups
+  eq <- format_model_equation(earth_result, response_idx = 1L)
+  # For multivariate, groups are shared; use first response's equation
+  groups <- if (inherits(eq, "earthui_equation_multi")) {
+    eq$equations[[1]]$groups
+  } else {
+    eq$groups
+  }
   non_intercept <- Filter(function(g) g$degree > 0L, groups)
 
   if (length(non_intercept) == 0L) {
@@ -636,10 +677,15 @@ list_g_functions <- function(earth_result) {
 #' @examples
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_g_function(result, 1)
-plot_g_function <- function(earth_result, group_index) {
+plot_g_function <- function(earth_result, group_index, response_idx = NULL) {
   validate_earthui_result(earth_result)
-  eq <- format_model_equation(earth_result)
-  non_intercept <- Filter(function(g) g$degree > 0L, eq$groups)
+  eq <- format_model_equation(earth_result, response_idx = if (is.null(response_idx)) 1L else response_idx)
+  groups <- if (inherits(eq, "earthui_equation_multi")) {
+    eq$equations[[1]]$groups
+  } else {
+    eq$groups
+  }
+  non_intercept <- Filter(function(g) g$degree > 0L, groups)
 
   group_index <- as.integer(group_index)
   if (group_index < 1L || group_index > length(non_intercept)) {
@@ -651,9 +697,9 @@ plot_g_function <- function(earth_result, group_index) {
   d <- grp$degree - grp$n_factors
 
   if (d >= 2L) {
-    plot_g_3d_(earth_result, grp)
+    plot_g_3d_(earth_result, grp, response_idx = response_idx)
   } else {
-    plot_g_2d_(earth_result, grp)
+    plot_g_2d_(earth_result, grp, response_idx = response_idx)
   }
 }
 
@@ -688,10 +734,16 @@ plot_g_function <- function(earth_result, group_index) {
 #' @examples
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"), degree = 2L)
 #' plot_g_persp(result, 1)
-plot_g_persp <- function(earth_result, group_index, theta = 30, phi = 25) {
+plot_g_persp <- function(earth_result, group_index, theta = 30, phi = 25,
+                         response_idx = NULL) {
   validate_earthui_result(earth_result)
-  eq <- format_model_equation(earth_result)
-  non_intercept <- Filter(function(g) g$degree > 0L, eq$groups)
+  eq <- format_model_equation(earth_result, response_idx = if (is.null(response_idx)) 1L else response_idx)
+  groups <- if (inherits(eq, "earthui_equation_multi")) {
+    eq$equations[[1]]$groups
+  } else {
+    eq$groups
+  }
+  non_intercept <- Filter(function(g) g$degree > 0L, groups)
 
   group_index <- as.integer(group_index)
   if (group_index < 1L || group_index > length(non_intercept)) {
@@ -703,10 +755,11 @@ plot_g_persp <- function(earth_result, group_index, theta = 30, phi = 25) {
   d <- grp$degree - grp$n_factors
 
   if (d < 2L) {
-    return(plot_g_2d_(earth_result, grp))
+    return(plot_g_2d_(earth_result, grp, response_idx = response_idx))
   }
 
-  plot_g_persp_(earth_result, grp, theta = theta, phi = phi)
+  plot_g_persp_(earth_result, grp, theta = theta, phi = phi,
+                response_idx = response_idx)
 }
 
 #' Plot g-function as a static contour (for reports)
@@ -723,10 +776,15 @@ plot_g_persp <- function(earth_result, group_index, theta = 30, phi = 25) {
 #' @examples
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_g_contour(result, 1)
-plot_g_contour <- function(earth_result, group_index) {
+plot_g_contour <- function(earth_result, group_index, response_idx = NULL) {
   validate_earthui_result(earth_result)
-  eq <- format_model_equation(earth_result)
-  non_intercept <- Filter(function(g) g$degree > 0L, eq$groups)
+  eq <- format_model_equation(earth_result, response_idx = if (is.null(response_idx)) 1L else response_idx)
+  groups <- if (inherits(eq, "earthui_equation_multi")) {
+    eq$equations[[1]]$groups
+  } else {
+    eq$groups
+  }
+  non_intercept <- Filter(function(g) g$degree > 0L, groups)
 
   group_index <- as.integer(group_index)
   if (group_index < 1L || group_index > length(non_intercept)) {
@@ -738,16 +796,20 @@ plot_g_contour <- function(earth_result, group_index) {
   d <- grp$degree - grp$n_factors
 
   if (d >= 2L) {
-    plot_g_contour_(earth_result, grp)
+    plot_g_contour_(earth_result, grp, response_idx = response_idx)
   } else {
-    plot_g_2d_(earth_result, grp)
+    plot_g_2d_(earth_result, grp, response_idx = response_idx)
   }
 }
 
 # --- Internal: Evaluate g-function group on new data ---
 # Returns numeric vector, one value per row of newdata
-eval_g_function_ <- function(model, group, newdata) {
-  coefs <- as.numeric(stats::coef(model))
+# response_idx: for multivariate models, which response column (1-based)
+eval_g_function_ <- function(model, group, newdata, response_idx = NULL) {
+  coef_mat <- model$coefficients
+  multi <- ncol(coef_mat) > 1L
+  ri <- if (is.null(response_idx)) 1L else response_idx
+  coefs <- if (multi) as.numeric(coef_mat[, ri]) else as.numeric(coef_mat)
   n <- nrow(newdata)
   total <- numeric(n)
 
@@ -756,10 +818,13 @@ eval_g_function_ <- function(model, group, newdata) {
     term_val <- rep(coefs[ti], n)
     for (comp in term$components) {
       if (comp$is_factor) {
-        x <- as.character(newdata[[comp$base_var]])
+        col_data <- newdata[[comp$base_var]]
+        if (is.null(col_data)) { term_val <- rep(0, n); break }
+        x <- as.character(col_data)
         term_val <- term_val * as.numeric(x == comp$level)
       } else {
         x <- newdata[[comp$base_var]]
+        if (is.null(x)) { term_val <- rep(0, n); break }
         if (comp$dir == 2) {
           term_val <- term_val * x
         } else if (comp$dir == 1) {
@@ -775,20 +840,34 @@ eval_g_function_ <- function(model, group, newdata) {
 }
 
 # --- Internal: 2D plot for d <= 1 g-functions ---
-plot_g_2d_ <- function(earth_result, grp) {
+plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
   model <- earth_result$model
   data <- earth_result$data
-  target <- earth_result$target
+  targets <- earth_result$target
+  multi <- length(targets) > 1L
+  ri <- if (is.null(response_idx)) 1L else response_idx
+  target_label <- targets[ri]
 
   title <- sprintf("%s  (%d term%s)", grp$label,
                    length(grp$terms), if (length(grp$terms) > 1L) "s" else "")
 
   numeric_vars <- grp$base_vars[!grp$base_vars %in% earth_result$categoricals]
+  # Safety: filter to variables that actually exist in the data
+  numeric_vars <- numeric_vars[numeric_vars %in% names(data)]
 
   if (length(numeric_vars) == 0L) {
-    # All factors: bar chart
-    contrib <- eval_g_function_(model, grp, data)
-    fvar <- grp$base_vars[1]
+    contrib <- eval_g_function_(model, grp, data, response_idx = ri)
+    fvar <- grp$base_vars[grp$base_vars %in% names(data)]
+    if (length(fvar) == 0L) {
+      return(
+        ggplot2::ggplot() +
+          ggplot2::annotate("text", x = 0.5, y = 0.5,
+                            label = paste("Cannot resolve variables:",
+                                          paste(grp$base_vars, collapse = ", "))) +
+          ggplot2::theme_void()
+      )
+    }
+    fvar <- fvar[1]
     plot_df <- data.frame(x = as.character(data[[fvar]]), y = contrib,
                           stringsAsFactors = FALSE)
     return(
@@ -798,7 +877,7 @@ plot_g_2d_ <- function(earth_result, grp) {
         ggplot2::geom_jitter(color = "#2c7bb6", alpha = 0.5, width = 0.2) +
         ggplot2::scale_y_continuous(labels = dollar_format_) +
         ggplot2::labs(title = title, x = fvar,
-                      y = paste("Contribution to", target)) +
+                      y = paste("Contribution to", target_label)) +
         ggplot2::theme_minimal() +
         ggplot2::theme(
           plot.title = ggplot2::element_text(face = "bold", size = 13))
@@ -811,14 +890,14 @@ plot_g_2d_ <- function(earth_result, grp) {
   # Compute training-data contributions using bx (exact match to model)
   term_indices <- vapply(grp$terms, function(t) t$index, integer(1))
   bx <- model$bx
-  coefs <- as.numeric(stats::coef(model))
+  coef_mat <- model$coefficients
+  coefs <- if (multi) as.numeric(coef_mat[, ri]) else as.numeric(coef_mat)
   contrib <- rowSums(sweep(bx[, term_indices, drop = FALSE], 2,
                            coefs[term_indices], "*"))
 
   plot_df <- data.frame(x = var_col, y = contrib)
   plot_df <- plot_df[order(plot_df$x), ]
 
-  # Collect knots for this variable from the group's terms
   dirs <- model$dirs[model$selected.terms, , drop = FALSE]
   cuts <- model$cuts[model$selected.terms, , drop = FALSE]
   col_names <- colnames(dirs)
@@ -846,7 +925,6 @@ plot_g_2d_ <- function(earth_result, grp) {
   x_max <- max(var_col, na.rm = TRUE)
   knots <- knots[knots > x_min & knots < x_max]
 
-  # Evaluate g-function on a fine grid for the line
   grid_x <- seq(x_min, x_max, length.out = 200)
   eps <- (x_max - x_min) * 1e-6
   for (k in knots) {
@@ -858,16 +936,15 @@ plot_g_2d_ <- function(earth_result, grp) {
   eval_row <- data[1L, , drop = FALSE]
   grid_y <- vapply(grid_x, function(xv) {
     eval_row[[var]] <- xv
-    eval_g_function_(model, grp, eval_row)
+    eval_g_function_(model, grp, eval_row, response_idx = ri)
   }, numeric(1))
 
   line_df <- data.frame(x = grid_x, y = grid_y)
 
-  # Compute slopes between knot segments
   breaks <- c(x_min, knots, x_max)
   break_y <- vapply(breaks, function(xv) {
     eval_row[[var]] <- xv
-    eval_g_function_(model, grp, eval_row)
+    eval_g_function_(model, grp, eval_row, response_idx = ri)
   }, numeric(1))
 
   n_seg <- length(breaks) - 1L
@@ -907,7 +984,7 @@ plot_g_2d_ <- function(earth_result, grp) {
   p + ggplot2::scale_x_continuous(labels = comma_format_) +
     ggplot2::scale_y_continuous(labels = dollar_format_) +
     ggplot2::labs(title = title, x = var,
-                  y = paste("Contribution to", target)) +
+                  y = paste("Contribution to", target_label)) +
     ggplot2::theme_minimal() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(face = "bold", size = 13)
@@ -915,14 +992,18 @@ plot_g_2d_ <- function(earth_result, grp) {
 }
 
 # --- Internal: 3D plotly surface for d >= 2 g-functions ---
-plot_g_3d_ <- function(earth_result, grp) {
+plot_g_3d_ <- function(earth_result, grp, response_idx = NULL) {
   model <- earth_result$model
   data <- earth_result$data
-  target <- earth_result$target
+  targets <- earth_result$target
+  multi <- length(targets) > 1L
+  ri <- if (is.null(response_idx)) 1L else response_idx
+  target_label <- targets[ri]
 
   numeric_vars <- grp$base_vars[!grp$base_vars %in% earth_result$categoricals]
+  numeric_vars <- numeric_vars[numeric_vars %in% names(data)]
   if (length(numeric_vars) < 2L) {
-    return(plot_g_2d_(earth_result, grp))
+    return(plot_g_2d_(earth_result, grp, response_idx = ri))
   }
 
   var1 <- numeric_vars[1]
@@ -940,7 +1021,7 @@ plot_g_3d_ <- function(earth_result, grp) {
   eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
   eval_data[[var1]] <- grid$x1
   eval_data[[var2]] <- grid$x2
-  z_vals <- eval_g_function_(model, grp, eval_data)
+  z_vals <- eval_g_function_(model, grp, eval_data, response_idx = ri)
   z_mat <- matrix(z_vals, nrow = n_grid, ncol = n_grid)
 
   if (!requireNamespace("plotly", quietly = TRUE)) {
@@ -951,17 +1032,17 @@ plot_g_3d_ <- function(earth_result, grp) {
         ggplot2::scale_x_continuous(labels = comma_format_) +
         ggplot2::scale_y_continuous(labels = comma_format_) +
         ggplot2::labs(title = title, x = var1, y = var2,
-                      fill = paste("Contribution\nto", target)) +
+                      fill = paste("Contribution\nto", target_label)) +
         ggplot2::theme_minimal() +
         ggplot2::theme(
           plot.title = ggplot2::element_text(face = "bold", size = 13))
     )
   }
 
-  # Training data contributions for scatter overlay
   term_indices <- vapply(grp$terms, function(t) t$index, integer(1))
   bx <- model$bx
-  coefs <- as.numeric(stats::coef(model))
+  coef_mat <- model$coefficients
+  coefs <- if (multi) as.numeric(coef_mat[, ri]) else as.numeric(coef_mat)
   contrib <- rowSums(sweep(bx[, term_indices, drop = FALSE], 2,
                            coefs[term_indices], "*"))
 
@@ -970,7 +1051,7 @@ plot_g_3d_ <- function(earth_result, grp) {
       x = x1_seq, y = x2_seq, z = z_mat,
       colorscale = list(c(0, "#2166AC"), c(0.5, "#f7f7f7"), c(1, "#B2182B")),
       opacity = 0.85,
-      colorbar = list(title = paste("Contribution\nto", target)),
+      colorbar = list(title = paste("Contribution\nto", target_label)),
       name = "Surface",
       showlegend = FALSE
     ) |>
@@ -986,20 +1067,23 @@ plot_g_3d_ <- function(earth_result, grp) {
       scene = list(
         xaxis = list(title = var1),
         yaxis = list(title = var2),
-        zaxis = list(title = paste("Contribution to", target))
+        zaxis = list(title = paste("Contribution to", target_label))
       )
     )
 }
 
 # --- Internal: Static contour for d >= 2 (PDF/Word reports) ---
-plot_g_contour_ <- function(earth_result, grp) {
+plot_g_contour_ <- function(earth_result, grp, response_idx = NULL) {
   model <- earth_result$model
   data <- earth_result$data
-  target <- earth_result$target
+  targets <- earth_result$target
+  ri <- if (is.null(response_idx)) 1L else response_idx
+  target_label <- targets[ri]
 
   numeric_vars <- grp$base_vars[!grp$base_vars %in% earth_result$categoricals]
+  numeric_vars <- numeric_vars[numeric_vars %in% names(data)]
   if (length(numeric_vars) < 2L) {
-    return(plot_g_2d_(earth_result, grp))
+    return(plot_g_2d_(earth_result, grp, response_idx = ri))
   }
 
   var1 <- numeric_vars[1]
@@ -1017,14 +1101,14 @@ plot_g_contour_ <- function(earth_result, grp) {
   eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
   eval_data[[var1]] <- grid$x1
   eval_data[[var2]] <- grid$x2
-  grid$z <- eval_g_function_(model, grp, eval_data)
+  grid$z <- eval_g_function_(model, grp, eval_data, response_idx = ri)
 
   ggplot2::ggplot(grid, ggplot2::aes(x = .data$x1, y = .data$x2)) +
     ggplot2::geom_contour_filled(ggplot2::aes(z = .data$z), bins = 15) +
     ggplot2::scale_x_continuous(labels = comma_format_) +
     ggplot2::scale_y_continuous(labels = comma_format_) +
     ggplot2::labs(title = title, x = var1, y = var2,
-                  fill = paste("Contribution\nto", target)) +
+                  fill = paste("Contribution\nto", target_label)) +
     ggplot2::theme_minimal() +
     ggplot2::theme(
       plot.title = ggplot2::element_text(face = "bold", size = 13)
@@ -1032,14 +1116,18 @@ plot_g_contour_ <- function(earth_result, grp) {
 }
 
 # --- Internal: Static 3D perspective for d >= 2 (PDF/Word reports) ---
-plot_g_persp_ <- function(earth_result, grp, theta = 30, phi = 25) {
+plot_g_persp_ <- function(earth_result, grp, theta = 30, phi = 25,
+                           response_idx = NULL) {
   model <- earth_result$model
   data <- earth_result$data
-  target <- earth_result$target
+  targets <- earth_result$target
+  ri <- if (is.null(response_idx)) 1L else response_idx
+  target_label <- targets[ri]
 
   numeric_vars <- grp$base_vars[!grp$base_vars %in% earth_result$categoricals]
+  numeric_vars <- numeric_vars[numeric_vars %in% names(data)]
   if (length(numeric_vars) < 2L) {
-    return(plot_g_2d_(earth_result, grp))
+    return(plot_g_2d_(earth_result, grp, response_idx = ri))
   }
 
   var1 <- numeric_vars[1]
@@ -1057,7 +1145,7 @@ plot_g_persp_ <- function(earth_result, grp, theta = 30, phi = 25) {
   eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
   eval_data[[var1]] <- grid$x1
   eval_data[[var2]] <- grid$x2
-  z_vals <- eval_g_function_(model, grp, eval_data)
+  z_vals <- eval_g_function_(model, grp, eval_data, response_idx = ri)
   z_mat <- matrix(z_vals, nrow = n_grid, ncol = n_grid)
 
   # Color the surface facets by z-value (blue -> white -> red)
@@ -1089,7 +1177,7 @@ plot_g_persp_ <- function(earth_result, grp, theta = 30, phi = 25) {
     theta = theta, phi = phi,
     col = facet_col, shade = 0.3, border = NA,
     xlab = var1, ylab = var2,
-    zlab = paste("Contribution to", target),
+    zlab = paste("Contribution to", target_label),
     main = title,
     cex.main = 1.1, font.main = 2,
     ticktype = "detailed", nticks = 5

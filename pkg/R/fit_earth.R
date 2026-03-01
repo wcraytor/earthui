@@ -63,6 +63,7 @@
 #' @param Exhaustive.tol Numeric or `NULL`. Condition number threshold for
 #'   exhaustive pruning. Default 1e-10.
 #' @param wp Numeric vector or `NULL`. Response weights.
+#' @param weights Numeric vector or `NULL`. Case weights passed to earth.
 #' @param ... Additional arguments passed to [earth::earth()].
 #'
 #' @return A list with class `"earthui_result"` containing:
@@ -96,17 +97,20 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
                       Auto.linpreds = NULL, Force.weights = NULL,
                       Use.beta.cache = NULL, Force.xtx.prune = NULL,
                       Get.leverages = NULL, Exhaustive.tol = NULL,
-                      wp = NULL, ..., .capture_trace = TRUE) {
+                      wp = NULL, weights = NULL, ..., .capture_trace = TRUE) {
 
   # --- Input validation ---
   if (!is.data.frame(df)) {
     stop("`df` must be a data frame.", call. = FALSE)
   }
-  if (!is.character(target) || length(target) != 1L) {
-    stop("`target` must be a single character string.", call. = FALSE)
+  if (!is.character(target) || length(target) < 1L) {
+    stop("`target` must be a character vector of one or more variable names.",
+         call. = FALSE)
   }
-  if (!target %in% names(df)) {
-    stop("Target variable '", target, "' not found in data frame.", call. = FALSE)
+  missing_targets <- setdiff(target, names(df))
+  if (length(missing_targets) > 0L) {
+    stop("Target variable(s) not found in data frame: ",
+         paste(missing_targets, collapse = ", "), call. = FALSE)
   }
   if (!is.character(predictors) || length(predictors) == 0L) {
     stop("`predictors` must be a non-empty character vector.", call. = FALSE)
@@ -116,8 +120,10 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
     stop("Predictor(s) not found in data frame: ",
          paste(missing_preds, collapse = ", "), call. = FALSE)
   }
-  if (target %in% predictors) {
-    stop("Target variable must not be in the predictors list.", call. = FALSE)
+  overlap <- intersect(target, predictors)
+  if (length(overlap) > 0L) {
+    stop("Target variable(s) must not be in the predictors list: ",
+         paste(overlap, collapse = ", "), call. = FALSE)
   }
 
   degree <- as.integer(degree)
@@ -126,6 +132,7 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   }
 
   # --- Prepare data ---
+  multi_response <- length(target) > 1L
   model_df <- df[, c(target, predictors), drop = FALSE]
 
   # Convert categoricals to factors
@@ -161,7 +168,7 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   # Drop factor/character columns with fewer than 2 unique values (causes contrasts error)
   drop_cols <- character(0)
   for (col in names(model_df)) {
-    if (col == target) next
+    if (col %in% target) next
     if (is.factor(model_df[[col]])) {
       if (nlevels(droplevels(model_df[[col]])) < 2L) {
         drop_cols <- c(drop_cols, col)
@@ -194,7 +201,12 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   }
 
   # --- Build earth arguments ---
-  formula <- stats::as.formula(paste("`", target, "` ~ .", sep = ""))
+  if (multi_response) {
+    lhs <- paste0("cbind(", paste0("`", target, "`", collapse = ", "), ")")
+    formula <- stats::as.formula(paste(lhs, "~ ."))
+  } else {
+    formula <- stats::as.formula(paste("`", target, "` ~ .", sep = ""))
+  }
 
   earth_args <- list(formula = formula, data = model_df, degree = degree)
 
@@ -265,6 +277,7 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   if (!is.null(Get.leverages))   earth_args$Get.leverages    <- Get.leverages
   if (!is.null(Exhaustive.tol))  earth_args$Exhaustive.tol   <- Exhaustive.tol
   if (!is.null(wp))              earth_args$wp               <- wp
+  if (!is.null(weights))         earth_args$weights          <- weights
 
   if (degree >= 2L && !is.null(allowed_func)) {
     earth_args$allowed <- allowed_func
