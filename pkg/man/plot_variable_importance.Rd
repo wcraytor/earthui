@@ -7,7 +7,7 @@
 plot_variable_importance(earth_result, type = "nsubsets")
 }
 \arguments{
-\item{earth_result}{An object of class \code{"earthui_result"} as returned by
+\item{earth_result}{An object of class \code{"earthUI_result"} as returned by
 \code{\link[=fit_earth]{fit_earth()}}.}
 
 \item{type}{Character. Importance metric to plot: \code{"nsubsets"} (default),

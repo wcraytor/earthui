@@ -68,7 +68,7 @@
 #' @param .capture_trace Logical. If `TRUE` (default), capture earth's trace
 #'   output. Set to `FALSE` when running in a background process.
 #'
-#' @return A list with class `"earthui_result"` containing:
+#' @return A list with class `"earthUI_result"` containing:
 #'   \describe{
 #'     \item{model}{The fitted earth model object.}
 #'     \item{target}{Name of the response variable.}
@@ -315,6 +315,6 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
     elapsed      = elapsed,
     trace_output = trace_output
   )
-  class(result) <- "earthui_result"
+  class(result) <- "earthUI_result"
   result
 }

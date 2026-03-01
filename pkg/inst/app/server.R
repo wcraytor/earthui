@@ -1,9 +1,9 @@
 function(input, output, session) {
 
   # --- SQLite settings database ---
-  settings_con <- earthui:::settings_db_connect_()
+  settings_con <- earthUI:::settings_db_connect_()
   session$onSessionEnded(function() {
-    earthui:::settings_db_disconnect_(settings_con)
+    earthUI:::settings_db_disconnect_(settings_con)
   })
 
   # --- Reactive values ---
@@ -23,16 +23,16 @@ function(input, output, session) {
   # --- Data Import ---
   observeEvent(input$file_input, {
     req(input$file_input)
-    message("earthui: file upload received: ", input$file_input$name)
-    message("earthui: datapath = ", input$file_input$datapath)
-    message("earthui: file exists = ", file.exists(input$file_input$datapath))
+    message("earthUI: file upload received: ", input$file_input$name)
+    message("earthUI: datapath = ", input$file_input$datapath)
+    message("earthUI: file exists = ", file.exists(input$file_input$datapath))
     ext <- tolower(tools::file_ext(input$file_input$name))
     rv$file_ext <- ext
     rv$file_path <- input$file_input$datapath
     rv$file_name <- input$file_input$name
 
     # Restore saved settings from SQLite into localStorage
-    saved <- earthui:::settings_db_read_(settings_con, rv$file_name)
+    saved <- earthUI:::settings_db_read_(settings_con, rv$file_name)
     if (!is.null(saved)) {
       session$sendCustomMessage("restore_all_settings", list(
         filename     = rv$file_name,
@@ -40,7 +40,7 @@ function(input, output, session) {
         variables    = saved$variables,
         interactions = saved$interactions
       ))
-      message("earthui: restored settings from SQLite for: ", rv$file_name)
+      message("earthUI: restored settings from SQLite for: ", rv$file_name)
     }
 
     if (ext %in% c("xlsx", "xls")) {
@@ -52,9 +52,9 @@ function(input, output, session) {
       rv$data <- import_data(input$file_input$datapath, sheet = 1)
       rv$categoricals <- detect_categoricals(rv$data)
       rv$result <- NULL
-      message("earthui: import OK, ", nrow(rv$data), " rows, ", ncol(rv$data), " cols")
+      message("earthUI: import OK, ", nrow(rv$data), " rows, ", ncol(rv$data), " cols")
     }, error = function(e) {
-      message("earthui: IMPORT ERROR: ", e$message)
+      message("earthUI: IMPORT ERROR: ", e$message)
       showNotification(paste("Import error:", e$message),
                        type = "error", duration = 15)
     })
@@ -92,7 +92,7 @@ function(input, output, session) {
     payload <- input$eui_save_trigger
     req(payload$filename)
     tryCatch({
-      earthui:::settings_db_write_(
+      earthUI:::settings_db_write_(
         settings_con,
         filename     = payload$filename,
         settings     = if (!is.null(payload$settings))     payload$settings     else "{}",
@@ -100,7 +100,7 @@ function(input, output, session) {
         interactions = if (!is.null(payload$interactions)) payload$interactions else "{}"
       )
     }, error = function(e) {
-      message("earthui: SQLite save error: ", e$message)
+      message("earthUI: SQLite save error: ", e$message)
     })
   }, ignoreInit = TRUE)
 
@@ -109,11 +109,11 @@ function(input, output, session) {
   # Radio: choose mode (last per-file settings vs saved defaults)
   observeEvent(input$eui_defaults_action, {
     action <- input$eui_defaults_action
-    message("earthui: defaults radio changed to: '", action, "'")
+    message("earthUI: defaults radio changed to: '", action, "'")
     req(rv$file_name)
 
     if (action == "use_default") {
-      defaults <- earthui:::settings_db_read_(settings_con, "__defaults__")
+      defaults <- earthUI:::settings_db_read_(settings_con, "__defaults__")
       if (!is.null(defaults)) {
         session$sendCustomMessage("restore_all_settings", list(
           filename     = rv$file_name,
@@ -142,7 +142,7 @@ function(input, output, session) {
   # Button: save current settings as the default
   observeEvent(input$eui_save_defaults, {
     req(rv$file_name)
-    message("earthui: saving current settings as defaults for: ", rv$file_name)
+    message("earthUI: saving current settings as defaults for: ", rv$file_name)
     session$sendCustomMessage("collect_and_save_defaults", list(
       filename = rv$file_name
     ))
@@ -207,7 +207,7 @@ function(input, output, session) {
     # JavaScript: persist target variable + advanced parameters in localStorage
     js <- tags$script(HTML(sprintf("
       (function() {
-        var storageKey = 'earthui_settings_' + %s;
+        var storageKey = 'earthUI_settings_' + %s;
         var selectIds = ['target', 'subset_arg', 'weights_col', 'wp_col', 'na_action',
                          'degree', 'pmethod', 'glm_family', 'trace',
                          'varmod_method'];
@@ -354,7 +354,7 @@ function(input, output, session) {
       (function() {
         var cols = %s;
         var n = %d;
-        var storageKey = 'earthui_vars_' + %s;
+        var storageKey = 'earthUI_vars_' + %s;
 
         function gatherState() {
           var inc = [], fac = [], lin = [];
@@ -469,7 +469,7 @@ function(input, output, session) {
     js <- tags$script(HTML(sprintf("
       (function() {
         var n = %d;
-        var storageKey = 'earthui_interactions_' + %s;
+        var storageKey = 'earthUI_interactions_' + %s;
 
         function saveState() {
           var state = {};
@@ -670,7 +670,7 @@ function(input, output, session) {
             cat(sprintf("Cross-validation: %d folds\n", args$nfold))
           cat("Running forward pass...\n")
           flush(stdout())
-          result <- do.call(earthui::fit_earth, args)
+          result <- do.call(earthUI::fit_earth, args)
           cat(sprintf("Completed in %.1f seconds\n", result$elapsed))
           flush(stdout())
           result
@@ -992,7 +992,7 @@ function(input, output, session) {
   output$model_equation <- renderUI({
     req(rv$result)
     eq <- format_model_equation(rv$result)
-    if (inherits(eq, "earthui_equation_multi")) {
+    if (inherits(eq, "earthUI_equation_multi")) {
       # Show one equation per response with a heading
       eq_blocks <- lapply(seq_along(eq$targets), function(i) {
         sub_eq <- eq$equations[[i]]
@@ -1094,7 +1094,7 @@ function(input, output, session) {
       plot_g_function(rv$result, as.integer(input$contrib_g_index),
                       response_idx = ri),
       error = function(e) {
-        message("earthui: g-function 2D plot error: ", e$message)
+        message("earthUI: g-function 2D plot error: ", e$message)
         plot.new()
         text(0.5, 0.5, paste("Error:", e$message), cex = 1.2)
       }
@@ -1113,7 +1113,7 @@ function(input, output, session) {
         plot_g_function(rv$result, as.integer(input$contrib_g_index),
                         response_idx = ri),
         error = function(e) {
-          message("earthui: g-function 3D plot error: ", e$message)
+          message("earthUI: g-function 3D plot error: ", e$message)
           plotly::plot_ly() |>
             plotly::layout(title = paste("Error:", e$message))
         }
@@ -1132,7 +1132,7 @@ function(input, output, session) {
     tryCatch(
       plot_correlation_matrix(rv$result),
       error = function(e) {
-        message("earthui: correlation plot error: ", e$message)
+        message("earthUI: correlation plot error: ", e$message)
         plot.new()
         text(0.5, 0.5, paste("Error:", e$message), cex = 1.2)
       }
@@ -1237,7 +1237,7 @@ function(input, output, session) {
                         output_file = tmp_out)
           setProgress(1, detail = "Done")
         }, error = function(e) {
-          message("earthui export error: ", e$message)
+          message("earthUI export error: ", e$message)
           showNotification(paste("Export error:", e$message),
                            type = "error", duration = 15)
         })

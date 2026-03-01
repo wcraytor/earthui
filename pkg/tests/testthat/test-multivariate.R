@@ -3,7 +3,7 @@
 test_that("fit_earth fits a multi-response model", {
   result <- fit_earth(mtcars, target = c("mpg", "hp"),
                       predictors = c("cyl", "disp", "wt"))
-  expect_s3_class(result, "earthui_result")
+  expect_s3_class(result, "earthUI_result")
   expect_equal(result$target, c("mpg", "hp"))
   expect_equal(result$predictors, c("cyl", "disp", "wt"))
   expect_false(result$cv_enabled)
@@ -57,7 +57,7 @@ test_that("fit_earth multi-response handles categoricals", {
   result <- fit_earth(df, target = c("mpg", "hp"),
                       predictors = c("wt", "am_cat"),
                       categoricals = "am_cat")
-  expect_s3_class(result, "earthui_result")
+  expect_s3_class(result, "earthUI_result")
   expect_equal(result$categoricals, "am_cat")
 })
 
@@ -68,7 +68,7 @@ test_that("fit_earth multi-response handles missing values", {
     result <- fit_earth(df, c("mpg", "hp"), c("wt", "cyl")),
     "Removed 3 rows"
   )
-  expect_s3_class(result, "earthui_result")
+  expect_s3_class(result, "earthUI_result")
   expect_equal(nrow(result$data), 29L)
 })
 
@@ -157,11 +157,11 @@ test_that("format_anova single-response has target-named coefficient column", {
 
 # --- Multi-response format_model_equation() ---
 
-test_that("format_model_equation returns earthui_equation_multi for multi-response", {
+test_that("format_model_equation returns earthUI_equation_multi for multi-response", {
   result <- fit_earth(mtcars, c("mpg", "hp"), c("cyl", "disp", "wt"))
   eq <- format_model_equation(result)
 
-  expect_s3_class(eq, "earthui_equation_multi")
+  expect_s3_class(eq, "earthUI_equation_multi")
   expect_true(eq$multi)
   expect_equal(eq$targets, c("mpg", "hp"))
   expect_length(eq$equations, 2L)
@@ -174,7 +174,7 @@ test_that("format_model_equation multi-response per-equation has LaTeX fields", 
 
   for (tgt in c("mpg", "hp")) {
     sub_eq <- eq$equations[[tgt]]
-    expect_s3_class(sub_eq, "earthui_equation")
+    expect_s3_class(sub_eq, "earthUI_equation")
     expect_true(nzchar(sub_eq$latex))
     expect_true(nzchar(sub_eq$latex_inline))
     expect_true(nzchar(sub_eq$latex_pdf))
@@ -188,22 +188,22 @@ test_that("format_model_equation with specific response_idx returns single equat
   result <- fit_earth(mtcars, c("mpg", "hp"), c("cyl", "disp", "wt"))
 
   eq1 <- format_model_equation(result, response_idx = 1L)
-  expect_s3_class(eq1, "earthui_equation")
+  expect_s3_class(eq1, "earthUI_equation")
   expect_true(nzchar(eq1$latex))
 
   eq2 <- format_model_equation(result, response_idx = 2L)
-  expect_s3_class(eq2, "earthui_equation")
+  expect_s3_class(eq2, "earthUI_equation")
   expect_true(nzchar(eq2$latex))
 
   # Equations should differ (different coefficients)
   expect_false(identical(eq1$latex, eq2$latex))
 })
 
-test_that("format_model_equation single-response returns earthui_equation class", {
+test_that("format_model_equation single-response returns earthUI_equation class", {
   result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "wt"))
   eq <- format_model_equation(result)
 
-  expect_s3_class(eq, "earthui_equation")
+  expect_s3_class(eq, "earthUI_equation")
   expect_true(nzchar(eq$latex))
   expect_true(nzchar(eq$latex_inline))
   expect_true(grepl("\\\\begin\\{array\\}", eq$latex))
@@ -310,7 +310,7 @@ test_that("plot_g_function works with multi-response", {
 test_that("fit_earth passes weights to earth", {
   w <- runif(nrow(mtcars), 0.5, 1.5)
   result <- fit_earth(mtcars, "mpg", c("cyl", "wt"), weights = w)
-  expect_s3_class(result, "earthui_result")
+  expect_s3_class(result, "earthUI_result")
   # Model should have fitted successfully
   expect_true(!is.null(result$model))
 })
@@ -318,6 +318,6 @@ test_that("fit_earth passes weights to earth", {
 test_that("fit_earth passes weights with multi-response", {
   w <- runif(nrow(mtcars), 0.5, 1.5)
   result <- fit_earth(mtcars, c("mpg", "hp"), c("cyl", "wt"), weights = w)
-  expect_s3_class(result, "earthui_result")
+  expect_s3_class(result, "earthUI_result")
   expect_equal(ncol(result$model$coefficients), 2L)
 })

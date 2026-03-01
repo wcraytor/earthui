@@ -34,11 +34,11 @@ test_that("plot_actual_vs_predicted returns a ggplot", {
   expect_s3_class(p, "ggplot")
 })
 
-test_that("plot functions reject non-earthui_result objects", {
-  expect_error(plot_variable_importance(list()), "earthui_result")
-  expect_error(plot_residuals(list()), "earthui_result")
-  expect_error(plot_qq(list()), "earthui_result")
-  expect_error(plot_actual_vs_predicted(list()), "earthui_result")
+test_that("plot functions reject non-earthUI_result objects", {
+  expect_error(plot_variable_importance(list()), "earthUI_result")
+  expect_error(plot_residuals(list()), "earthUI_result")
+  expect_error(plot_qq(list()), "earthUI_result")
+  expect_error(plot_actual_vs_predicted(list()), "earthUI_result")
 })
 
 test_that("plot_partial_dependence works with categorical variable", {

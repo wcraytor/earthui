@@ -4,7 +4,7 @@ test_that("format_model_equation produces valid LaTeX structure", {
   result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
   eq <- format_model_equation(result)
 
-  expect_s3_class(eq, "earthui_equation")
+  expect_s3_class(eq, "earthUI_equation")
   expect_true(grepl("\\\\begin\\{array\\}\\{lrl\\}", eq$latex))
   expect_true(grepl("\\\\end\\{array\\}", eq$latex))
   expect_true(grepl("^\\$\\$", eq$latex_inline))
@@ -24,12 +24,12 @@ test_that("format_model_equation LaTeX PDF has escaped underscores in text block
   expect_true(grepl("car_weight", eq$latex))
 })
 
-test_that("format_model_equation Word output uses aligned environment", {
+test_that("format_model_equation Word output uses array environment", {
   result <- fit_earth(mtcars, "mpg", c("cyl", "wt"))
   eq <- format_model_equation(result)
 
-  expect_true(grepl("\\\\begin\\{aligned\\}", eq$latex_word))
-  expect_true(grepl("\\\\end\\{aligned\\}", eq$latex_word))
+  expect_true(grepl("\\\\begin\\{array\\}", eq$latex_word))
+  expect_true(grepl("\\\\end\\{array\\}", eq$latex_word))
 })
 
 test_that("format_model_equation groups have correct structure", {
@@ -66,7 +66,7 @@ test_that("format_model_equation handles interaction terms", {
   result <- fit_earth(mtcars, "mpg", c("wt", "hp"), degree = 2L)
   eq <- format_model_equation(result)
 
-  expect_s3_class(eq, "earthui_equation")
+  expect_s3_class(eq, "earthUI_equation")
   # Should have groups with degree > 1 if interactions were selected
   degrees <- vapply(eq$groups, `[[`, integer(1), "degree")
   # At minimum we have degree 0 (intercept) and degree 1
@@ -79,7 +79,7 @@ test_that("format_model_equation handles categorical variables", {
   result <- fit_earth(df, "mpg", c("wt", "am_cat"), categoricals = "am_cat")
   eq <- format_model_equation(result)
 
-  expect_s3_class(eq, "earthui_equation")
+  expect_s3_class(eq, "earthUI_equation")
   # Should contain indicator function notation for factor
   if (any(vapply(eq$groups, function(g) g$n_factors, integer(1)) > 0L)) {
     expect_true(grepl("I\\\\\\{", eq$latex))
@@ -187,7 +187,7 @@ test_that("resolve_columns_ maps dummy columns to base variables", {
     color = factor(c("red", "blue", "green", "red", "blue", "green"))
   )
   col_names <- c("colorblue", "colorgreen", "colorred")
-  info <- earthui:::resolve_columns_(col_names, "color", df)
+  info <- earthUI:::resolve_columns_(col_names, "color", df)
 
   expect_equal(info$base_var, c("color", "color", "color"))
   expect_true(all(info$is_factor))
@@ -203,7 +203,7 @@ test_that("resolve_columns_ handles dot-separated dummy names", {
   )
   # R's model.matrix replaces spaces with dots
   col_names <- c("sizesmall", "sizex.large")
-  info <- earthui:::resolve_columns_(col_names, "size", df)
+  info <- earthUI:::resolve_columns_(col_names, "size", df)
 
   expect_true(all(info$is_factor))
   expect_equal(info$base_var, c("size", "size"))
@@ -212,7 +212,7 @@ test_that("resolve_columns_ handles dot-separated dummy names", {
 test_that("resolve_columns_ returns non-factor for non-categorical columns", {
   df <- data.frame(y = 1:5, x1 = rnorm(5), x2 = rnorm(5))
   col_names <- c("x1", "x2")
-  info <- earthui:::resolve_columns_(col_names, character(0), df)
+  info <- earthUI:::resolve_columns_(col_names, character(0), df)
 
   expect_false(any(info$is_factor))
   expect_equal(info$base_var, c("x1", "x2"))
@@ -225,7 +225,7 @@ test_that("resolve_columns_ fallback startsWith matching works", {
   )
   # Simulate a dummy name that doesn't match exactly but starts with the var name
   col_names <- c("regionNorth.East", "regionSouth")
-  info <- earthui:::resolve_columns_(col_names, "region", df)
+  info <- earthUI:::resolve_columns_(col_names, "region", df)
 
   expect_true(all(info$is_factor))
   expect_equal(info$base_var, c("region", "region"))

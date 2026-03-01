@@ -1,4 +1,4 @@
-library(earthui)
+library(earthUI)
 
 # Load Roboto Condensed for R graphics (ggplot2 + base R)
 if (requireNamespace("sysfonts", quietly = TRUE) &&

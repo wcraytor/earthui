@@ -1,0 +1,189 @@
+---
+title: "The g-Function Notation for MARS Models"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{The g-Function Notation for MARS Models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+A MARS model (Multivariate Adaptive Regression Splines, implemented by the
+`earth` package) produces a sum of a base constant plus additional terms, each
+involving one to three variables. To analyze and visualize such a model, we
+first split it into individual terms, then combine terms that share the same
+set of variables into single interaction expressions called **g-functions**.
+
+The `earthUI` package uses a compact g-function notation to organize model
+terms into groups and to determine how each group should be graphed. This
+vignette describes that notation and the reasoning behind it.
+
+## Grouping Model Terms
+
+Assume the maximum degree of interaction is 3. A fitted MARS model can be
+partitioned into four groups of expressions:
+
+- **Group 0**: the base constant.
+- **Group 1**: first-degree expressions (single-variable terms).
+- **Group 2**: second-degree interaction expressions (two-variable terms).
+- **Group 3**: third-degree interaction expressions (three-variable terms).
+
+Each group is graphed differently based on two factors:
+
+1. The number of unique variables in the expression.
+2. Whether any of those variables are **factor variables** (categorical).
+
+Specifically:
+
+- First-degree expressions (1 variable) are graphed in **2D**.
+- Second-degree expressions (2 variables) are graphed in **3D**.
+- Third-degree expressions (3 variables) are graphed as a set of **3D**
+  graphs.
+- If an expression contains a factor variable, each unique factor **reduces
+  the graph's dimensionality by one** (e.g., a 3D graph becomes 2D if one
+  variable is a factor).
+
+## Indexing the g-Functions
+
+Each function $g$ is indexed as ${}^{f_{j,k}}g^{j}_{k}$, where:
+
+**The leading superscript** $f_{j,k}$ (before $g$):
+
+- $j$ ranges from 0 to 3 and identifies the **group**:
+    - $j = 0$: the base constant.
+    - $j = 1$: first-degree expressions.
+    - $j = 2$: second-degree expressions.
+    - $j = 3$: third-degree expressions.
+- $k$ is the index of a specific function **within** its group (e.g., $k = 1$
+  for the first function in group $j$).
+- The **value** of $f_{j,k}$ indicates the number of unique factor variables
+  in the function:
+    - $f_{j,k} = 0$: no factor variables.
+    - $f_{j,k} > 0$: the count of factor variables (e.g., 1, 2, or 3).
+
+**Trailing indices on** $g$:
+
+- The superscript $j$ after $g$ repeats the group number for clarity.
+- The subscript $k$ after $g$ matches the $k$ in $f_{j,k}$, identifying the
+  function within its group.
+
+While the indices of $f$ and $g$ align numerically, their roles differ:
+$f_{j,k}$ counts factor variables (critical for graphing decisions), while $j$
+and $k$ on $g$ define its group and position.
+
+## Graphing Dimensions
+
+The dimension $d$ of the graph for a function ${}^{f_{j,k}}g^{j}_{k}$ is:
+
+$$d = j - f_{j,k}$$
+
+where:
+
+- $j$ is the number of unique variables (the group number).
+- $f_{j,k}$ is the number of factor variables.
+- $d$ is the resulting graph dimension.
+
+**Examples:**
+
+- $j = 3$ (3 variables), $f_{j,k} = 0$ (no factors): $d = 3$, requiring a
+  **3D** graph.
+- $j = 3$, $f_{j,k} = 1$ (one factor): $d = 2$, requiring a **2D** graph.
+- $j = 2$, $f_{j,k} = 0$: $d = 2$, requiring a **2D** contour or surface.
+- $j = 0$ (the constant): graphing is not needed.
+
+When $d = 3$ (e.g., a third-degree expression with no factor variables),
+visualizing the full function may require multiple 3D graphs, each fixing one
+variable at different values to show a subset of the function's behavior.
+
+## The Model Equation
+
+The MARS model is broken into four groups of expressions. The indexing
+${}^{f_{j,k}}g^{j}_{k}$ tells us:
+
+- $j$: the group and number of variables.
+- $f_{j,k}$: the number of factor variables.
+- $d = j - f_{j,k}$: the graph dimension.
+
+The estimated response $\hat{P}$ provided by the MARS model can be expressed
+as:
+
+$$
+\hat{P} =
+  {}^{f_{0,1}}g^{0}_{1}
+  + \sum_{q=1}^{n_1} {}^{f_{1,q}}g^{1}_{q}(x^{*})
+  + \sum_{r=1}^{n_2} {}^{f_{2,r}}g^{2}_{r}(x^{*}, y^{*})
+  + \sum_{s=1}^{n_3} {}^{f_{3,s}}g^{3}_{s}(x^{*}, y^{*}, z^{*})
+$$
+
+where $n_1$, $n_2$, and $n_3$ are the number of first-, second-, and
+third-degree g-functions, respectively.
+
+## Number of Charts
+
+The number of graphs required to visualize all g-functions in a model depends
+on the variables, their interactions, and whether they are factor or non-factor
+variables:
+
+1. **Single-variable, non-factor** (${}^{0}g^{1}_{k}$): 1 line graph.
+2. **Single-variable, factor** (${}^{1}g^{1}_{k}$): 1 bar graph combining all
+   factor values.
+3. **Base constant** (${}^{0}g^{0}_{1}$): no graph needed.
+4. **2nd-degree, no factors** (${}^{0}g^{2}_{k}$): 1 surface or contour plot.
+5. **2nd-degree, 1 factor** (${}^{1}g^{2}_{k}$): 1 graph per factor value
+   present in the model.
+6. **2nd-degree, 2 factors** (${}^{2}g^{2}_{k}$): 1 graph with a matrix of
+   factor combinations.
+7. **3rd-degree, no factors** (${}^{0}g^{3}_{k}$): multiple 3D graphs, each
+   fixing one variable at different values.
+8. **3rd-degree, 1 factor** (${}^{1}g^{3}_{k}$): 1 graph per factor value.
+9. **3rd-degree, 2 factors** (${}^{2}g^{3}_{k}$): 1 graph per combination of
+   factor values.
+10. **3rd-degree, 3 factors** (${}^{3}g^{3}_{k}$): 1 graph per value of the
+    factor with the fewest distinct values, using a color matrix for the other
+    two.
+
+For factor variables with many levels (e.g., an area identifier with 12
+values interacting with living area), graphing can become complex. However,
+`earth` rarely finds all combinations significant; typically only a few key
+interactions warrant graphing, as identified by the model.
+
+## Example
+
+```{r}
+library(earthUI)
+
+result <- fit_earth(
+  df = mtcars,
+  target = "mpg",
+  predictors = c("cyl", "disp", "hp", "wt", "qsec"),
+  degree = 2
+)
+
+# List the g-functions and their indices
+gf <- list_g_functions(result)
+gf
+```
+
+The g-function table shows each group with its label, group index $j$
+(`g_j`), position index $k$ (`g_k`), factor count $f$ (`g_f`), graph
+dimension $d$, and number of terms. The `earthUI` package uses this structure
+to automatically select the appropriate plot type for each g-function.
+
+```{r fig.width=7, fig.height=4}
+# Plot a first-degree g-function (2D line)
+plot_g_function(result, 1)
+```
+
+## Reference
+
+Craytor, W.B. (2025). *Real Estate Appraisal: A Regression-Centric
+Approach*. Zenodo. DOI:
+[10.5281/zenodo.14787917](https://doi.org/10.5281/zenodo.14787917)

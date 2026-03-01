@@ -57,16 +57,16 @@ fluidPage(
       if (html.getAttribute('data-bs-theme') === 'dark') {
         html.removeAttribute('data-bs-theme');
         btn.innerHTML = '\\u263E';
-        try { localStorage.setItem('earthui_theme', 'light'); } catch(e) {}
+        try { localStorage.setItem('earthUI_theme', 'light'); } catch(e) {}
       } else {
         html.setAttribute('data-bs-theme', 'dark');
         btn.innerHTML = '\\u2600';
-        try { localStorage.setItem('earthui_theme', 'dark'); } catch(e) {}
+        try { localStorage.setItem('earthUI_theme', 'dark'); } catch(e) {}
       }
     }
     (function() {
       var saved = null;
-      try { saved = localStorage.getItem('earthui_theme'); } catch(e) {}
+      try { saved = localStorage.getItem('earthUI_theme'); } catch(e) {}
       if (saved === 'dark') {
         document.documentElement.setAttribute('data-bs-theme', 'dark');
         var btn = document.getElementById('eui-theme-toggle');
@@ -139,13 +139,13 @@ fluidPage(
     Shiny.addCustomMessageHandler('restore_all_settings', function(msg) {
       var fn = msg.filename;
       if (msg.settings && Object.keys(msg.settings).length > 0) {
-        try { localStorage.setItem('earthui_settings_' + fn, JSON.stringify(msg.settings)); } catch(e) {}
+        try { localStorage.setItem('earthUI_settings_' + fn, JSON.stringify(msg.settings)); } catch(e) {}
       }
       if (msg.variables && Object.keys(msg.variables).length > 0) {
-        try { localStorage.setItem('earthui_vars_' + fn, JSON.stringify(msg.variables)); } catch(e) {}
+        try { localStorage.setItem('earthUI_vars_' + fn, JSON.stringify(msg.variables)); } catch(e) {}
       }
       if (msg.interactions && Object.keys(msg.interactions).length > 0) {
-        try { localStorage.setItem('earthui_interactions_' + fn, JSON.stringify(msg.interactions)); } catch(e) {}
+        try { localStorage.setItem('earthUI_interactions_' + fn, JSON.stringify(msg.interactions)); } catch(e) {}
       }
 
       // If apply flag set, push settings directly into Shiny inputs
@@ -181,7 +181,7 @@ fluidPage(
             // Get column names from the table
             var $rows = $('#variable_table .eui-var-cb');
             // Simpler: trigger restore by re-reading localStorage
-            var storageKey = 'earthui_vars_' + fn;
+            var storageKey = 'earthUI_vars_' + fn;
             var saved = null;
             try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
             if (saved) {
@@ -201,7 +201,7 @@ fluidPage(
           }
           // Apply interaction matrix
           if (msg.interactions) {
-            var storageKey2 = 'earthui_interactions_' + fn;
+            var storageKey2 = 'earthUI_interactions_' + fn;
             var saved2 = null;
             try { saved2 = JSON.parse(localStorage.getItem(storageKey2)); } catch(e) {}
             if (saved2) {
@@ -222,9 +222,9 @@ fluidPage(
       clearTimeout(window.euiSaveTimer);
       window.euiSaveTimer = setTimeout(function() {
         var payload = { filename: fn, settings: null, variables: null, interactions: null };
-        try { payload.settings     = localStorage.getItem('earthui_settings_' + fn); } catch(e) {}
-        try { payload.variables    = localStorage.getItem('earthui_vars_' + fn); } catch(e) {}
-        try { payload.interactions = localStorage.getItem('earthui_interactions_' + fn); } catch(e) {}
+        try { payload.settings     = localStorage.getItem('earthUI_settings_' + fn); } catch(e) {}
+        try { payload.variables    = localStorage.getItem('earthUI_vars_' + fn); } catch(e) {}
+        try { payload.interactions = localStorage.getItem('earthUI_interactions_' + fn); } catch(e) {}
         Shiny.setInputValue('eui_save_trigger', payload, {priority: 'deferred'});
       }, 2000);
     };
@@ -276,9 +276,9 @@ fluidPage(
     Shiny.addCustomMessageHandler('collect_and_save_defaults', function(msg) {
       var fn = msg.filename;
       var payload = { filename: '__defaults__', settings: null, variables: null, interactions: null };
-      try { payload.settings     = localStorage.getItem('earthui_settings_' + fn); } catch(e) {}
-      try { payload.variables    = localStorage.getItem('earthui_vars_' + fn); } catch(e) {}
-      try { payload.interactions = localStorage.getItem('earthui_interactions_' + fn); } catch(e) {}
+      try { payload.settings     = localStorage.getItem('earthUI_settings_' + fn); } catch(e) {}
+      try { payload.variables    = localStorage.getItem('earthUI_vars_' + fn); } catch(e) {}
+      try { payload.interactions = localStorage.getItem('earthUI_interactions_' + fn); } catch(e) {}
       Shiny.setInputValue('eui_save_trigger', payload, {priority: 'deferred'});
     });
 
@@ -288,7 +288,7 @@ fluidPage(
     tags$h2(
       tags$img(src = "logo.png", height = "32px",
                style = "margin-right: 8px; vertical-align: middle;"),
-      "earthui",
+      "earthUI",
       tags$small(" - Interactive Earth Model Builder",
                  style = "font-size: 0.6em; color: #7f8c8d;")
     )
@@ -623,7 +623,7 @@ fluidPage(
         div(
           class = "text-muted",
           style = "text-align: center; padding: 80px 20px;",
-          h3("Welcome to earthui"),
+          h3("Welcome to earthUI"),
           p("Upload a CSV or Excel file to get started."),
           p("Build and explore Earth (MARS-style) models interactively.")
         )
@@ -711,7 +711,7 @@ fluidPage(
     tags$p(
       style = "margin: 2px 0;",
       HTML(paste0(
-        "earthui v", utils::packageVersion("earthui"),
+        "earthUI v", utils::packageVersion("earthUI"),
         " &mdash; Copyright &copy; 2026 Pacific Vista Net / William Craytor"
       ))
     ),
@@ -733,9 +733,9 @@ fluidPage(
       style = "margin: 2px 0;",
       "Source code: ",
       tags$a(
-        href = "https://github.com/wcraytor/earthui",
+        href = "https://github.com/wcraytor/earthUI",
         target = "_blank",
-        "github.com/wcraytor/earthui"
+        "github.com/wcraytor/earthUI"
       )
     )
   )

@@ -1,4 +1,4 @@
-#' Launch the earthui Shiny application
+#' Launch the earthUI Shiny application
 #'
 #' Opens an interactive Shiny GUI for building and exploring earth
 #' (MARS-style) models. The application provides data import, variable
@@ -27,16 +27,16 @@ launch <- function(port = 7878L, ...) {
   # Optional: SQLite settings persistence
   for (pkg in c("DBI", "RSQLite")) {
     if (!requireNamespace(pkg, quietly = TRUE)) {
-      message("earthui: '", pkg, "' not installed. ",
+      message("earthUI: '", pkg, "' not installed. ",
               "Settings will be stored in browser localStorage only. ",
               "Install with: install.packages('", pkg, "')")
     }
   }
 
-  app_dir <- system.file("app", package = "earthui")
+  app_dir <- system.file("app", package = "earthUI")
   if (app_dir == "") {
     stop("Could not find the Shiny app directory. ",
-         "Try reinstalling the 'earthui' package.", call. = FALSE)
+         "Try reinstalling the 'earthUI' package.", call. = FALSE)
   }
   shiny::runApp(app_dir, port = port, ...)
 }

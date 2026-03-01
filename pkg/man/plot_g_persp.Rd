@@ -13,7 +13,7 @@ plot_g_persp(
 )
 }
 \arguments{
-\item{earth_result}{An object of class \code{"earthui_result"} as returned by
+\item{earth_result}{An object of class \code{"earthUI_result"} as returned by
 \code{\link[=fit_earth]{fit_earth()}}.}
 
 \item{group_index}{Integer. Index of the g-function group (1-based, from

@@ -1,8 +1,8 @@
 ---
-title: "Getting Started with earthui"
+title: "Getting Started with earthUI"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Getting Started with earthui}
+  %\VignetteIndexEntry{Getting Started with earthUI}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,13 +16,13 @@ knitr::opts_chunk$set(
 
 ## Introduction
 
-`earthui` provides both an interactive Shiny GUI and a set of composable R
+`earthUI` provides both an interactive Shiny GUI and a set of composable R
 functions for building Earth (MARS-style) models using the `earth` package.
 
 This vignette demonstrates the programmatic API. To launch the interactive
 app, simply run:
 ```{r eval=FALSE}
-library(earthui)
+library(earthUI)
 launch()
 ```
 
@@ -31,7 +31,7 @@ launch()
 ### 1. Import Data
 
 ```{r}
-library(earthui)
+library(earthUI)
 
 # For this example, we use the built-in mtcars dataset
 df <- mtcars

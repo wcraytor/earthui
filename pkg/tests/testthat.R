@@ -1,4 +1,4 @@
 library(testthat)
-library(earthui)
+library(earthUI)
 
-test_check("earthui")
+test_check("earthUI")

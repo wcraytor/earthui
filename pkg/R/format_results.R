@@ -3,7 +3,7 @@
 #' Extracts key statistics from a fitted earth model including coefficients,
 #' basis functions, R-squared, GCV, GRSq, and RSS.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #'
 #' @return A list containing:
@@ -25,7 +25,7 @@
 #' summary_info <- format_summary(result)
 #' summary_info$r_squared
 format_summary <- function(earth_result) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   model <- earth_result$model
   targets <- earth_result$target
   multi <- length(targets) > 1L
@@ -96,7 +96,7 @@ format_summary <- function(earth_result) {
 #'
 #' Extracts the ANOVA table from a fitted earth model.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #'
 #' @return A data frame with the ANOVA decomposition showing which predictors
@@ -107,7 +107,7 @@ format_summary <- function(earth_result) {
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' format_anova(result)
 format_anova <- function(earth_result) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   model <- earth_result$model
   targets <- earth_result$target
 
@@ -160,7 +160,7 @@ format_anova <- function(earth_result) {
 #' Extracts variable importance scores from a fitted earth model using
 #' [earth::evimp()].
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #'
 #' @return A data frame with columns `variable`, `nsubsets`, `gcv`, and `rss`,
@@ -171,7 +171,7 @@ format_anova <- function(earth_result) {
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' format_variable_importance(result)
 format_variable_importance <- function(earth_result) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   model <- earth_result$model
 
   imp <- earth::evimp(model)
@@ -216,13 +216,13 @@ format_variable_importance <- function(earth_result) {
 #' degree (constant, first-degree, second-degree, third-degree) and labeled
 #' with indices that encode the group, position, and factor variable count.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #' @param digits Integer. Number of significant digits for coefficients and
 #'   cut points. Default is 7.
 #' @param response_idx Integer or `NULL`. For multivariate models, which
 #'   response column to generate the equation for (1-based). Default `NULL`
-#'   returns all response equations in an `earthui_equation_multi` object.
+#'   returns all response equations in an `earthUI_equation_multi` object.
 #'
 #' @return A list containing:
 #'   \describe{
@@ -239,7 +239,7 @@ format_variable_importance <- function(earth_result) {
 #' cat(eq$latex)
 format_model_equation <- function(earth_result, digits = 7L,
                                   response_idx = NULL) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   model <- earth_result$model
   targets <- earth_result$target
   multi <- length(targets) > 1L
@@ -255,7 +255,7 @@ format_model_equation <- function(earth_result, digits = 7L,
       multi        = TRUE,
       targets      = targets
     )
-    class(result) <- "earthui_equation_multi"
+    class(result) <- "earthUI_equation_multi"
     return(result)
   }
 
@@ -426,22 +426,23 @@ format_model_equation <- function(earth_result, digits = 7L,
   )
   latex_pdf <- latex_escape_for_pdf_(latex_pdf)
 
-  # --- Word (Pandoc OMML) — \begin{aligned} is the only multiline env supported
+  # --- Word (Pandoc OMML) — \begin{array}{lrl} for 3-column layout
   word_lines <- character(0)
   for (ld in line_data) {
     if (ld$is_first) {
       word_lines <- c(word_lines,
-        sprintf("  %s \\; %s &= %s", ld$label, ld$g_tex, ld$term_str))
+        sprintf("  %s & %s \\;=\\; & %s", ld$label, ld$g_tex, ld$term_str))
     } else {
       word_lines <- c(word_lines,
-        sprintf("  &\\quad %s", ld$term_str))
+        sprintf("  & & \\quad %s", ld$term_str))
     }
   }
   latex_word <- paste0(
-    "\\begin{aligned}\n",
+    "\\begin{array}{lrl}\n",
     paste(word_lines, collapse = " \\\\\n"),
-    "\n\\end{aligned}"
+    "\n\\end{array}"
   )
+  latex_word <- latex_escape_for_pdf_(latex_word)
 
   result <- list(
     latex        = latex,
@@ -450,7 +451,7 @@ format_model_equation <- function(earth_result, digits = 7L,
     latex_word   = latex_word,
     groups       = groups
   )
-  class(result) <- "earthui_equation"
+  class(result) <- "earthUI_equation"
   result
 }
 
@@ -659,13 +660,13 @@ format_term_html_ <- function(term_info, is_first, digits) {
   html_escape_(txt)
 }
 
-#' Validate earthui_result object
+#' Validate earthUI_result object
 #' @param x Object to validate.
 #' @return Invisible NULL. Raises error if invalid.
 #' @keywords internal
-validate_earthui_result <- function(x) {
-  if (!inherits(x, "earthui_result")) {
-    stop("Expected an 'earthui_result' object from fit_earth().", call. = FALSE)
+validate_earthUI_result <- function(x) {
+  if (!inherits(x, "earthUI_result")) {
+    stop("Expected an 'earthUI_result' object from fit_earth().", call. = FALSE)
   }
   if (is.null(x$model)) {
     stop("Result object does not contain a model.", call. = FALSE)

@@ -153,7 +153,7 @@ exhaustive pruning. Default 1e-10.}
 output. Set to \code{FALSE} when running in a background process.}
 }
 \value{
-A list with class \code{"earthui_result"} containing:
+A list with class \code{"earthUI_result"} containing:
 \describe{
 \item{model}{The fitted earth model object.}
 \item{target}{Name of the response variable.}

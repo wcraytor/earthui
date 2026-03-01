@@ -1,4 +1,4 @@
-# earthui 0.1.0
+# earthUI 0.1.0
 
 ## Core
 

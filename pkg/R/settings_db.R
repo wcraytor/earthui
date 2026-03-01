@@ -1,12 +1,12 @@
 # Internal SQLite-backed settings persistence
 #
 # Stores per-file model settings, variable selections, and interaction matrices
-# in a SQLite database at tools::R_user_dir("earthui", "data")/settings.sqlite.
+# in a SQLite database at tools::R_user_dir("earthUI", "data")/settings.sqlite.
 # Falls back gracefully to localStorage-only if DBI/RSQLite are not installed.
 
 # --- Path to the settings database file ---
 settings_db_path_ <- function() {
-  dir <- tools::R_user_dir("earthui", "data")
+  dir <- tools::R_user_dir("earthUI", "data")
   if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
   file.path(dir, "settings.sqlite")
 }
@@ -15,7 +15,7 @@ settings_db_path_ <- function() {
 settings_db_connect_ <- function() {
   if (!requireNamespace("DBI", quietly = TRUE) ||
       !requireNamespace("RSQLite", quietly = TRUE)) {
-    message("earthui: DBI/RSQLite not available, settings persistence disabled")
+    message("earthUI: DBI/RSQLite not available, settings persistence disabled")
     return(NULL)
   }
 

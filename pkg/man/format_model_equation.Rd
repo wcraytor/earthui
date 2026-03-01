@@ -7,7 +7,7 @@
 format_model_equation(earth_result, digits = 7L, response_idx = NULL)
 }
 \arguments{
-\item{earth_result}{An object of class \code{"earthui_result"} as returned by
+\item{earth_result}{An object of class \code{"earthUI_result"} as returned by
 \code{\link[=fit_earth]{fit_earth()}}.}
 
 \item{digits}{Integer. Number of significant digits for coefficients and
@@ -15,7 +15,7 @@ cut points. Default is 7.}
 
 \item{response_idx}{Integer or \code{NULL}. For multivariate models, which
 response column to generate the equation for (1-based). Default \code{NULL}
-returns all response equations in an \code{earthui_equation_multi} object.}
+returns all response equations in an \code{earthUI_equation_multi} object.}
 }
 \value{
 A list containing:

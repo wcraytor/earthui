@@ -1,4 +1,4 @@
-Package: earthui
+Package: earthUI
 Title: Interactive GUI for Enhanced Adaptive Regression Through Hinges
 Version: 0.1.0
 Authors@R:
@@ -11,8 +11,8 @@ Description: Provides a Shiny-based graphical user interface for the 'earth'
     diagnostics with variable importance and partial dependence plots, and
     publication-quality report generation via 'Quarto'.
 License: AGPL (>= 3)
-URL: https://github.com/wcraytor/earthui
-BugReports: https://github.com/wcraytor/earthui/issues
+URL: https://github.com/wcraytor/earthUI
+BugReports: https://github.com/wcraytor/earthUI/issues
 Depends:
     R (>= 4.1.0)
 Imports:

@@ -1,7 +1,7 @@
 test_that("fit_earth fits a basic model", {
   result <- fit_earth(mtcars, target = "mpg",
                       predictors = c("cyl", "disp", "hp", "wt"))
-  expect_s3_class(result, "earthui_result")
+  expect_s3_class(result, "earthUI_result")
   expect_true(!is.null(result$model))
   expect_equal(result$target, "mpg")
   expect_equal(result$predictors, c("cyl", "disp", "hp", "wt"))
@@ -23,7 +23,7 @@ test_that("fit_earth handles categorical variables", {
   result <- fit_earth(df, target = "mpg",
                       predictors = c("wt", "hp", "am_cat"),
                       categoricals = "am_cat")
-  expect_s3_class(result, "earthui_result")
+  expect_s3_class(result, "earthUI_result")
   expect_equal(result$categoricals, "am_cat")
 })
 
@@ -47,5 +47,5 @@ test_that("fit_earth handles missing values", {
     result <- fit_earth(df, "mpg", c("wt", "hp")),
     "Removed 3 rows"
   )
-  expect_s3_class(result, "earthui_result")
+  expect_s3_class(result, "earthUI_result")
 })

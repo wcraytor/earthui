@@ -2,7 +2,7 @@
 % Please edit documentation in R/launch.R
 \name{launch}
 \alias{launch}
-\title{Launch the earthui Shiny application}
+\title{Launch the earthUI Shiny application}
 \usage{
 launch(port = 7878L, ...)
 }

@@ -1,8 +1,8 @@
-# earthui
+# earthUI
 
 Interactive GUI for Enhanced Adaptive Regression Through Hinges (EARTH) models.
 
-`earthui` provides a Shiny-based graphical interface for the
+`earthUI` provides a Shiny-based graphical interface for the
 [earth](https://CRAN.R-project.org/package=earth) package, making it easy to
 build, explore, and export multivariate adaptive regression spline models
 without writing code.
@@ -13,8 +13,8 @@ without writing code.
 # Install remotes if needed
 install.packages("remotes")
 
-# Install earthui from GitHub
-remotes::install_github("wcraytor/earthui")
+# Install earthUI from GitHub
+remotes::install_github("wcraytor/earthUI")
 ```
 
 ### Optional: Report Export
@@ -36,7 +36,7 @@ tinytex::install_tinytex()
 ## Quick Start
 
 ```r
-library(earthui)
+library(earthUI)
 launch()
 ```
 
@@ -54,7 +54,7 @@ This opens an interactive Shiny application where you can:
 All analytical functions are available independently of the Shiny app:
 
 ```r
-library(earthui)
+library(earthUI)
 
 # Import and detect categoricals
 df <- import_data("my_data.csv")

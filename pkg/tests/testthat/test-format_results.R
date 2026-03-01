@@ -45,8 +45,8 @@ test_that("format_variable_importance returns data frame", {
   expect_true(nrow(imp) > 0L)
 })
 
-test_that("format functions reject non-earthui_result", {
-  expect_error(format_summary(list()), "earthui_result")
-  expect_error(format_anova(list()), "earthui_result")
-  expect_error(format_variable_importance(list()), "earthui_result")
+test_that("format functions reject non-earthUI_result", {
+  expect_error(format_summary(list()), "earthUI_result")
+  expect_error(format_anova(list()), "earthUI_result")
+  expect_error(format_variable_importance(list()), "earthUI_result")
 })

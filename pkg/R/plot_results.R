@@ -59,7 +59,7 @@ eui_font_family_ <- function() {
 #' Creates a horizontal bar chart of variable importance from a fitted
 #' earth model.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #' @param type Character. Importance metric to plot: `"nsubsets"` (default),
 #'   `"gcv"`, or `"rss"`.
@@ -73,7 +73,7 @@ eui_font_family_ <- function() {
 #' plot_variable_importance(result)
 #' }
 plot_variable_importance <- function(earth_result, type = "nsubsets") {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   type <- match.arg(type, c("nsubsets", "gcv", "rss"))
 
   imp_df <- format_variable_importance(earth_result)
@@ -114,7 +114,7 @@ plot_variable_importance <- function(earth_result, type = "nsubsets") {
 #' Creates a partial dependence plot for a selected variable from a fitted
 #' earth model.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #' @param variable Character string. Name of the predictor variable to plot.
 #' @param n_grid Integer. Number of grid points for the partial dependence
@@ -132,7 +132,7 @@ plot_variable_importance <- function(earth_result, type = "nsubsets") {
 #' }
 plot_partial_dependence <- function(earth_result, variable, n_grid = 50L,
                                     response_idx = NULL) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
 
   if (!is.character(variable) || length(variable) != 1L) {
     stop("`variable` must be a single character string.", call. = FALSE)
@@ -193,7 +193,7 @@ plot_partial_dependence <- function(earth_result, variable, n_grid = 50L,
 #' prediction. For each observation, the contribution is the sum of
 #' coefficient * basis function value across all terms involving that variable.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #' @param variable Character string. Name of the predictor variable to plot.
 #' @param response_idx Integer or `NULL`. For multivariate models, which
@@ -208,7 +208,7 @@ plot_partial_dependence <- function(earth_result, variable, n_grid = 50L,
 #' plot_contribution(result, "wt")
 #' }
 plot_contribution <- function(earth_result, variable, response_idx = NULL) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
 
   if (!is.character(variable) || length(variable) != 1L) {
     stop("`variable` must be a single character string.", call. = FALSE)
@@ -376,7 +376,7 @@ plot_contribution <- function(earth_result, variable, response_idx = NULL) {
 #' numeric predictors, with cells colored by degree of correlation and values
 #' printed in each cell.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #'
 #' @return A [ggplot2::ggplot] object.
@@ -388,7 +388,7 @@ plot_contribution <- function(earth_result, variable, response_idx = NULL) {
 #' plot_correlation_matrix(result)
 #' }
 plot_correlation_matrix <- function(earth_result) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
 
   # target may be a vector for multivariate models
   vars <- c(earth_result$target, earth_result$predictors)
@@ -465,7 +465,7 @@ plot_correlation_matrix <- function(earth_result) {
 #' Creates a two-panel diagnostic plot: residuals vs fitted values and
 #' a Q-Q plot of residuals.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #' @param response_idx Integer or `NULL`. For multivariate models, which
 #'   response column to plot (1-based). Default `NULL` uses the first response.
@@ -480,7 +480,7 @@ plot_correlation_matrix <- function(earth_result) {
 #' plot_residuals(result)
 #' }
 plot_residuals <- function(earth_result, response_idx = NULL) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   model <- earth_result$model
   targets <- earth_result$target
   multi <- length(targets) > 1L
@@ -517,7 +517,7 @@ plot_residuals <- function(earth_result, response_idx = NULL) {
 #'
 #' Creates a normal Q-Q plot of the model residuals.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #' @param response_idx Integer or `NULL`. For multivariate models, which
 #'   response column to plot (1-based). Default `NULL` uses the first response.
@@ -531,7 +531,7 @@ plot_residuals <- function(earth_result, response_idx = NULL) {
 #' plot_qq(result)
 #' }
 plot_qq <- function(earth_result, response_idx = NULL) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   model <- earth_result$model
   targets <- earth_result$target
   multi <- length(targets) > 1L
@@ -571,7 +571,7 @@ plot_qq <- function(earth_result, response_idx = NULL) {
 #' Creates a scatter plot of actual vs predicted values with a 1:1 reference
 #' line.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #' @param response_idx Integer or `NULL`. For multivariate models, which
 #'   response column to plot (1-based). Default `NULL` uses the first response.
@@ -585,7 +585,7 @@ plot_qq <- function(earth_result, response_idx = NULL) {
 #' plot_actual_vs_predicted(result)
 #' }
 plot_actual_vs_predicted <- function(earth_result, response_idx = NULL) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   model <- earth_result$model
   targets <- earth_result$target
   multi <- length(targets) > 1L
@@ -627,7 +627,7 @@ plot_actual_vs_predicted <- function(earth_result, response_idx = NULL) {
 #' (top-left), j = degree of interaction (top-right), k = position within the
 #' degree group (bottom-right).
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #'
 #' @return A data frame with columns:
@@ -648,10 +648,10 @@ plot_actual_vs_predicted <- function(earth_result, response_idx = NULL) {
 #' list_g_functions(result)
 #' }
 list_g_functions <- function(earth_result) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   eq <- format_model_equation(earth_result, response_idx = 1L)
   # For multivariate, groups are shared; use first response's equation
-  groups <- if (inherits(eq, "earthui_equation_multi")) {
+  groups <- if (inherits(eq, "earthUI_equation_multi")) {
     eq$equations[[1]]$groups
   } else {
     eq$groups
@@ -686,7 +686,7 @@ list_g_functions <- function(earth_result) {
 #' slope labels and knot markers. For degree-2 groups (two variables), produces
 #' a 3D surface plot using plotly if available, or a filled contour plot.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #' @param group_index Integer. Index of the g-function group (1-based, from
 #'   [list_g_functions()]).
@@ -704,9 +704,9 @@ list_g_functions <- function(earth_result) {
 #' plot_g_function(result, 1)
 #' }
 plot_g_function <- function(earth_result, group_index, response_idx = NULL) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   eq <- format_model_equation(earth_result, response_idx = if (is.null(response_idx)) 1L else response_idx)
-  groups <- if (inherits(eq, "earthui_equation_multi")) {
+  groups <- if (inherits(eq, "earthUI_equation_multi")) {
     eq$equations[[1]]$groups
   } else {
     eq$groups
@@ -750,9 +750,9 @@ plot_g_function <- function(earth_result, group_index, response_idx = NULL) {
 #' }
 plot_g_persp <- function(earth_result, group_index, theta = 30, phi = 25,
                          response_idx = NULL) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   eq <- format_model_equation(earth_result, response_idx = if (is.null(response_idx)) 1L else response_idx)
-  groups <- if (inherits(eq, "earthui_equation_multi")) {
+  groups <- if (inherits(eq, "earthUI_equation_multi")) {
     eq$equations[[1]]$groups
   } else {
     eq$groups
@@ -793,9 +793,9 @@ plot_g_persp <- function(earth_result, group_index, theta = 30, phi = 25,
 #' plot_g_contour(result, 1)
 #' }
 plot_g_contour <- function(earth_result, group_index, response_idx = NULL) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
   eq <- format_model_equation(earth_result, response_idx = if (is.null(response_idx)) 1L else response_idx)
-  groups <- if (inherits(eq, "earthui_equation_multi")) {
+  groups <- if (inherits(eq, "earthUI_equation_multi")) {
     eq$equations[[1]]$groups
   } else {
     eq$groups

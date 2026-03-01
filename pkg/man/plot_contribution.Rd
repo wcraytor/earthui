@@ -7,7 +7,7 @@
 plot_contribution(earth_result, variable, response_idx = NULL)
 }
 \arguments{
-\item{earth_result}{An object of class \code{"earthui_result"} as returned by
+\item{earth_result}{An object of class \code{"earthUI_result"} as returned by
 \code{\link[=fit_earth]{fit_earth()}}.}
 
 \item{variable}{Character string. Name of the predictor variable to plot.}

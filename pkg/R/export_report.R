@@ -3,7 +3,7 @@
 #' Renders a parameterized Quarto report from the fitted earth model results.
 #' Requires the `quarto` R package and a Quarto installation.
 #'
-#' @param earth_result An object of class `"earthui_result"` as returned by
+#' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
 #' @param output_format Character. Output format: `"html"`, `"pdf"`, or
 #'   `"docx"`. Default is `"html"`.
@@ -20,7 +20,7 @@
 #' }
 render_report <- function(earth_result, output_format = "html",
                           output_file = NULL) {
-  validate_earthui_result(earth_result)
+  validate_earthUI_result(earth_result)
 
   if (!requireNamespace("quarto", quietly = TRUE)) {
     stop("The 'quarto' package is required for report rendering. ",
@@ -29,9 +29,9 @@ render_report <- function(earth_result, output_format = "html",
 
   output_format <- match.arg(output_format, c("html", "pdf", "docx"))
 
-  template <- system.file("quarto", "earth_report.qmd", package = "earthui")
+  template <- system.file("quarto", "earth_report.qmd", package = "earthUI")
   if (template == "") {
-    stop("Quarto template not found. Try reinstalling 'earthui'.",
+    stop("Quarto template not found. Try reinstalling 'earthUI'.",
          call. = FALSE)
   }
 
@@ -42,14 +42,16 @@ render_report <- function(earth_result, output_format = "html",
   # Create a temporary directory for rendering.
   # Use normalizePath to resolve symlinks (e.g. /var -> /private/var on macOS)
   # which prevents Quarto cleanup errors with path mismatch.
-  tmp_dir <- tempfile("earthui_report_")
+  tmp_dir <- tempfile("earthUI_report_")
   dir.create(tmp_dir, recursive = TRUE)
   tmp_dir <- normalizePath(tmp_dir)
   on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
 
-  # Copy template
+  # Copy template and supporting files
   tmp_qmd <- file.path(tmp_dir, "earth_report.qmd")
   file.copy(template, tmp_qmd)
+  ref_docx <- system.file("quarto", "reference.docx", package = "earthUI")
+  if (ref_docx != "") file.copy(ref_docx, tmp_dir)
 
   # Save result object for the template to load
   result_file <- file.path(tmp_dir, "earth_result.rds")
