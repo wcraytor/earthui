@@ -19,6 +19,8 @@ numeric predictors, with cells colored by degree of correlation and values
 printed in each cell.
 }
 \examples{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 plot_correlation_matrix(result)
+}
 }

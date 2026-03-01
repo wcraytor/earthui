@@ -4,7 +4,7 @@
 \alias{plot_g_function}
 \title{Plot g-function contribution}
 \usage{
-plot_g_function(earth_result, group_index)
+plot_g_function(earth_result, group_index, response_idx = NULL)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
@@ -12,6 +12,9 @@ plot_g_function(earth_result, group_index)
 
 \item{group_index}{Integer. Index of the g-function group (1-based, from
 \code{\link[=list_g_functions]{list_g_functions()}}).}
+
+\item{response_idx}{Integer or \code{NULL}. For multivariate models, which
+response column to plot (1-based). Default \code{NULL} uses the first response.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object for d <= 1, or a plotly widget for d >= 2
@@ -25,6 +28,8 @@ slope labels and knot markers. For degree-2 groups (two variables), produces
 a 3D surface plot using plotly if available, or a filled contour plot.
 }
 \examples{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 plot_g_function(result, 1)
+}
 }

@@ -2,9 +2,15 @@
 % Please edit documentation in R/plot_results.R
 \name{plot_g_persp}
 \alias{plot_g_persp}
-\title{Plot g-function as a static contour (for reports)}
+\title{Plot g-function as a static 3D perspective (for reports)}
 \usage{
-plot_g_persp(earth_result, group_index, theta = 30, phi = 25)
+plot_g_persp(
+  earth_result,
+  group_index,
+  theta = 30,
+  phi = 25,
+  response_idx = NULL
+)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
@@ -16,27 +22,22 @@ plot_g_persp(earth_result, group_index, theta = 30, phi = 25)
 \item{theta}{Numeric. Azimuthal rotation angle in degrees. Default 30.}
 
 \item{phi}{Numeric. Elevation angle in degrees. Default 25.}
+
+\item{response_idx}{Integer or \code{NULL}. For multivariate models, which
+response column to plot (1-based). Default \code{NULL} uses the first response.}
 }
 \value{
-A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
-
 Invisible \code{NULL} (base graphics). For d <= 1, returns a ggplot object.
 }
 \description{
-Creates a ggplot2 visualization for any g-function group. For d <= 1,
-produces a 2D scatter plot (same as \code{\link[=plot_g_function]{plot_g_function()}}). For d >= 2,
-produces a filled contour plot suitable for static formats like PDF and Word.
-}
-\examples{
-result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
-plot_g_contour(result, 1)
-Plot g-function as a static 3D perspective (for reports)
-
-Creates a base R `persp()` 3D surface plot for g-function groups with d >= 2.
-For d <= 1, produces a 2D scatter plot (same as [plot_g_function()]).
+Creates a base R \code{persp()} 3D surface plot for g-function groups with d >= 2.
+For d <= 1, produces a 2D scatter plot (same as \code{\link[=plot_g_function]{plot_g_function()}}).
 The surface is colored by contribution value using a blue-white-red scale.
 Suitable for PDF and Word output where interactive plotly is not available.
-
+}
+\examples{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"), degree = 2L)
 plot_g_persp(result, 1)
+}
 }

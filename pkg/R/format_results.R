@@ -220,6 +220,9 @@ format_variable_importance <- function(earth_result) {
 #'   [fit_earth()].
 #' @param digits Integer. Number of significant digits for coefficients and
 #'   cut points. Default is 7.
+#' @param response_idx Integer or `NULL`. For multivariate models, which
+#'   response column to generate the equation for (1-based). Default `NULL`
+#'   returns all response equations in an `earthui_equation_multi` object.
 #'
 #' @return A list containing:
 #'   \describe{

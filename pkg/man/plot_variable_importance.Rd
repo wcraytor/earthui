@@ -21,6 +21,8 @@ Creates a horizontal bar chart of variable importance from a fitted
 earth model.
 }
 \examples{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 plot_variable_importance(result)
+}
 }

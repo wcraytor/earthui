@@ -4,11 +4,14 @@
 \alias{plot_actual_vs_predicted}
 \title{Plot actual vs predicted values}
 \usage{
-plot_actual_vs_predicted(earth_result)
+plot_actual_vs_predicted(earth_result, response_idx = NULL)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
 \code{\link[=fit_earth]{fit_earth()}}.}
+
+\item{response_idx}{Integer or \code{NULL}. For multivariate models, which
+response column to plot (1-based). Default \code{NULL} uses the first response.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
@@ -18,6 +21,8 @@ Creates a scatter plot of actual vs predicted values with a 1:1 reference
 line.
 }
 \examples{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 plot_actual_vs_predicted(result)
+}
 }

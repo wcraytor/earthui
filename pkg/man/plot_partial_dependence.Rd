@@ -4,7 +4,12 @@
 \alias{plot_partial_dependence}
 \title{Plot partial dependence}
 \usage{
-plot_partial_dependence(earth_result, variable, n_grid = 50L)
+plot_partial_dependence(
+  earth_result,
+  variable,
+  n_grid = 50L,
+  response_idx = NULL
+)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
@@ -14,6 +19,9 @@ plot_partial_dependence(earth_result, variable, n_grid = 50L)
 
 \item{n_grid}{Integer. Number of grid points for the partial dependence
 calculation. Default is 50.}
+
+\item{response_idx}{Integer or \code{NULL}. For multivariate models, which
+response column to plot (1-based). Default \code{NULL} uses the first response.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
@@ -23,6 +31,8 @@ Creates a partial dependence plot for a selected variable from a fitted
 earth model.
 }
 \examples{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 plot_partial_dependence(result, "wt")
+}
 }

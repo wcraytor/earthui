@@ -42,6 +42,7 @@ fit_earth(
   Get.leverages = NULL,
   Exhaustive.tol = NULL,
   wp = NULL,
+  weights = NULL,
   ...,
   .capture_trace = TRUE
 )
@@ -144,7 +145,12 @@ exhaustive pruning. Default 1e-10.}
 
 \item{wp}{Numeric vector or \code{NULL}. Response weights.}
 
+\item{weights}{Numeric vector or \code{NULL}. Case weights passed to earth.}
+
 \item{...}{Additional arguments passed to \code{\link[earth:earth]{earth::earth()}}.}
+
+\item{.capture_trace}{Logical. If \code{TRUE} (default), capture earth's trace
+output. Set to \code{FALSE} when running in a background process.}
 }
 \value{
 A list with class \code{"earthui_result"} containing:

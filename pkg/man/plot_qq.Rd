@@ -4,11 +4,14 @@
 \alias{plot_qq}
 \title{Plot Q-Q plot of residuals}
 \usage{
-plot_qq(earth_result)
+plot_qq(earth_result, response_idx = NULL)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
 \code{\link[=fit_earth]{fit_earth()}}.}
+
+\item{response_idx}{Integer or \code{NULL}. For multivariate models, which
+response column to plot (1-based). Default \code{NULL} uses the first response.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
@@ -17,6 +20,8 @@ A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
 Creates a normal Q-Q plot of the model residuals.
 }
 \examples{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 plot_qq(result)
+}
 }

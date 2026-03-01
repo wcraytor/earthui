@@ -65,6 +65,8 @@
 #' @param wp Numeric vector or `NULL`. Response weights.
 #' @param weights Numeric vector or `NULL`. Case weights passed to earth.
 #' @param ... Additional arguments passed to [earth::earth()].
+#' @param .capture_trace Logical. If `TRUE` (default), capture earth's trace
+#'   output. Set to `FALSE` when running in a background process.
 #'
 #' @return A list with class `"earthui_result"` containing:
 #'   \describe{

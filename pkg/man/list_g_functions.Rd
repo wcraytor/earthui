@@ -31,6 +31,8 @@ the number of terms. The g-function notation is
 degree group (bottom-right).
 }
 \examples{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 list_g_functions(result)
+}
 }

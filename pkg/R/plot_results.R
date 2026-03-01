@@ -58,8 +58,10 @@ comma_format_ <- function(x) {
 #'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_variable_importance(result)
+#' }
 plot_variable_importance <- function(earth_result, type = "nsubsets") {
   validate_earthui_result(earth_result)
   type <- match.arg(type, c("nsubsets", "gcv", "rss"))
@@ -114,8 +116,10 @@ plot_variable_importance <- function(earth_result, type = "nsubsets") {
 #'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_partial_dependence(result, "wt")
+#' }
 plot_partial_dependence <- function(earth_result, variable, n_grid = 50L,
                                     response_idx = NULL) {
   validate_earthui_result(earth_result)
@@ -182,16 +186,17 @@ plot_partial_dependence <- function(earth_result, variable, n_grid = 50L,
 #' @param earth_result An object of class `"earthui_result"` as returned by
 #'   [fit_earth()].
 #' @param variable Character string. Name of the predictor variable to plot.
-#'
-#' @return A [ggplot2::ggplot] object.
-#'
 #' @param response_idx Integer or `NULL`. For multivariate models, which
 #'   response column to plot (1-based). Default `NULL` uses the first response.
 #'
+#' @return A [ggplot2::ggplot] object.
+#'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_contribution(result, "wt")
+#' }
 plot_contribution <- function(earth_result, variable, response_idx = NULL) {
   validate_earthui_result(earth_result)
 
@@ -368,8 +373,10 @@ plot_contribution <- function(earth_result, variable, response_idx = NULL) {
 #'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_correlation_matrix(result)
+#' }
 plot_correlation_matrix <- function(earth_result) {
   validate_earthui_result(earth_result)
 
@@ -450,17 +457,18 @@ plot_correlation_matrix <- function(earth_result) {
 #'
 #' @param earth_result An object of class `"earthui_result"` as returned by
 #'   [fit_earth()].
+#' @param response_idx Integer or `NULL`. For multivariate models, which
+#'   response column to plot (1-based). Default `NULL` uses the first response.
 #'
 #' @return A [ggplot2::ggplot] object showing residuals vs fitted values.
 #'   Use [plot_qq()] for the Q-Q plot separately.
 #'
-#' @param response_idx Integer or `NULL`. For multivariate models, which
-#'   response column to plot (1-based). Default `NULL` uses the first response.
-#'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_residuals(result)
+#' }
 plot_residuals <- function(earth_result, response_idx = NULL) {
   validate_earthui_result(earth_result)
   model <- earth_result$model
@@ -501,16 +509,17 @@ plot_residuals <- function(earth_result, response_idx = NULL) {
 #'
 #' @param earth_result An object of class `"earthui_result"` as returned by
 #'   [fit_earth()].
-#'
-#' @return A [ggplot2::ggplot] object.
-#'
 #' @param response_idx Integer or `NULL`. For multivariate models, which
 #'   response column to plot (1-based). Default `NULL` uses the first response.
 #'
+#' @return A [ggplot2::ggplot] object.
+#'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_qq(result)
+#' }
 plot_qq <- function(earth_result, response_idx = NULL) {
   validate_earthui_result(earth_result)
   model <- earth_result$model
@@ -554,16 +563,17 @@ plot_qq <- function(earth_result, response_idx = NULL) {
 #'
 #' @param earth_result An object of class `"earthui_result"` as returned by
 #'   [fit_earth()].
-#'
-#' @return A [ggplot2::ggplot] object.
-#'
 #' @param response_idx Integer or `NULL`. For multivariate models, which
 #'   response column to plot (1-based). Default `NULL` uses the first response.
 #'
+#' @return A [ggplot2::ggplot] object.
+#'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_actual_vs_predicted(result)
+#' }
 plot_actual_vs_predicted <- function(earth_result, response_idx = NULL) {
   validate_earthui_result(earth_result)
   model <- earth_result$model
@@ -623,8 +633,10 @@ plot_actual_vs_predicted <- function(earth_result, response_idx = NULL) {
 #'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' list_g_functions(result)
+#' }
 list_g_functions <- function(earth_result) {
   validate_earthui_result(earth_result)
   eq <- format_model_equation(earth_result, response_idx = 1L)
@@ -668,6 +680,8 @@ list_g_functions <- function(earth_result) {
 #'   [fit_earth()].
 #' @param group_index Integer. Index of the g-function group (1-based, from
 #'   [list_g_functions()]).
+#' @param response_idx Integer or `NULL`. For multivariate models, which
+#'   response column to plot (1-based). Default `NULL` uses the first response.
 #'
 #' @return A [ggplot2::ggplot] object for d <= 1, or a plotly widget for d >= 2
 #'   (when plotly is installed). Falls back to ggplot2 contour if plotly is not
@@ -675,8 +689,10 @@ list_g_functions <- function(earth_result) {
 #'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_g_function(result, 1)
+#' }
 plot_g_function <- function(earth_result, group_index, response_idx = NULL) {
   validate_earthui_result(earth_result)
   eq <- format_model_equation(earth_result, response_idx = if (is.null(response_idx)) 1L else response_idx)
@@ -703,20 +719,6 @@ plot_g_function <- function(earth_result, group_index, response_idx = NULL) {
   }
 }
 
-#' Plot g-function as a static contour (for reports)
-#'
-#' Creates a ggplot2 visualization for any g-function group. For d <= 1,
-#' produces a 2D scatter plot (same as [plot_g_function()]). For d >= 2,
-#' produces a filled contour plot suitable for static formats like PDF and Word.
-#'
-#' @inheritParams plot_g_function
-#'
-#' @return A [ggplot2::ggplot] object.
-#'
-#' @export
-#' @examples
-#' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
-#' plot_g_contour(result, 1)
 #' Plot g-function as a static 3D perspective (for reports)
 #'
 #' Creates a base R `persp()` 3D surface plot for g-function groups with d >= 2.
@@ -732,8 +734,10 @@ plot_g_function <- function(earth_result, group_index, response_idx = NULL) {
 #'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"), degree = 2L)
 #' plot_g_persp(result, 1)
+#' }
 plot_g_persp <- function(earth_result, group_index, theta = 30, phi = 25,
                          response_idx = NULL) {
   validate_earthui_result(earth_result)
@@ -774,8 +778,10 @@ plot_g_persp <- function(earth_result, group_index, theta = 30, phi = 25,
 #'
 #' @export
 #' @examples
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 #' plot_g_contour(result, 1)
+#' }
 plot_g_contour <- function(earth_result, group_index, response_idx = NULL) {
   validate_earthui_result(earth_result)
   eq <- format_model_equation(earth_result, response_idx = if (is.null(response_idx)) 1L else response_idx)

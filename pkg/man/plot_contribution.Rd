@@ -4,13 +4,16 @@
 \alias{plot_contribution}
 \title{Plot variable contribution}
 \usage{
-plot_contribution(earth_result, variable)
+plot_contribution(earth_result, variable, response_idx = NULL)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
 \code{\link[=fit_earth]{fit_earth()}}.}
 
 \item{variable}{Character string. Name of the predictor variable to plot.}
+
+\item{response_idx}{Integer or \code{NULL}. For multivariate models, which
+response column to plot (1-based). Default \code{NULL} uses the first response.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
@@ -21,6 +24,8 @@ prediction. For each observation, the contribution is the sum of
 coefficient * basis function value across all terms involving that variable.
 }
 \examples{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 plot_contribution(result, "wt")
+}
 }

@@ -4,7 +4,7 @@
 \alias{plot_g_contour}
 \title{Plot g-function as a static contour (for reports)}
 \usage{
-plot_g_contour(earth_result, group_index)
+plot_g_contour(earth_result, group_index, response_idx = NULL)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthui_result"} as returned by
@@ -12,6 +12,9 @@ plot_g_contour(earth_result, group_index)
 
 \item{group_index}{Integer. Index of the g-function group (1-based, from
 \code{\link[=list_g_functions]{list_g_functions()}}).}
+
+\item{response_idx}{Integer or \code{NULL}. For multivariate models, which
+response column to plot (1-based). Default \code{NULL} uses the first response.}
 }
 \value{
 A \link[ggplot2:ggplot]{ggplot2::ggplot} object.
@@ -22,6 +25,8 @@ produces a 2D scatter plot (same as \code{\link[=plot_g_function]{plot_g_functio
 produces a filled contour plot suitable for static formats like PDF and Word.
 }
 \examples{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
 plot_g_contour(result, 1)
+}
 }
