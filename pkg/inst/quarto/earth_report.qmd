@@ -70,7 +70,12 @@ summary_info <- format_summary(result)
 
 ```{r model-equation, results='asis'}
 eq <- format_model_equation(result)
-cat("$$\n", eq$latex, "\n$$\n")
+# Use PDF-safe escaping for LaTeX output, standard for HTML/Word
+if (knitr::is_latex_output()) {
+  cat("$$\n", eq$latex_pdf, "\n$$\n")
+} else {
+  cat("$$\n", eq$latex, "\n$$\n")
+}
 ```
 
 ## Coefficients & Basis Functions

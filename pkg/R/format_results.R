@@ -362,9 +362,12 @@ format_model_equation <- function(earth_result, digits = 7L) {
     "\n\\end{array}"
   )
 
+  latex_pdf <- latex_escape_for_pdf_(latex)
+
   result <- list(
     latex        = latex,
     latex_inline = paste0("$$\n", latex, "\n$$"),
+    latex_pdf    = latex_pdf,
     groups       = groups
   )
   class(result) <- "earthui_equation"
@@ -415,11 +418,28 @@ resolve_columns_ <- function(col_names, categoricals, data) {
 #' @keywords internal
 #' @noRd
 latex_escape_text_ <- function(x) {
-  x <- gsub("_", "\\_", x, fixed = TRUE)
-  x <- gsub("$", "\\$", x, fixed = TRUE)
+  # Escapes safe for BOTH MathJax and LaTeX inside \text{}
   x <- gsub("%", "\\%", x, fixed = TRUE)
   x <- gsub("&", "\\&", x, fixed = TRUE)
   x <- gsub("#", "\\#", x, fixed = TRUE)
+  x
+}
+
+#' Escape underscores/dollars inside \\text{} blocks for LaTeX PDF output.
+#' MathJax does not need (and breaks with) these escapes.
+#' @keywords internal
+#' @noRd
+latex_escape_for_pdf_ <- function(x) {
+  pattern <- "\\\\text\\{[^}]*\\}"
+  m <- gregexpr(pattern, x, perl = TRUE)
+  regmatches(x, m) <- lapply(regmatches(x, m), function(matches) {
+    vapply(matches, function(txt) {
+      inner <- sub("^\\\\text\\{(.*)\\}$", "\\1", txt)
+      inner <- gsub("_", "\\_", inner, fixed = TRUE)
+      inner <- gsub("$", "\\$", inner, fixed = TRUE)
+      paste0("\\text{", inner, "}")
+    }, character(1))
+  })
   x
 }
 
