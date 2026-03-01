@@ -96,7 +96,7 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
                       Auto.linpreds = NULL, Force.weights = NULL,
                       Use.beta.cache = NULL, Force.xtx.prune = NULL,
                       Get.leverages = NULL, Exhaustive.tol = NULL,
-                      wp = NULL, ...) {
+                      wp = NULL, ..., .capture_trace = TRUE) {
 
   # --- Input validation ---
   if (!is.data.frame(df)) {
@@ -198,14 +198,16 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
 
   earth_args <- list(formula = formula, data = model_df, degree = degree)
 
-  # Auto-enable CV when degree >= 2
+  # Auto-enable CV when degree >= 2 or variance model is requested
+  needs_cv <- degree >= 2L ||
+    (!is.null(varmod.method) && varmod.method != "none")
   cv_enabled <- FALSE
   if (!is.null(nfold)) {
     if (nfold > 0L) {
       earth_args$nfold <- as.integer(nfold)
       cv_enabled <- TRUE
     }
-  } else if (degree >= 2L) {
+  } else if (needs_cv) {
     earth_args$nfold <- 10L
     cv_enabled <- TRUE
   }
@@ -236,7 +238,15 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   if (!is.null(nk))              earth_args$nk               <- as.integer(nk)
   if (!is.null(newvar.penalty))  earth_args$newvar.penalty   <- newvar.penalty
   if (!is.null(fast.beta))       earth_args$fast.beta        <- fast.beta
-  if (!is.null(ncross))          earth_args$ncross           <- as.integer(ncross)
+  if (!is.null(ncross)) {
+    # Auto-increase ncross when variance model is enabled and ncross < 3
+    if (needs_cv && !is.null(varmod.method) && varmod.method != "none" &&
+        as.integer(ncross) < 3L) {
+      earth_args$ncross <- 3L
+    } else {
+      earth_args$ncross <- as.integer(ncross)
+    }
+  }
   if (!is.null(stratify))        earth_args$stratify         <- stratify
   if (!is.null(varmod.method) && varmod.method != "none") {
     earth_args$varmod.method <- varmod.method
@@ -266,9 +276,15 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
 
   # --- Fit model (with timing and trace capture) ---
   start_time <- proc.time()
-  trace_output <- utils::capture.output({
+  if (.capture_trace) {
+    trace_output <- utils::capture.output({
+      model <- do.call(earth::earth, earth_args)
+    })
+  } else {
+    # Let trace go to stdout (for callr background process capture)
     model <- do.call(earth::earth, earth_args)
-  })
+    trace_output <- character(0)
+  }
   elapsed <- as.numeric((proc.time() - start_time)["elapsed"])
 
   # --- Return structured result ---

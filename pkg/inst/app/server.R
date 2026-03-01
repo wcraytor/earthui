@@ -8,7 +8,10 @@ function(input, output, session) {
     file_name = NULL,
     sheets = NULL,
     file_path = NULL,
-    file_ext = NULL
+    file_ext = NULL,
+    fitting = FALSE,
+    bg_proc = NULL,
+    trace_lines = character(0)
   )
 
   # --- Data Import ---
@@ -329,13 +332,14 @@ function(input, output, session) {
                 title = preds[j], preds[j])
       ))
     }
-    header_row <- tags$tr(header_cells)
+    header_row <- tags$tr(class = "eui-matrix-header", header_cells)
 
     # Build matrix rows
-    table_rows <- list(header_row)
+    body_rows <- list()
     for (i in seq_len(n)) {
       cells <- list(
-        tags$td(style = "padding: 2px 4px; font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;",
+        tags$td(class = "eui-matrix-rowlabel",
+                style = "padding: 2px 4px; font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;",
                 title = preds[i], preds[i])
       )
       for (j in seq_len(n)) {
@@ -356,7 +360,7 @@ function(input, output, session) {
           ))
         }
       }
-      table_rows <- c(table_rows, list(tags$tr(cells)))
+      body_rows <- c(body_rows, list(tags$tr(cells)))
     }
 
     # JavaScript to sync checkboxes with Shiny inputs + localStorage persistence
@@ -420,7 +424,9 @@ function(input, output, session) {
 
     div(
       style = "max-height: 300px; overflow: auto; border: 1px solid #ddd; padding: 4px; border-radius: 4px;",
-      tags$table(style = "border-collapse: collapse;", table_rows),
+      tags$table(style = "border-collapse: collapse;",
+                 tags$thead(header_row),
+                 tags$tbody(body_rows)),
       js
     )
   })
@@ -447,8 +453,8 @@ function(input, output, session) {
   })
 
   # --- Fit Model ---
-  observeEvent(input$run_model, {
-    req(rv$data, input$target, input$predictors)
+  build_fit_args_ <- function() {
+    na_to_null <- function(x) if (is.na(x) || is.null(x)) NULL else x
 
     degree <- as.integer(input$degree)
 
@@ -457,87 +463,209 @@ function(input, output, session) {
       allowed_func <- build_allowed_function(get_allowed_matrix())
     }
 
-    na_to_null <- function(x) if (is.na(x) || is.null(x)) NULL else x
-
-    nprune <- na_to_null(input$nprune)
-    thresh <- na_to_null(input$thresh)
-    penalty <- na_to_null(input$penalty)
-    minspan <- na_to_null(input$minspan)
-    endspan <- na_to_null(input$endspan)
-    fast_k <- na_to_null(input$fast_k)
-    nfold <- na_to_null(input$nfold_override)
-    nk <- na_to_null(input$nk)
-    newvar_penalty <- na_to_null(input$newvar_penalty)
-    fast_beta <- na_to_null(input$fast_beta)
-    ncross <- na_to_null(input$ncross)
-    adjust_endspan <- na_to_null(input$adjust_endspan)
-    exhaustive_tol <- na_to_null(input$exhaustive_tol)
-    varmod_exponent <- na_to_null(input$varmod_exponent)
-    varmod_conv <- na_to_null(input$varmod_conv)
-    varmod_clamp <- na_to_null(input$varmod_clamp)
-    varmod_minspan <- na_to_null(input$varmod_minspan)
-
     glm_arg <- NULL
     if (input$glm_family != "none") {
       glm_arg <- list(family = input$glm_family)
     }
 
-    trace_val <- as.numeric(input$trace)
+    list(
+      df              = rv$data,
+      target          = input$target,
+      predictors      = input$predictors,
+      categoricals    = input$categoricals,
+      linpreds        = input$linpreds,
+      degree          = degree,
+      allowed_func    = allowed_func,
+      nfold           = na_to_null(input$nfold_override),
+      nprune          = na_to_null(input$nprune),
+      thresh          = na_to_null(input$thresh),
+      penalty         = na_to_null(input$penalty),
+      minspan         = na_to_null(input$minspan),
+      endspan         = na_to_null(input$endspan),
+      fast.k          = na_to_null(input$fast_k),
+      pmethod         = input$pmethod,
+      glm             = glm_arg,
+      trace           = as.numeric(input$trace),
+      nk              = na_to_null(input$nk),
+      newvar.penalty  = na_to_null(input$newvar_penalty),
+      fast.beta       = na_to_null(input$fast_beta),
+      ncross          = na_to_null(input$ncross),
+      stratify        = input$stratify,
+      varmod.method   = input$varmod_method,
+      varmod.exponent = na_to_null(input$varmod_exponent),
+      varmod.conv     = na_to_null(input$varmod_conv),
+      varmod.clamp    = na_to_null(input$varmod_clamp),
+      varmod.minspan  = na_to_null(input$varmod_minspan),
+      keepxy          = input$keepxy,
+      Scale.y         = input$scale_y,
+      Adjust.endspan  = na_to_null(input$adjust_endspan),
+      Auto.linpreds   = input$auto_linpreds,
+      Force.weights   = input$force_weights,
+      Use.beta.cache  = input$use_beta_cache,
+      Force.xtx.prune = input$force_xtx_prune,
+      Get.leverages   = input$get_leverages,
+      Exhaustive.tol  = na_to_null(input$exhaustive_tol)
+    )
+  }
 
-    pmethod <- input$pmethod
-    linpreds <- input$linpreds
+  observeEvent(input$run_model, {
+    req(rv$data, input$target, input$predictors)
 
-    withProgress(message = "Fitting Earth model...", value = 0.2, {
-      tryCatch({
-        setProgress(0.3, detail = "Running forward pass")
-        rv$result <- fit_earth(
-          df = rv$data,
-          target = input$target,
-          predictors = input$predictors,
-          categoricals = input$categoricals,
-          linpreds = linpreds,
-          degree = degree,
-          allowed_func = allowed_func,
-          nfold = nfold,
-          nprune = nprune,
-          thresh = thresh,
-          penalty = penalty,
-          minspan = minspan,
-          endspan = endspan,
-          fast.k = fast_k,
-          pmethod = pmethod,
-          glm = glm_arg,
-          trace = trace_val,
-          nk = nk,
-          newvar.penalty = newvar_penalty,
-          fast.beta = fast_beta,
-          ncross = ncross,
-          stratify = input$stratify,
-          varmod.method = input$varmod_method,
-          varmod.exponent = varmod_exponent,
-          varmod.conv = varmod_conv,
-          varmod.clamp = varmod_clamp,
-          varmod.minspan = varmod_minspan,
-          keepxy = input$keepxy,
-          Scale.y = input$scale_y,
-          Adjust.endspan = adjust_endspan,
-          Auto.linpreds = input$auto_linpreds,
-          Force.weights = input$force_weights,
-          Use.beta.cache = input$use_beta_cache,
-          Force.xtx.prune = input$force_xtx_prune,
-          Get.leverages = input$get_leverages,
-          Exhaustive.tol = exhaustive_tol
-        )
-        elapsed <- rv$result$elapsed
-        setProgress(1, detail = "Done")
-        session$sendCustomMessage("fitting_done",
-          list(text = sprintf("Done in %.1fs", elapsed)))
-      }, error = function(e) {
-        session$sendCustomMessage("fitting_done",
-          list(text = "Error"))
-        showNotification(paste("Model error:", e$message),
-                         type = "error", duration = 10)
+    fit_args <- build_fit_args_()
+    use_async <- requireNamespace("callr", quietly = TRUE)
+
+    if (use_async) {
+      # --- Async path: run earth in background process ---
+      fit_args$.capture_trace <- FALSE
+      rv$trace_lines <- character(0)
+      rv$result <- NULL
+
+      rv$bg_proc <- callr::r_bg(
+        function(args) {
+          do.call(earthui::fit_earth, args)
+        },
+        args = list(args = fit_args),
+        stdout = "|", stderr = "|",
+        supervise = TRUE
+      )
+      rv$fitting <- TRUE
+      session$sendCustomMessage("fitting_start", list())
+
+    } else {
+      # --- Sync fallback (no callr) ---
+      session$sendCustomMessage("fitting_start", list())
+      withProgress(message = "Fitting Earth model...", value = 0.2, {
+        tryCatch({
+          setProgress(0.3, detail = "Running forward pass")
+          rv$result <- fit_earth(
+            df = fit_args$df,
+            target = fit_args$target,
+            predictors = fit_args$predictors,
+            categoricals = fit_args$categoricals,
+            linpreds = fit_args$linpreds,
+            degree = fit_args$degree,
+            allowed_func = fit_args$allowed_func,
+            nfold = fit_args$nfold,
+            nprune = fit_args$nprune,
+            thresh = fit_args$thresh,
+            penalty = fit_args$penalty,
+            minspan = fit_args$minspan,
+            endspan = fit_args$endspan,
+            fast.k = fit_args$fast.k,
+            pmethod = fit_args$pmethod,
+            glm = fit_args$glm,
+            trace = fit_args$trace,
+            nk = fit_args$nk,
+            newvar.penalty = fit_args$newvar.penalty,
+            fast.beta = fit_args$fast.beta,
+            ncross = fit_args$ncross,
+            stratify = fit_args$stratify,
+            varmod.method = fit_args$varmod.method,
+            varmod.exponent = fit_args$varmod.exponent,
+            varmod.conv = fit_args$varmod.conv,
+            varmod.clamp = fit_args$varmod.clamp,
+            varmod.minspan = fit_args$varmod.minspan,
+            keepxy = fit_args$keepxy,
+            Scale.y = fit_args$Scale.y,
+            Adjust.endspan = fit_args$Adjust.endspan,
+            Auto.linpreds = fit_args$Auto.linpreds,
+            Force.weights = fit_args$Force.weights,
+            Use.beta.cache = fit_args$Use.beta.cache,
+            Force.xtx.prune = fit_args$Force.xtx.prune,
+            Get.leverages = fit_args$Get.leverages,
+            Exhaustive.tol = fit_args$Exhaustive.tol
+          )
+          elapsed <- rv$result$elapsed
+          setProgress(1, detail = "Done")
+          session$sendCustomMessage("fitting_done",
+            list(text = sprintf("Done in %.1fs", elapsed)))
+        }, error = function(e) {
+          session$sendCustomMessage("fitting_done",
+            list(text = "Error"))
+          showNotification(paste("Model error:", e$message),
+                           type = "error", duration = 10)
+        })
       })
+    }
+  })
+
+  # --- Background process polling observer ---
+  send_trace_lines_ <- function(lines, truncate_at = 0L) {
+    for (line in lines) {
+      if (nzchar(trimws(line))) {
+        display <- if (truncate_at > 0L && nchar(line) > truncate_at) {
+          paste0(substr(line, 1L, truncate_at), "...")
+        } else {
+          line
+        }
+        session$sendCustomMessage("trace_line", list(text = display))
+      }
+    }
+  }
+
+  observe({
+    req(rv$fitting)
+    invalidateLater(300)
+    isolate({
+      proc <- rv$bg_proc
+      if (is.null(proc)) return()
+
+      # stdout = earth trace output (truncate to 25 chars)
+      new_out <- tryCatch(proc$read_output_lines(), error = function(e) character(0))
+      # stderr = messages, warnings, errors (show in full)
+      new_err <- tryCatch(proc$read_error_lines(), error = function(e) character(0))
+
+      if (length(new_out) > 0L) {
+        rv$trace_lines <- c(rv$trace_lines, new_out)
+        send_trace_lines_(new_out, truncate_at = 25L)
+      }
+      if (length(new_err) > 0L) {
+        rv$trace_lines <- c(rv$trace_lines, new_err)
+        # Show stderr messages in full (no truncation)
+        send_trace_lines_(new_err, truncate_at = 0L)
+      }
+
+      # Check if process has finished
+      if (!proc$is_alive()) {
+        # Read any remaining output
+        final_out <- tryCatch(proc$read_output_lines(), error = function(e) character(0))
+        final_err <- tryCatch(proc$read_error_lines(), error = function(e) character(0))
+        if (length(final_out) > 0L) {
+          rv$trace_lines <- c(rv$trace_lines, final_out)
+          send_trace_lines_(final_out, truncate_at = 25L)
+        }
+        if (length(final_err) > 0L) {
+          rv$trace_lines <- c(rv$trace_lines, final_err)
+          send_trace_lines_(final_err, truncate_at = 0L)
+        }
+
+        tryCatch({
+          result <- proc$get_result()
+          # Store captured trace lines from polling
+          result$trace_output <- rv$trace_lines
+          rv$result <- result
+          session$sendCustomMessage("fitting_done",
+            list(text = sprintf("Done in %.1fs", result$elapsed)))
+        }, error = function(e) {
+          # Extract the real error from callr's wrapper
+          err_msg <- e$message
+          if (!is.null(e$parent)) {
+            err_msg <- e$parent$message
+          } else {
+            # Also check stderr for error details
+            err_lines <- rv$trace_lines[grepl("^Error", rv$trace_lines)]
+            if (length(err_lines) > 0L) {
+              err_msg <- sub("^Error *:? *", "", err_lines[length(err_lines)])
+            }
+          }
+          session$sendCustomMessage("fitting_done", list(text = "Error"))
+          showNotification(paste("Model error:", err_msg),
+                           type = "error", duration = 15)
+        })
+
+        rv$fitting <- FALSE
+        rv$bg_proc <- NULL
+      }
     })
   })
 
@@ -817,18 +945,29 @@ function(input, output, session) {
     content = function(file) {
       req(rv$result)
       fmt <- input$export_format
+
+      # Render to a temp file with proper extension first, then copy
+      tmp_out <- tempfile(fileext = paste0(".", fmt))
+      on.exit(unlink(tmp_out), add = TRUE)
+
       withProgress(message = "Rendering report...", value = 0.3, {
         tryCatch({
           render_report(rv$result,
                         output_format = fmt,
-                        output_file = file)
+                        output_file = tmp_out)
           setProgress(1, detail = "Done")
         }, error = function(e) {
           message("earthui export error: ", e$message)
-          # Write error to a text file so the download doesn't silently 404
-          writeLines(paste("Report generation failed:", e$message), file)
+          showNotification(paste("Export error:", e$message),
+                           type = "error", duration = 15)
         })
       })
-    }
+
+      # Copy rendered file (binary-safe) to Shiny's download path
+      if (file.exists(tmp_out) && file.size(tmp_out) > 0L) {
+        file.copy(tmp_out, file, overwrite = TRUE)
+      }
+    },
+    contentType = NA
   )
 }

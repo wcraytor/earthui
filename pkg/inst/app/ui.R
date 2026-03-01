@@ -25,6 +25,9 @@ fluidPage(
     [data-bs-theme='dark'] .eui-popup-content { background: #2c3e50; color: #ecf0f1; }
     [data-bs-theme='dark'] details > summary { color: #ecf0f1 !important; }
     #earth_output { font-family: 'MathJax_Main', 'Computer Modern', Georgia, 'Times New Roman', serif; font-size: 0.9em; line-height: 1.5; }
+    .eui-matrix-header th { position: sticky; top: 0; z-index: 2; background: var(--bs-body-bg, #fff); }
+    .eui-matrix-header th:first-child { position: sticky; left: 0; z-index: 3; }
+    .eui-matrix-rowlabel { position: sticky; left: 0; z-index: 1; background: var(--bs-body-bg, #fff); }
   "))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -67,17 +70,37 @@ fluidPage(
     })();
   ")),
   tags$script(HTML("
-    $(document).on('click', '#run_model', function() {
+    Shiny.addCustomMessageHandler('fitting_start', function(msg) {
+      // Remove any previous overlays
+      $('#eui-timer, #eui-trace-log').remove();
+      clearInterval(window.euiTimerInterval);
+
       var start = Date.now();
       $('<div id=\"eui-timer\" style=\"position:fixed;bottom:20px;right:20px;z-index:10001;background:#2c3e50;color:white;padding:8px 16px;border-radius:4px;font-size:0.9em;box-shadow:0 2px 8px rgba(0,0,0,0.3);\">Fitting... 0s</div>').appendTo('body');
+      $('<div id=\"eui-trace-log\" style=\"position:fixed;bottom:52px;right:20px;z-index:10000;background:rgba(0,0,0,0.88);color:#0f0;padding:6px 10px;border-radius:4px;font-family:monospace;font-size:0.72em;max-height:220px;overflow-y:auto;max-width:500px;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:none;word-wrap:break-word;\"></div>').appendTo('body');
+
       window.euiTimerInterval = setInterval(function() {
         var s = Math.floor((Date.now() - start) / 1000);
         $('#eui-timer').text('Fitting... ' + s + 's');
       }, 1000);
     });
+
+    Shiny.addCustomMessageHandler('trace_line', function(msg) {
+      var $log = $('#eui-trace-log');
+      if ($log.length) {
+        $log.show();
+        var $line = $('<div>').text(msg.text);
+        $log.append($line);
+        // Keep only last 15 lines
+        while ($log.children().length > 15) { $log.children().first().remove(); }
+        $log.scrollTop($log[0].scrollHeight);
+      }
+    });
+
     Shiny.addCustomMessageHandler('fitting_done', function(msg) {
       clearInterval(window.euiTimerInterval);
       $('#eui-timer').text(msg.text).delay(3000).fadeOut(500, function(){ $(this).remove(); });
+      $('#eui-trace-log').delay(2000).fadeOut(500, function(){ $(this).remove(); });
     });
   ")),
   titlePanel("earthui - Interactive Earth Model Builder"),

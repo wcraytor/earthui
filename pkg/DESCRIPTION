@@ -27,6 +27,7 @@ Imports:
     utils
 Suggests:
     bslib,
+    callr,
     DT,
     jsonlite,
     knitr,
