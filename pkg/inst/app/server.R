@@ -1,5 +1,11 @@
 function(input, output, session) {
 
+  # --- SQLite settings database ---
+  settings_con <- earthui:::settings_db_connect_()
+  session$onSessionEnded(function() {
+    earthui:::settings_db_disconnect_(settings_con)
+  })
+
   # --- Reactive values ---
   rv <- reactiveValues(
     data = NULL,
@@ -24,6 +30,19 @@ function(input, output, session) {
     rv$file_ext <- ext
     rv$file_path <- input$file_input$datapath
     rv$file_name <- input$file_input$name
+
+    # Restore saved settings from SQLite into localStorage
+    saved <- earthui:::settings_db_read_(settings_con, rv$file_name)
+    if (!is.null(saved)) {
+      session$sendCustomMessage("restore_all_settings", list(
+        filename     = rv$file_name,
+        settings     = saved$settings,
+        variables    = saved$variables,
+        interactions = saved$interactions
+      ))
+      message("earthui: restored settings from SQLite for: ", rv$file_name)
+    }
+
     if (ext %in% c("xlsx", "xls")) {
       rv$sheets <- readxl::excel_sheets(input$file_input$datapath)
     } else {
@@ -58,6 +77,23 @@ function(input, output, session) {
 
   output$model_fitted <- reactive(!is.null(rv$result))
   outputOptions(output, "model_fitted", suspendWhenHidden = FALSE)
+
+  # --- Persist settings to SQLite (debounced from JS) ---
+  observeEvent(input$eui_save_trigger, {
+    payload <- input$eui_save_trigger
+    req(payload$filename)
+    tryCatch({
+      earthui:::settings_db_write_(
+        settings_con,
+        filename     = payload$filename,
+        settings     = if (!is.null(payload$settings))     payload$settings     else "{}",
+        variables    = if (!is.null(payload$variables))    payload$variables    else "{}",
+        interactions = if (!is.null(payload$interactions)) payload$interactions else "{}"
+      )
+    }, error = function(e) {
+      message("earthui: SQLite save error: ", e$message)
+    })
+  }, ignoreInit = TRUE)
 
   output$data_preview_info <- renderUI({
     req(rv$data)
@@ -196,10 +232,14 @@ function(input, output, session) {
         // Save on any tracked input change
         $(document).off('shiny:inputchanged.euisettings')
                    .on('shiny:inputchanged.euisettings', function(event) {
-          if (allIds.indexOf(event.name) >= 0) { saveSettings(); }
+          if (allIds.indexOf(event.name) >= 0) {
+            saveSettings();
+            if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(%s);
+          }
         });
       })();
-    ", jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
+    ", jsonlite::toJSON(storage_key, auto_unbox = TRUE),
+       jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
 
     tagList(
       selectInput("target", "Target (response) variable",
@@ -307,9 +347,11 @@ function(input, output, session) {
         $(document).off('change.euivar').on('change.euivar', '.eui-var-cb', function() {
           saveState();
           gatherState();
+          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(%s);
         });
       })();
-    ", col_json, n_cols, jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
+    ", col_json, n_cols, jsonlite::toJSON(storage_key, auto_unbox = TRUE),
+       jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
 
     tagList(header, rows, js)
   })
@@ -421,6 +463,7 @@ function(input, output, session) {
         $(document).off('change.euimatrix').on('change.euimatrix', '.eui-interaction-cb', function() {
           saveState();
           syncToShiny();
+          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(%s);
         });
 
         // Click variable name (row or column header) to toggle all its interactions
@@ -442,7 +485,8 @@ function(input, output, session) {
           if (cbs.length > 0) cbs[0].trigger('change');
         });
       })();
-    ", n, jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
+    ", n, jsonlite::toJSON(storage_key, auto_unbox = TRUE),
+       jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
 
     div(
       style = "max-height: 300px; overflow: auto; border: 1px solid #ddd; padding: 4px; border-radius: 4px;",
@@ -539,12 +583,25 @@ function(input, output, session) {
     if (use_async) {
       # --- Async path: run earth in background process ---
       fit_args$.capture_trace <- FALSE
+      # Ensure trace >= 1 so the user sees progress in the fitting log
+      if (is.null(fit_args$trace) || fit_args$trace < 1) {
+        fit_args$trace <- 1
+      }
       rv$trace_lines <- character(0)
       rv$result <- NULL
 
       rv$bg_proc <- callr::r_bg(
         function(args) {
-          do.call(earthui::fit_earth, args)
+          cat(sprintf("Dataset: %d obs, %d predictors, degree=%d\n",
+                      nrow(args$df), length(args$predictors), args$degree))
+          if (!is.null(args$nfold) && args$nfold > 0)
+            cat(sprintf("Cross-validation: %d folds\n", args$nfold))
+          cat("Running forward pass...\n")
+          flush(stdout())
+          result <- do.call(earthui::fit_earth, args)
+          cat(sprintf("Completed in %.1f seconds\n", result$elapsed))
+          flush(stdout())
+          result
         },
         args = list(args = fit_args),
         stdout = "|", stderr = "|",
@@ -632,19 +689,18 @@ function(input, output, session) {
       proc <- rv$bg_proc
       if (is.null(proc)) return()
 
-      # stdout = earth trace output (truncate to 25 chars)
+      # stdout = earth trace output
       new_out <- tryCatch(proc$read_output_lines(), error = function(e) character(0))
-      # stderr = messages, warnings, errors (show in full)
+      # stderr = messages, warnings, errors
       new_err <- tryCatch(proc$read_error_lines(), error = function(e) character(0))
 
       if (length(new_out) > 0L) {
         rv$trace_lines <- c(rv$trace_lines, new_out)
-        send_trace_lines_(new_out, truncate_at = 25L)
+        send_trace_lines_(new_out)
       }
       if (length(new_err) > 0L) {
         rv$trace_lines <- c(rv$trace_lines, new_err)
-        # Show stderr messages in full (no truncation)
-        send_trace_lines_(new_err, truncate_at = 0L)
+        send_trace_lines_(new_err)
       }
 
       # Check if process has finished
@@ -654,11 +710,11 @@ function(input, output, session) {
         final_err <- tryCatch(proc$read_error_lines(), error = function(e) character(0))
         if (length(final_out) > 0L) {
           rv$trace_lines <- c(rv$trace_lines, final_out)
-          send_trace_lines_(final_out, truncate_at = 25L)
+          send_trace_lines_(final_out)
         }
         if (length(final_err) > 0L) {
           rv$trace_lines <- c(rv$trace_lines, final_err)
-          send_trace_lines_(final_err, truncate_at = 0L)
+          send_trace_lines_(final_err)
         }
 
         tryCatch({
@@ -889,6 +945,11 @@ function(input, output, session) {
   }
 
   # --- Results: Correlation Matrix ---
+  output$correlation_plot_ui <- renderUI({
+    req(rv$result)
+    plotOutput("correlation_plot", height = "800px", width = "800px")
+  })
+
   output$correlation_plot <- renderPlot({
     req(rv$result)
     tryCatch(
@@ -899,7 +960,7 @@ function(input, output, session) {
         text(0.5, 0.5, paste("Error:", e$message), cex = 1.2)
       }
     )
-  })
+  }, res = 120)
 
   # --- Results: Diagnostics ---
   output$residuals_plot <- renderPlot({

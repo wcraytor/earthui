@@ -74,36 +74,90 @@ fluidPage(
   tags$script(HTML("
     Shiny.addCustomMessageHandler('fitting_start', function(msg) {
       // Remove any previous overlays
-      $('#eui-timer, #eui-trace-log').remove();
+      $('#eui-fitting-modal').remove();
       clearInterval(window.euiTimerInterval);
 
       var start = Date.now();
-      $('<div id=\"eui-timer\" style=\"position:fixed;bottom:20px;right:20px;z-index:10001;background:#2c3e50;color:white;padding:8px 16px;border-radius:4px;font-size:0.9em;box-shadow:0 2px 8px rgba(0,0,0,0.3);\">Fitting... 0s</div>').appendTo('body');
-      $('<div id=\"eui-trace-log\" style=\"position:fixed;bottom:52px;right:20px;z-index:10000;background:rgba(0,0,0,0.88);color:#0f0;padding:6px 10px;border-radius:4px;font-family:monospace;font-size:0.72em;max-height:220px;overflow-y:auto;max-width:500px;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:none;word-wrap:break-word;\"></div>').appendTo('body');
+      var modal = $(
+        '<div id=\"eui-fitting-modal\" style=\"position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10001;' +
+        'background:#1e2a35;color:#ecf0f1;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.5);' +
+        'width:520px;max-width:90vw;font-family:monospace;overflow:hidden;\">' +
+          '<div style=\"background:#2c3e50;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;\">' +
+            '<span style=\"font-size:0.95em;font-weight:bold;\">Fitting Earth Model</span>' +
+            '<span id=\"eui-timer\" style=\"font-size:0.85em;color:#bdc3c7;\">0s</span>' +
+          '</div>' +
+          '<div id=\"eui-trace-log\" style=\"padding:8px 12px;height:300px;overflow-y:auto;font-size:0.78em;line-height:1.5;\"></div>' +
+        '</div>'
+      );
+      // Add semi-transparent backdrop
+      $('<div id=\"eui-fitting-backdrop\" style=\"position:fixed;top:0;left:0;width:100%;height:100%;' +
+        'background:rgba(0,0,0,0.4);z-index:10000;\"></div>').appendTo('body');
+      modal.appendTo('body');
+
+      // Add initial message
+      $('#eui-trace-log').append($('<div style=\"color:#3498db;\">').text('Starting model fit...'));
 
       window.euiTimerInterval = setInterval(function() {
         var s = Math.floor((Date.now() - start) / 1000);
-        $('#eui-timer').text('Fitting... ' + s + 's');
+        var m = Math.floor(s / 60);
+        var label = m > 0 ? m + 'm ' + (s % 60) + 's' : s + 's';
+        $('#eui-timer').text(label);
       }, 1000);
     });
 
     Shiny.addCustomMessageHandler('trace_line', function(msg) {
       var $log = $('#eui-trace-log');
       if ($log.length) {
-        $log.show();
-        var $line = $('<div>').text(msg.text);
+        var color = '#0f0';
+        if (msg.text.match(/^\\s*(CV|cross)/i)) color = '#f1c40f';
+        else if (msg.text.match(/error|fail/i)) color = '#e74c3c';
+        var $line = $('<div style=\"color:' + color + ';\">').text(msg.text);
         $log.append($line);
-        // Keep only last 15 lines
-        while ($log.children().length > 15) { $log.children().first().remove(); }
+        // Keep last 200 lines
+        while ($log.children().length > 200) { $log.children().first().remove(); }
         $log.scrollTop($log[0].scrollHeight);
       }
     });
 
     Shiny.addCustomMessageHandler('fitting_done', function(msg) {
       clearInterval(window.euiTimerInterval);
-      $('#eui-timer').text(msg.text).delay(3000).fadeOut(500, function(){ $(this).remove(); });
-      $('#eui-trace-log').delay(2000).fadeOut(500, function(){ $(this).remove(); });
+      var $log = $('#eui-trace-log');
+      $log.append($('<div style=\"color:#2ecc71;font-weight:bold;margin-top:4px;\">').text(msg.text));
+      $log.scrollTop($log[0].scrollHeight);
+      // Fade out after 2.5 seconds
+      setTimeout(function() {
+        $('#eui-fitting-modal, #eui-fitting-backdrop').fadeOut(500, function(){ $(this).remove(); });
+      }, 2500);
     });
+
+    // --- SQLite settings bridge ---
+
+    // Restore settings from SQLite into localStorage
+    Shiny.addCustomMessageHandler('restore_all_settings', function(msg) {
+      var fn = msg.filename;
+      if (msg.settings && Object.keys(msg.settings).length > 0) {
+        try { localStorage.setItem('earthui_settings_' + fn, JSON.stringify(msg.settings)); } catch(e) {}
+      }
+      if (msg.variables && Object.keys(msg.variables).length > 0) {
+        try { localStorage.setItem('earthui_vars_' + fn, JSON.stringify(msg.variables)); } catch(e) {}
+      }
+      if (msg.interactions && Object.keys(msg.interactions).length > 0) {
+        try { localStorage.setItem('earthui_interactions_' + fn, JSON.stringify(msg.interactions)); } catch(e) {}
+      }
+    });
+
+    // Debounced save-to-server: collect localStorage and send to R/SQLite
+    window.euiSaveTimer = null;
+    window.euiSaveToServer = function(fn) {
+      clearTimeout(window.euiSaveTimer);
+      window.euiSaveTimer = setTimeout(function() {
+        var payload = { filename: fn, settings: null, variables: null, interactions: null };
+        try { payload.settings     = localStorage.getItem('earthui_settings_' + fn); } catch(e) {}
+        try { payload.variables    = localStorage.getItem('earthui_vars_' + fn); } catch(e) {}
+        try { payload.interactions = localStorage.getItem('earthui_interactions_' + fn); } catch(e) {}
+        Shiny.setInputValue('eui_save_trigger', payload, {priority: 'deferred'});
+      }, 2000);
+    };
   ")),
   tags$div(
     style = "padding: 10px 15px;",
@@ -390,7 +444,7 @@ fluidPage(
           tabPanel(
             "Correlation",
             br(),
-            plotOutput("correlation_plot", height = "550px")
+            uiOutput("correlation_plot_ui")
           ),
           tabPanel(
             "Diagnostics",
@@ -414,6 +468,45 @@ fluidPage(
                 verbatimTextOutput("earth_output"))
           )
         )
+      )
+    )
+  ),
+
+  # ── AGPL-3 legal footer ──────────────────────────────────────────────
+  tags$hr(style = "margin-top: 30px; margin-bottom: 10px;"),
+  tags$footer(
+    style = paste(
+      "text-align: center; padding: 10px 15px 15px;",
+      "font-size: 0.8em; color: #7f8c8d;"
+    ),
+    tags$p(
+      style = "margin: 2px 0;",
+      HTML(paste0(
+        "earthui v", utils::packageVersion("earthui"),
+        " &mdash; Copyright &copy; 2026 Pacific Vista Net / William Craytor"
+      ))
+    ),
+    tags$p(
+      style = "margin: 2px 0;",
+      "Licensed under the ",
+      tags$a(
+        href = "https://www.gnu.org/licenses/agpl-3.0.html",
+        target = "_blank",
+        "GNU Affero General Public License v3.0"
+      ),
+      " or later (AGPL-3)."
+    ),
+    tags$p(
+      style = "margin: 2px 0;",
+      HTML("This software is provided &ldquo;as is&rdquo;, without warranty of any kind.")
+    ),
+    tags$p(
+      style = "margin: 2px 0;",
+      "Source code: ",
+      tags$a(
+        href = "https://github.com/wcraytor/earthui",
+        target = "_blank",
+        "github.com/wcraytor/earthui"
       )
     )
   )

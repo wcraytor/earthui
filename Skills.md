@@ -57,8 +57,26 @@ Technical skills and capabilities demonstrated by the earthui package.
   (`{}^{f}g^{j}_{k}` where f = factors, j = degree, k = position)
 - Hinge functions: `max(0, x - c)` and `max(0, c - x)`
 - Indicator functions for categorical levels: `I{var = level}`
-- Array environment with aligned equations
-- Full LaTeX special character escaping (`_`, `$`, `%`, `&`, `#`)
+- 3-column `\begin{array}{lrl}` layout for equations:
+  - Column 1 (`l`): variable label — left-aligned
+  - Column 2 (`r`): g-function notation + `=` — right-aligned so `=` signs
+    line up flush against the equation column
+  - Column 3 (`l`): equation terms — left-aligned
+  - Continuation lines leave columns 1-2 empty, indent in column 3
+  - **Key lesson**: `\begin{aligned}` right-aligns everything left of `&`,
+    and two-column `{ll}` or `{rl}` arrays don't separate the label from the
+    g-notation. The 3-column `{lrl}` approach is the only one that produces
+    left-aligned labels with a natural gap before right-aligned g + `=`.
+- Dual LaTeX output paths:
+  - `latex`: for MathJax (Shiny app), KaTeX, and Pandoc (HTML/Word reports).
+    Uses `\begin{array}{lrl}`. No `_`/`$` escaping inside `\text{}` —
+    MathJax handles them natively.
+  - `latex_pdf`: for native LaTeX (PDF reports). Same `{lrl}` structure with
+    `\\[4pt]` row spacing. Post-processed by `latex_escape_for_pdf_()` which
+    finds `\text{...}` blocks and escapes `_` → `\_` and `$` → `\$` inside
+    them (required by pdflatex/xelatex but breaks MathJax).
+- Full LaTeX special character escaping (`%`, `&`, `#` in both paths;
+  `_` and `$` only in the PDF path via `latex_escape_for_pdf_()`)
 - MathJax rendering in Shiny; native LaTeX in PDF reports
 
 ## Report Generation

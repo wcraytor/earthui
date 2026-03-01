@@ -403,8 +403,10 @@ plot_correlation_matrix <- function(earth_result) {
   long_df$Var2 <- factor(long_df$Var2, levels = rev(var_names))
 
   # Scale text size based on number of variables
-  txt_size <- if (n <= 6) 4.5 else if (n <= 10) 3.5 else if (n <= 15) 2.8 else 2.2
-  axis_size <- if (n <= 10) 11 else if (n <= 15) 9 else 7
+  # geom_text size is in mm; multiply by ~2.85 to approximate pt
+  txt_size <- if (n <= 6) 7 else if (n <= 10) 5 else if (n <= 15) 4 else 3.2
+  axis_size <- if (n <= 6) 14 else if (n <= 10) 13 else if (n <= 15) 11 else 9
+  title_size <- 16
 
   text_color <- ifelse(abs(long_df$value) > 0.65, "white", "black")
 
@@ -423,13 +425,15 @@ plot_correlation_matrix <- function(earth_result) {
       title = "Correlation Matrix",
       x = NULL, y = NULL
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_minimal(base_size = 14) +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.title = ggplot2::element_text(face = "bold", size = title_size),
       axis.text.x = ggplot2::element_text(angle = 45, hjust = 1, size = axis_size),
       axis.text.y = ggplot2::element_text(size = axis_size),
       panel.grid = ggplot2::element_blank(),
-      legend.position = "right"
+      legend.position = "right",
+      legend.text = ggplot2::element_text(size = 11),
+      legend.title = ggplot2::element_text(size = 12)
     ) +
     ggplot2::coord_fixed(expand = FALSE)
 }

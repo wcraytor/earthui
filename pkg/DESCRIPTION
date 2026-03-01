@@ -28,6 +28,7 @@ Imports:
 Suggests:
     bslib,
     callr,
+    DBI,
     DT,
     jsonlite,
     knitr,
@@ -35,6 +36,7 @@ Suggests:
     quarto,
     rmarkdown,
     roxygen2,
+    RSQLite,
     showtext,
     sysfonts,
     testthat (>= 3.0.0)

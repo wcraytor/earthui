@@ -70,10 +70,14 @@ summary_info <- format_summary(result)
 
 ```{r model-equation, results='asis'}
 eq <- format_model_equation(result)
-# Use PDF-safe escaping for LaTeX output, standard for HTML/Word
 if (knitr::is_latex_output()) {
+  # Native LaTeX for PDF — array environment with PDF-safe escaping
   cat("$$\n", eq$latex_pdf, "\n$$\n")
+} else if (!is.null(knitr::pandoc_to()) && knitr::pandoc_to() == "docx") {
+  # Word — Pandoc OMML only supports aligned environment
+  cat("$$\n", eq$latex_word, "\n$$\n")
 } else {
+  # HTML — MathJax/KaTeX supports array environment
   cat("$$\n", eq$latex, "\n$$\n")
 }
 ```

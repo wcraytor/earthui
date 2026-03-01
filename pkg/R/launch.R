@@ -24,6 +24,15 @@ launch <- function(port = 7878L, ...) {
            call. = FALSE)
     }
   }
+  # Optional: SQLite settings persistence
+  for (pkg in c("DBI", "RSQLite")) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+      message("earthui: '", pkg, "' not installed. ",
+              "Settings will be stored in browser localStorage only. ",
+              "Install with: install.packages('", pkg, "')")
+    }
+  }
+
   app_dir <- system.file("app", package = "earthui")
   if (app_dir == "") {
     stop("Could not find the Shiny app directory. ",

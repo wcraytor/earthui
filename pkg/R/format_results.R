@@ -324,50 +324,87 @@ format_model_equation <- function(earth_result, digits = 7L) {
     groups[[g_idx]]$g_f <- groups[[g_idx]]$n_factors
   }
 
-  # Build LaTeX with g-function notation (for MathJax + Quarto/PDF)
-  latex_lines <- character(0)
+  # Build per-group line data (shared between aligned and array formats)
+  line_data <- list()
   for (g_idx in seq_along(groups)) {
     grp <- groups[[g_idx]]
     g_tex <- sprintf("{}^{%d}g^{%d}_{%d}", grp$g_f, grp$g_j, grp$g_k)
+
+    # Format label: single var as \text{var}, multi-var as \{\text{v1},\,\text{v2}\}
+    if (grp$degree > 1L) {
+      var_parts <- vapply(grp$base_vars, function(v) {
+        sprintf("\\text{%s}", latex_escape_text_(v))
+      }, character(1))
+      label_latex <- paste0("\\{", paste(var_parts, collapse = ",\\, "), "\\}")
+    } else {
+      label_latex <- sprintf("\\text{%s}", latex_escape_text_(grp$label))
+    }
 
     for (t_idx in seq_along(grp$terms)) {
       term <- grp$terms[[t_idx]]
       is_first <- (t_idx == 1L)
       term_str <- format_term_latex_(term, is_first, digits)
-      # Format label: single var as \text{var}, multi-var as \{\text{v1},\,\text{v2}\}
-      if (grp$degree > 1L) {
-        var_parts <- vapply(grp$base_vars, function(v) {
-          sprintf("\\text{%s}", latex_escape_text_(v))
-        }, character(1))
-        label_latex <- paste0("\\{", paste(var_parts, collapse = ",\\, "), "\\}")
-      } else {
-        label_latex <- sprintf("\\text{%s}", latex_escape_text_(grp$label))
-      }
-      if (is_first) {
-        line <- sprintf("  %s & %s \\;=\\; %s",
-                        label_latex, g_tex, term_str)
-      } else {
-        line <- sprintf("  & \\qquad %s", term_str)
-      }
-      latex_lines <- c(latex_lines, paste0(line, " \\\\[4pt]"))
+      line_data <- c(line_data, list(list(
+        label    = label_latex,
+        g_tex    = g_tex,
+        term_str = term_str,
+        is_first = is_first
+      )))
     }
   }
-  if (length(latex_lines) > 0L) {
-    latex_lines[length(latex_lines)] <- sub(" \\\\\\\\\\[4pt\\]$", "",
-                                            latex_lines[length(latex_lines)])
+
+  # 3-column array: left label | right g-function = | left equation
+  # Col 1: variable name (left-aligned)
+  # Col 2: g-function notation + = (right-aligned, so = signs line up)
+  # Col 3: equation terms (left-aligned)
+  lines <- character(0)
+  for (ld in line_data) {
+    if (ld$is_first) {
+      lines <- c(lines,
+        sprintf("  %s & %s \\;=\\; & %s", ld$label, ld$g_tex, ld$term_str))
+    } else {
+      lines <- c(lines,
+        sprintf("  & & \\quad %s", ld$term_str))
+    }
   }
+
+  # --- MathJax / KaTeX (Shiny, HTML) ---
   latex <- paste0(
-    "\\small\n\\begin{array}{l@{\\;=\\;\\,}l}\n",
-    paste(latex_lines, collapse = "\n"),
+    "\\small\n\\begin{array}{lrl}\n",
+    paste(lines, collapse = " \\\\\n"),
     "\n\\end{array}"
   )
 
-  latex_pdf <- latex_escape_for_pdf_(latex)
+  # --- Native LaTeX (PDF) — same structure, extra vertical space, PDF escaping ---
+  latex_pdf <- paste0(
+    "\\small\n\\begin{array}{lrl}\n",
+    paste(lines, collapse = " \\\\[4pt]\n"),
+    "\n\\end{array}"
+  )
+  latex_pdf <- latex_escape_for_pdf_(latex_pdf)
+
+  # --- Word (Pandoc OMML) — \begin{aligned} is the only multiline env supported
+  word_lines <- character(0)
+  for (ld in line_data) {
+    if (ld$is_first) {
+      word_lines <- c(word_lines,
+        sprintf("  %s \\; %s &= %s", ld$label, ld$g_tex, ld$term_str))
+    } else {
+      word_lines <- c(word_lines,
+        sprintf("  &\\quad %s", ld$term_str))
+    }
+  }
+  latex_word <- paste0(
+    "\\begin{aligned}\n",
+    paste(word_lines, collapse = " \\\\\n"),
+    "\n\\end{aligned}"
+  )
 
   result <- list(
     latex        = latex,
     latex_inline = paste0("$$\n", latex, "\n$$"),
     latex_pdf    = latex_pdf,
+    latex_word   = latex_word,
     groups       = groups
   )
   class(result) <- "earthui_equation"
