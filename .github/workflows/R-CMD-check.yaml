@@ -48,4 +48,4 @@ jobs:
       - uses: r-lib/actions/check-r-package@v2
         with:
           working-directory: pkg
-          args: ${{ runner.os == 'Windows' && '"--as-cran", "--no-manual"' || '"--as-cran"' }}
+          args: ${{ runner.os == 'Windows' && 'c("--as-cran", "--no-manual")' || '"--as-cran"' }}
