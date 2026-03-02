@@ -35,16 +35,15 @@ jobs:
 
       - uses: r-lib/actions/setup-tinytex@v2
 
-      - name: Install LaTeX packages
-        run: |
-          echo "$APPDATA/TinyTeX/bin/windows" >> $GITHUB_PATH
-          tlmgr install courier ec inconsolata || "$APPDATA/TinyTeX/bin/windows/tlmgr.bat" install courier ec inconsolata
-
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           working-directory: pkg
-          extra-packages: any::rcmdcheck
+          extra-packages: any::rcmdcheck, any::tinytex
           needs: check
+
+      - name: Install LaTeX packages
+        run: tinytex::tlmgr_install(c("courier", "ec", "inconsolata"))
+        shell: Rscript {0}
 
       - uses: r-lib/actions/check-r-package@v2
         with:
