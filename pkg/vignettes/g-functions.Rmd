@@ -183,19 +183,20 @@ three product types per batch.
 - **region** (North / South / West): the plant's climate zone. Climate
   affects both the *baseline* cost and the *marginal* cost of increased
   throughput:
+    - *West*: mild, dry climate and efficient natural gas pipeline
+      access give the lowest base cost and the lowest marginal costs.
+      Western plants run efficiently at all throughput levels, making
+      West the natural baseline for comparison.
     - *North*: cold winters drive the highest base cost (supplemental
-      space heating, winter pipeline surcharges). However, the Northern
-      plants were built with heavy-duty infrastructure — oversized
-      boilers, redundant compressors, high-capacity gas feeds — so
-      marginal costs stay low when throughput increases.
-    - *South*: warm climate gives the lowest base cost. However, the
-      Southern plants have lighter infrastructure (smaller gas feeds,
-      no on-site fuel storage, fewer night-shift contractors), so
-      marginal costs escalate steeply when gas or electric draw
-      exceeds normal levels.
-    - *West*: moderate climate and mid-range infrastructure place
-      these plants between North and South for both base and marginal
-      costs.
+      space heating, winter pipeline surcharges). Marginal costs are
+      moderate — the infrastructure is robust, but the winter climate
+      tax is unavoidable. Night shifts in winter are particularly
+      expensive.
+    - *South*: warm, humid climate gives a moderate base cost. However,
+      the lighter infrastructure (smaller gas feeds, no on-site fuel
+      storage, fewer night-shift contractors) hits capacity limits
+      quickly, so marginal costs escalate the most steeply — especially
+      on Night shifts.
 - **shift** (Day / Night): which shift ran the batch. Night shifts
   incur an overtime wage premium, and the utility charges peak rates for
   nighttime industrial draw.
@@ -217,35 +218,40 @@ three product types per batch.
 - *Gas × electricity × labor*: the most expensive days occur when
   throughput is maximal — heavy gas, heavy electric, and a full crew on
   overtime — producing a three-way compounding effect.
-- *Gas × region*: per-gallon fuel costs rise steeply in the South
-  because the lighter gas infrastructure hits capacity limits sooner.
-  Northern plants, with heavy-duty pipeline connections, absorb
-  increased gas usage at lower marginal cost.
+- *Gas × region*: per-gallon fuel costs vary by region. Southern
+  plants, with lighter gas infrastructure, face the steepest marginal
+  cost. Northern plants incur a moderate surcharge (winter pipeline
+  loads). Western plants, with efficient pipeline access, absorb
+  increased gas at the lowest marginal cost.
 - *Electricity × shift*: the utility's peak-rate surcharge is larger at
   night, so high electric draw costs more on the Night shift.
 - *Region × shift*: the night-shift premium varies dramatically by
   region. Southern plants — which lack on-site fuel storage and
   night-shift maintenance crews — incur the largest Night surcharge.
-  Western plants face a moderate Night premium, while Northern plants
-  (already staffed for round-the-clock winter operations) add only a
-  small Night increment.
+  Northern plants face a moderate Night premium (winter heating loads
+  at night). Western plants show no additional Night premium beyond
+  the shift main effect.
 - *Gas × electricity × region*: when both gas and electric draw are
   high, Southern plants face the steepest compounding surcharges
   because their lighter utility grid penalizes simultaneous peak
-  demand most aggressively. Northern plants, with heavy-duty
-  infrastructure, see only a small three-way premium.
+  demand most aggressively. Northern plants see a moderate three-way
+  premium. Western plants, with the most efficient grid, see only a
+  small premium.
 - *Gas × region × shift*: the per-gallon gas surcharge on Night shifts
   varies by region. Southern Night shifts pay the steepest per-gallon
   premium (no on-site fuel storage forces emergency deliveries at
-  night). Western Night shifts face a moderate premium.
+  night). Northern Night shifts face a moderate premium (winter night
+  heating). Western Night shifts show no additional three-way
+  surcharge.
 - *Product × region × shift*: certain product-region-shift
   combinations compound costs beyond what the individual effects would
   predict. Frozen product at a Southern plant on the Night shift is the
   most expensive triple combination — blast-freezer compressors running
-  in warm ambient air at peak nighttime electricity rates. Dried
-  product at a Southern Night shift also incurs a premium because the
-  drying ovens must run longer in humid conditions with no on-site gas
-  reserves.
+  in warm ambient air at peak nighttime electricity rates. Frozen
+  product at a Northern Night shift also costs extra (compressors
+  fighting extreme cold at night). Dried product at Southern and
+  Northern Night shifts incurs premiums because the drying ovens must
+  run longer in non-ideal conditions with nighttime supply constraints.
 
 The synthetic cost function below encodes these relationships. We then
 fit a degree-3 earth model to recover them:
@@ -263,30 +269,30 @@ df <- data.frame(
   shift        = factor(sample(c("Day", "Night"), n, replace = TRUE)),
   product      = factor(sample(c("Canned", "Dried", "Frozen"), n, replace = TRUE))
 )
+df$region <- relevel(df$region, ref = "West")
 df$cost <- 2000 +
   40 * pmax(0, df$gas_gallons - 15) + 25 * pmax(0, 15 - df$gas_gallons) +
   3 * pmax(0, df$electric_kwh - 300) +
-  ifelse(df$region == "North", 400, ifelse(df$region == "South", 100, 200)) +
+  ifelse(df$region == "North", 400, ifelse(df$region == "South", 200, 100)) +
   ifelse(df$shift == "Night", 100, 0) +
   ifelse(df$product == "Frozen", 200, ifelse(df$product == "Dried", 100, 0)) +
-  ifelse(df$region == "North", 5, ifelse(df$region == "South", 35, 15)) *
+  ifelse(df$region == "North", 15, ifelse(df$region == "South", 35, 5)) *
     pmax(0, df$gas_gallons - 12) +
   ifelse(df$shift == "Night", 5, 1) * pmax(0, df$electric_kwh - 250) +
   ifelse(df$region == "South" & df$shift == "Night", 1200,
-         ifelse(df$region == "West" & df$shift == "Night", 700,
-         ifelse(df$region == "North" & df$shift == "Night", 100, 0))) +
+         ifelse(df$region == "North" & df$shift == "Night", 600, 0)) +
   0.8 * pmax(0, df$gas_gallons - 15) * pmax(0, df$electric_kwh - 300) +
   0.02 * pmax(0, df$gas_gallons - 15) * pmax(0, df$electric_kwh - 300) *
     pmax(0, df$labor_hours - 40) +
-  ifelse(df$region == "North", 0.05, ifelse(df$region == "South", 0.5, 0.25)) *
+  ifelse(df$region == "North", 0.2, ifelse(df$region == "South", 0.5, 0.05)) *
     pmax(0, df$gas_gallons - 12) * pmax(0, df$electric_kwh - 250) +
-  (ifelse(df$region == "South" & df$shift == "Night", 30,
-     ifelse(df$region == "West" & df$shift == "Night", 25, 0))) *
+  (ifelse(df$region == "South" & df$shift == "Night", 35,
+     ifelse(df$region == "North" & df$shift == "Night", 30, 0))) *
     pmax(0, df$gas_gallons - 10) +
   ifelse(df$product == "Frozen" & df$region == "South" & df$shift == "Night", 800,
-    ifelse(df$product == "Frozen" & df$region == "West" & df$shift == "Night", 400,
+    ifelse(df$product == "Frozen" & df$region == "North" & df$shift == "Night", 500,
       ifelse(df$product == "Dried" & df$region == "South" & df$shift == "Night", 300,
-        ifelse(df$product == "Dried" & df$region == "West" & df$shift == "Night", 150, 0)))) +
+        ifelse(df$product == "Dried" & df$region == "North" & df$shift == "Night", 200, 0)))) +
   rnorm(n, 0, 30)
 
 result <- fit_earth(
@@ -296,7 +302,7 @@ result <- fit_earth(
                  "region", "shift", "product"),
   categoricals = c("region", "shift", "product"),
   degree = 3,
-  nk = 80
+  nk = 100
 )
 ```
 
@@ -366,11 +372,12 @@ plot_g_function(result, idx)
 Here `region` (North/South/West) interacts with `shift` (Day/Night).
 Both variables are factors, so $d = 2 - 2 = 0$ — there is no continuous
 axis at all. The heatmap below shows the interaction contribution for
-every region–shift combination. South Night has the largest value because
+every region–shift combination. South-Night has the largest value because
 Southern plants — lacking night-shift infrastructure — pay a steep
 premium that the main effects of region and shift alone do not capture.
-West Night shows a moderate premium; other combinations contribute zero
-because the main effects already account for them.
+North-Night shows a moderate premium (winter heating loads at night).
+West cells show zero because West is the reference level; Day cells
+show zero because Day is the reference level.
 
 **Note:** This plot shows only the **non-additive** part of the cost —
 the amount beyond what the separate main effects of `region` and `shift`
@@ -406,12 +413,13 @@ present in the model.
 
 The South panel shows the strongest compounding effect — its lighter
 utility grid imposes the steepest surcharges when both gas and electric
-draw are high simultaneously. The West panel shows a moderate effect.
-The North panel appears flat because North is the **reference level**
-in the earth model's factor encoding: the model expresses interaction
-corrections *relative to North*, so North's three-way contribution is
-zero by construction. North's actual three-way cost is captured in the
-non-factor 3rd-degree g-function above.
+draw are high simultaneously. The North panel shows a moderate effect
+(winter loads add a compounding premium). The West panel appears flat
+because West is the **reference level** in the earth model's factor
+encoding: the model expresses interaction corrections *relative to
+West*, so West's three-way contribution is zero by construction.
+West's actual three-way cost is captured in the non-factor 3rd-degree
+g-function above.
 
 ```{r fig.width=7, fig.height=5}
 idx <- which(gf$g_j == 3 & gf$g_f == 1)[1]
@@ -426,14 +434,14 @@ dimension from $d = 3$ to $d = 1$, producing a 2D line plot with
 `gas_gallons` on the x-axis. Each factor combination gets its own
 line — color encodes `region`, line style encodes `shift`.
 
-The two Night-shift lines (dashed) rise steeply with gas consumption:
-South-Night (green-dashed) shows the largest per-gallon surcharge
-because Southern plants must arrange emergency off-site gas deliveries
-for Night shifts. West-Night (blue-dashed) shows a similar but
-slightly smaller premium. All Day-shift lines (solid) and
-North-Night sit at zero — their three-way interaction is fully
-captured by the lower-order terms (main effects and two-way
-interactions).
+Both Night-shift lines rise steeply with gas consumption:
+North-Night and South-Night show substantial per-gallon surcharges.
+North-Night reflects winter heating costs that compound with
+nighttime gas draw; South-Night reflects emergency off-site gas
+deliveries on Night shifts. All Day-shift lines and West-Night sit
+at zero — West is the reference level and Day is the reference shift,
+so their three-way interaction is fully captured by the lower-order
+terms.
 
 ```{r fig.width=8, fig.height=5}
 idx <- which(gf$g_j == 3 & gf$g_f == 2)[1]
@@ -450,13 +458,14 @@ grid of each panel, and the third factor creates the facets.
 
 The Day panel is entirely zero — the three-way interaction premium
 only kicks in on Night shifts. The Night panel reveals the costly
-combinations: Frozen product at a Southern plant ($835) tops the
-chart because blast-freezer compressors fighting warm ambient air at
-peak nighttime rates compound all three factors simultaneously.
-Frozen-West-Night ($339) and Dried-South-Night ($387) show smaller
-but substantial premiums. Canned product and Northern plants show
-zero because their three-way interaction is fully captured by the
-lower-order terms.
+combinations: Frozen product at a Southern plant tops the chart
+because blast-freezer compressors fighting warm ambient air at peak
+nighttime rates compound all three factors simultaneously.
+Frozen-North-Night shows a substantial premium as well — blast-freezer
+compressors fighting extreme winter cold at night. Canned product,
+Dried product, and Western plants show zero because Canned and West
+are reference levels and the Dried signal was too weak to survive
+pruning.
 
 ```{r fig.width=12, fig.height=5}
 idx <- which(gf$g_j == 3 & gf$g_f == 3)[1]
