@@ -10,6 +10,7 @@ function(input, output, session) {
   rv <- reactiveValues(
     data = NULL,
     categoricals = NULL,
+    col_types = NULL,
     result = NULL,
     file_name = NULL,
     sheets = NULL,
@@ -51,6 +52,7 @@ function(input, output, session) {
     tryCatch({
       rv$data <- import_data(input$file_input$datapath, sheet = 1)
       rv$categoricals <- detect_categoricals(rv$data)
+      rv$col_types <- detect_types(rv$data)
       rv$result <- NULL
       message("earthUI: import OK, ", nrow(rv$data), " rows, ", ncol(rv$data), " cols")
     }, error = function(e) {
@@ -69,6 +71,7 @@ function(input, output, session) {
     req(rv$file_path, input$sheet)
     rv$data <- import_data(rv$file_path, sheet = input$sheet)
     rv$categoricals <- detect_categoricals(rv$data)
+    rv$col_types <- detect_types(rv$data)
     rv$result <- NULL
   })
 
@@ -312,10 +315,15 @@ function(input, output, session) {
     # Storage key for remembering settings
     storage_key <- if (is.null(rv$file_name)) "default" else rv$file_name
 
+    # Type options for dropdown
+    type_options <- c("numeric", "integer", "character", "logical",
+                      "factor", "Date", "POSIXct", "unknown")
+
     # Header row
     header <- tags$div(
       style = "display: flex; align-items: center; padding: 4px 0; border-bottom: 2px solid #ccc; font-weight: bold; font-size: 0.85em;",
-      tags$div(style = "flex: 1; min-width: 120px;", "Variable"),
+      tags$div(style = "flex: 1; min-width: 100px;", "Variable"),
+      tags$div(style = "width: 85px; text-align: center;", "Type"),
       tags$div(style = "width: 45px; text-align: center;", "Inc?"),
       tags$div(style = "width: 55px; text-align: center;", "Factor"),
       tags$div(style = "width: 55px; text-align: center;", "Linear"),
@@ -329,10 +337,31 @@ function(input, output, session) {
       pct_na <- n_na / nrows
       na_style <- if (pct_na > 0.3) "color: red;" else ""
 
+      # Auto-detected type for this column
+      detected_type <- if (!is.null(rv$col_types) && col %in% names(rv$col_types)) {
+        rv$col_types[[col]]
+      } else {
+        "unknown"
+      }
+
+      # Build <option> tags with auto-detected type selected
+      option_tags <- lapply(type_options, function(opt) {
+        if (opt == detected_type) {
+          tags$option(value = opt, selected = "selected", opt)
+        } else {
+          tags$option(value = opt, opt)
+        }
+      })
+
       tags$div(
         style = "display: flex; align-items: center; padding: 2px 0; border-bottom: 1px solid #eee;",
-        tags$div(style = "flex: 1; min-width: 120px; font-size: 0.82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+        tags$div(style = "flex: 1; min-width: 100px; font-size: 0.82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
                  title = col, col),
+        tags$div(style = "width: 85px; text-align: center;",
+                 tags$select(id = paste0("eui_type_", i),
+                             class = "eui-type-select",
+                             style = "width: 78px; font-size: 0.75em; padding: 1px 2px; border: 1px solid #ccc; border-radius: 3px; background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #333);",
+                             option_tags)),
         tags$div(style = "width: 45px; text-align: center;",
                  tags$input(type = "checkbox", id = paste0("eui_inc_", i),
                             class = "eui-var-cb")),
@@ -347,25 +376,44 @@ function(input, output, session) {
       )
     })
 
-    # JavaScript: sync checkboxes <-> Shiny inputs, with localStorage persistence
+    # Detected types as JSON for JS (used to reset to defaults)
+    detected_types_list <- vapply(candidates, function(col) {
+      if (!is.null(rv$col_types) && col %in% names(rv$col_types)) {
+        rv$col_types[[col]]
+      } else {
+        "unknown"
+      }
+    }, character(1L))
+    detected_types_json <- jsonlite::toJSON(
+      as.list(stats::setNames(detected_types_list, candidates)),
+      auto_unbox = TRUE
+    )
+
+    # JavaScript: sync checkboxes + type dropdowns <-> Shiny inputs, with localStorage persistence
     col_json <- jsonlite::toJSON(candidates, auto_unbox = FALSE)
     n_cols <- length(candidates)
+    storage_key_json <- jsonlite::toJSON(storage_key, auto_unbox = TRUE)
     js <- tags$script(HTML(sprintf("
       (function() {
         var cols = %s;
         var n = %d;
-        var storageKey = 'earthUI_vars_' + %s;
+        var storageKeyRaw = %s;
+        var storageKey = 'earthUI_vars_' + storageKeyRaw;
+        var detectedTypes = %s;
 
         function gatherState() {
           var inc = [], fac = [], lin = [];
+          var types = {};
           for (var i = 1; i <= n; i++) {
             if ($('#eui_inc_' + i).is(':checked')) inc.push(cols[i-1]);
             if ($('#eui_fac_' + i).is(':checked')) fac.push(cols[i-1]);
             if ($('#eui_lin_' + i).is(':checked')) lin.push(cols[i-1]);
+            types[cols[i-1]] = $('#eui_type_' + i).val();
           }
           Shiny.setInputValue('predictors', inc.length > 0 ? inc : null);
           Shiny.setInputValue('categoricals', fac.length > 0 ? fac : null);
           Shiny.setInputValue('linpreds', lin.length > 0 ? lin : null);
+          Shiny.setInputValue('col_types', types);
         }
 
         function saveState() {
@@ -374,7 +422,8 @@ function(input, output, session) {
             state[cols[i-1]] = {
               inc: $('#eui_inc_' + i).is(':checked'),
               fac: $('#eui_fac_' + i).is(':checked'),
-              lin: $('#eui_lin_' + i).is(':checked')
+              lin: $('#eui_lin_' + i).is(':checked'),
+              type: $('#eui_type_' + i).val()
             };
           }
           try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
@@ -390,6 +439,9 @@ function(input, output, session) {
                 $('#eui_inc_' + i).prop('checked', s.inc);
                 $('#eui_fac_' + i).prop('checked', s.fac);
                 $('#eui_lin_' + i).prop('checked', s.lin);
+                if (s.type) {
+                  $('#eui_type_' + i).val(s.type);
+                }
               }
             }
           }
@@ -403,11 +455,26 @@ function(input, output, session) {
         $(document).off('change.euivar').on('change.euivar', '.eui-var-cb', function() {
           saveState();
           gatherState();
-          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(%s);
+          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(storageKeyRaw);
         });
+
+        // On type dropdown change: auto-link Factor, save and sync
+        $(document).off('change.euitype').on('change.euitype', '.eui-type-select', function() {
+          var idx = this.id.replace('eui_type_', '');
+          var val = $(this).val();
+          if (val === 'character' || val === 'factor') {
+            $('#eui_fac_' + idx).prop('checked', true);
+          }
+          saveState();
+          gatherState();
+          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(storageKeyRaw);
+        });
+
+        // Expose detectedTypes for earth defaults reset
+        window.euiDetectedTypes = detectedTypes;
+        window.euiCols = cols;
       })();
-    ", col_json, n_cols, jsonlite::toJSON(storage_key, auto_unbox = TRUE),
-       jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
+    ", col_json, n_cols, storage_key_json, detected_types_json)))
 
     tagList(header, rows, js)
   })
@@ -604,12 +671,16 @@ function(input, output, session) {
       wp_arg <- rv$data[[input$wp_col]]
     }
 
+    # Collect type_map from JS dropdown state
+    type_map_arg <- input$col_types  # named list from gatherState()
+
     list(
       df              = rv$data,
       target          = input$target,
       predictors      = input$predictors,
       categoricals    = input$categoricals,
       linpreds        = input$linpreds,
+      type_map        = type_map_arg,
       degree          = degree,
       allowed_func    = allowed_func,
       nfold           = na_to_null(input$nfold_override),
@@ -650,6 +721,36 @@ function(input, output, session) {
     req(rv$data, input$target, input$predictors)
 
     fit_args <- build_fit_args_()
+
+    # --- Type validation before fitting ---
+    if (!is.null(fit_args$type_map)) {
+      validation <- validate_types(rv$data, fit_args$type_map, fit_args$predictors)
+
+      if (length(validation$warnings) > 0L) {
+        showNotification(
+          paste("Type warnings:", paste(validation$warnings, collapse = "; ")),
+          type = "warning", duration = 8
+        )
+      }
+
+      if (!validation$ok) {
+        showNotification(
+          HTML(paste0("<strong>Type errors (fix before fitting):</strong><br>",
+                      paste(validation$errors, collapse = "<br>"))),
+          type = "error", duration = 15
+        )
+        return()
+      }
+
+      if (length(validation$date_columns) > 0L) {
+        showNotification(
+          paste("Date columns converted to numeric (days since epoch):",
+                paste(validation$date_columns, collapse = ", ")),
+          type = "message", duration = 6
+        )
+      }
+    }
+
     use_async <- requireNamespace("callr", quietly = TRUE)
 
     if (use_async) {
@@ -908,8 +1009,8 @@ function(input, output, session) {
             tags$div(class = "col-md-3",
                      tags$div(class = "card text-center",
                               style = "padding: 8px;",
-                              tags$h6("GCV"),
-                              tags$h4(sprintf("%.2f", s$gcv[i])))),
+                              tags$h6("CV R\u00b2"),
+                              tags$h4(if (!is.na(s$cv_rsq[i])) sprintf("%.4f", s$cv_rsq[i]) else "N/A"))),
             tags$div(class = "col-md-3",
                      tags$div(class = "card text-center",
                               style = "padding: 8px;",
@@ -960,7 +1061,7 @@ function(input, output, session) {
           tags$div(class = "col-md-3",
                    tags$div(class = "card text-center",
                             style = "padding: 10px;",
-                            tags$h6("GCV"), tags$h4(sprintf("%.2f", s$gcv)))),
+                            tags$h6("CV R\u00b2"), tags$h4(if (!is.na(s$cv_rsq)) sprintf("%.4f", s$cv_rsq) else "N/A"))),
           tags$div(class = "col-md-3",
                    tags$div(class = "card text-center",
                             style = "padding: 10px;",

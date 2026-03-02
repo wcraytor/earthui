@@ -33,6 +33,8 @@ fluidPage(
     .eui-matrix-header th { position: sticky; top: 0; z-index: 2; background: var(--bs-body-bg, #fff); }
     .eui-matrix-header th:first-child { position: sticky; left: 0; z-index: 3; }
     .eui-matrix-rowlabel { position: sticky; left: 0; z-index: 1; background: var(--bs-body-bg, #fff); }
+    .eui-type-select { appearance: auto; -webkit-appearance: auto; }
+    [data-bs-theme='dark'] .eui-type-select { background: #2c3e50 !important; color: #ecf0f1 !important; border-color: #555 !important; }
   "))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -194,6 +196,9 @@ fluidPage(
                   $('#eui_inc_' + i).prop('checked', sv.inc);
                   $('#eui_fac_' + i).prop('checked', sv.fac);
                   $('#eui_lin_' + i).prop('checked', sv.lin);
+                  if (sv.type) {
+                    $('#eui_type_' + i).val(sv.type);
+                  }
                 }
               }
               $('.eui-var-cb').first().trigger('change');
@@ -265,10 +270,20 @@ fluidPage(
       }
       // Reset linpreds: uncheck all Linear checkboxes
       $('[id^=eui_lin_]').prop('checked', false);
+      // Reset type dropdowns to auto-detected values
+      if (window.euiDetectedTypes && window.euiCols) {
+        for (var i = 0; i < window.euiCols.length; i++) {
+          var dt = window.euiDetectedTypes[window.euiCols[i]];
+          if (dt) {
+            $('#eui_type_' + (i + 1)).val(dt);
+          }
+        }
+      }
       // Check all interaction checkboxes (allowed = NULL)
       $('.eui-interaction-cb').prop('checked', true);
       // Trigger change events
       if ($('.eui-var-cb').length) $('.eui-var-cb').first().trigger('change');
+      if ($('.eui-type-select').length) $('.eui-type-select').first().trigger('change');
       if ($('.eui-interaction-cb').length) $('.eui-interaction-cb').first().trigger('change');
     });
 
@@ -313,7 +328,7 @@ fluidPage(
         uiOutput("target_selector"),
         h5("Predictor Settings"),
         tags$p(class = "text-muted", style = "font-size: 0.8em; margin-bottom: 5px;",
-               "Inc = include as predictor, Factor = treat as categorical, Linear = linear-only (no hinges)"),
+               "Type = column data type, Inc = include as predictor, Factor = treat as categorical, Linear = linear-only (no hinges)"),
         div(style = "max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 4px;",
             uiOutput("variable_table")),
         hr(),

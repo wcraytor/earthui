@@ -10,6 +10,7 @@ fit_earth(
   predictors,
   categoricals = NULL,
   linpreds = NULL,
+  type_map = NULL,
   degree = 1L,
   allowed_func = NULL,
   nfold = NULL,
@@ -59,6 +60,12 @@ categorical (converted to factors before fitting). Default is \code{NULL}.}
 
 \item{linpreds}{Character vector. Names of predictors constrained to enter
 the model linearly (no hinge functions). Default is \code{NULL}.}
+
+\item{type_map}{Named list or character vector. Maps column names to
+declared types (e.g., \code{"numeric"}, \code{"Date"}, \code{"factor"}). When provided,
+columns are coerced before fitting: Date/POSIXct columns are converted
+to numeric (days/seconds since epoch), and type-derived categoricals are
+merged into \code{categoricals}. Default is \code{NULL} (no coercion).}
 
 \item{degree}{Integer. Maximum degree of interaction. Default is 1
 (no interactions). When >= 2, cross-validation is automatically enabled.}

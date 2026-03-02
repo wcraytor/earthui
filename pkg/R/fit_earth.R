@@ -10,6 +10,11 @@
 #'   categorical (converted to factors before fitting). Default is `NULL`.
 #' @param linpreds Character vector. Names of predictors constrained to enter
 #'   the model linearly (no hinge functions). Default is `NULL`.
+#' @param type_map Named list or character vector. Maps column names to
+#'   declared types (e.g., `"numeric"`, `"Date"`, `"factor"`). When provided,
+#'   columns are coerced before fitting: Date/POSIXct columns are converted
+#'   to numeric (days/seconds since epoch), and type-derived categoricals are
+#'   merged into `categoricals`. Default is `NULL` (no coercion).
 #' @param degree Integer. Maximum degree of interaction. Default is 1
 #'   (no interactions). When >= 2, cross-validation is automatically enabled.
 #' @param allowed_func Function or `NULL`. An allowed function as returned by
@@ -86,7 +91,8 @@
 #'                     predictors = c("cyl", "disp", "hp", "wt"))
 #' format_summary(result)
 fit_earth <- function(df, target, predictors, categoricals = NULL,
-                      linpreds = NULL, degree = 1L, allowed_func = NULL,
+                      linpreds = NULL, type_map = NULL,
+                      degree = 1L, allowed_func = NULL,
                       nfold = NULL, nprune = NULL, thresh = NULL,
                       penalty = NULL, minspan = NULL, endspan = NULL,
                       fast.k = NULL, pmethod = NULL, glm = NULL,
@@ -136,6 +142,17 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   # --- Prepare data ---
   multi_response <- length(target) > 1L
   model_df <- df[, c(target, predictors), drop = FALSE]
+
+  # Apply declared type coercions (Date->numeric, logical, factor, etc.)
+  if (!is.null(type_map)) {
+    model_df <- coerce_types_(model_df, type_map, predictors)
+    # Merge type-derived categoricals
+    type_cats <- names(type_map)[vapply(type_map, function(t) {
+      t %in% c("factor", "character")
+    }, logical(1L))]
+    type_cats <- intersect(type_cats, predictors)
+    categoricals <- union(categoricals, type_cats)
+  }
 
   # Convert categoricals to factors
   if (!is.null(categoricals)) {
