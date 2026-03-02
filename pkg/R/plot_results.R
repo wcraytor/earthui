@@ -879,7 +879,8 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
 
   if (length(numeric_vars) == 0L) {
     contrib <- eval_g_function_(model, grp, data, response_idx = ri)
-    fvar <- grp$base_vars[grp$base_vars %in% names(data)]
+    fvar <- grp$base_vars[grp$base_vars %in% earth_result$categoricals]
+    fvar <- fvar[fvar %in% names(data)]
     if (length(fvar) == 0L) {
       return(
         ggplot2::ggplot() +
@@ -889,6 +890,79 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
           ggplot2::theme_void()
       )
     }
+
+    if (length(fvar) >= 3L) {
+      # Three or more factors with d = 0: faceted heatmap tiles
+      fvar1 <- fvar[1]
+      fvar2 <- fvar[2]
+      fvar3 <- fvar[3]
+      lvls1 <- sort(unique(as.character(data[[fvar1]])))
+      lvls2 <- sort(unique(as.character(data[[fvar2]])))
+      lvls3 <- sort(unique(as.character(data[[fvar3]])))
+      combos <- expand.grid(f1 = lvls1, f2 = lvls2, f3 = lvls3,
+                             stringsAsFactors = FALSE)
+      combos$y <- vapply(seq_len(nrow(combos)), function(i) {
+        eval_row <- data[1L, , drop = FALSE]
+        eval_row[[fvar1]] <- combos$f1[i]
+        eval_row[[fvar2]] <- combos$f2[i]
+        eval_row[[fvar3]] <- combos$f3[i]
+        eval_g_function_(model, grp, eval_row, response_idx = ri)
+      }, numeric(1))
+      return(
+        ggplot2::ggplot(combos,
+          ggplot2::aes(x = .data$f1, y = .data$f2, fill = .data$y)) +
+          ggplot2::geom_tile(color = "white", linewidth = 1.5) +
+          ggplot2::geom_text(
+            ggplot2::aes(label = dollar_format_(.data$y)),
+            size = 3.5, fontface = "bold",
+            family = eui_font_family_()) +
+          ggplot2::facet_wrap(~ f3, labeller = ggplot2::labeller(
+            f3 = function(x) paste(fvar3, "=", x))) +
+          ggplot2::scale_fill_gradient2(
+            low = "#2166AC", mid = "white", high = "#B2182B",
+            midpoint = 0, labels = dollar_format_) +
+          ggplot2::labs(title = title, x = fvar1, y = fvar2,
+                        fill = "Contribution") +
+          ggplot2::theme_minimal() +
+          ggplot2::theme(
+            plot.title = ggplot2::element_text(face = "bold", size = 13),
+            panel.grid = ggplot2::element_blank(),
+            strip.text = ggplot2::element_text(face = "bold", size = 11))
+      )
+    }
+
+    if (length(fvar) == 2L) {
+      # Two factors with d = 0: heatmap tile chart
+      fvar1 <- fvar[1]
+      fvar2 <- fvar[2]
+      plot_df <- data.frame(
+        f1 = as.character(data[[fvar1]]),
+        f2 = as.character(data[[fvar2]]),
+        y  = contrib,
+        stringsAsFactors = FALSE
+      )
+      agg <- stats::aggregate(y ~ f1 + f2, data = plot_df, FUN = mean)
+      return(
+        ggplot2::ggplot(agg,
+          ggplot2::aes(x = .data$f1, y = .data$f2, fill = .data$y)) +
+          ggplot2::geom_tile(color = "white", linewidth = 1.5) +
+          ggplot2::geom_text(
+            ggplot2::aes(label = dollar_format_(.data$y)),
+            size = 4.5, fontface = "bold",
+            family = eui_font_family_()) +
+          ggplot2::scale_fill_gradient2(
+            low = "#2166AC", mid = "white", high = "#B2182B",
+            midpoint = 0, labels = dollar_format_) +
+          ggplot2::labs(title = title, x = fvar1, y = fvar2,
+                        fill = "Contribution") +
+          ggplot2::theme_minimal() +
+          ggplot2::theme(
+            plot.title = ggplot2::element_text(face = "bold", size = 13),
+            panel.grid = ggplot2::element_blank())
+      )
+    }
+
+    # Single factor with d = 0: boxplot + jitter
     fvar <- fvar[1]
     plot_df <- data.frame(x = as.character(data[[fvar]]), y = contrib,
                           stringsAsFactors = FALSE)
@@ -909,16 +983,15 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
   var <- numeric_vars[1]
   var_col <- data[[var]]
 
+  # Identify factor variables in the group
+  factor_vars <- grp$base_vars[grp$base_vars %in% earth_result$categoricals]
+  factor_vars <- factor_vars[factor_vars %in% names(data)]
+
   # Compute training-data contributions using bx (exact match to model)
   term_indices <- vapply(grp$terms, function(t) t$index, integer(1))
   bx <- model$bx
   coef_mat <- model$coefficients
   coefs <- if (multi) as.numeric(coef_mat[, ri]) else as.numeric(coef_mat)
-  contrib <- rowSums(sweep(bx[, term_indices, drop = FALSE], 2,
-                           coefs[term_indices], "*"))
-
-  plot_df <- data.frame(x = var_col, y = contrib)
-  plot_df <- plot_df[order(plot_df$x), ]
 
   dirs <- model$dirs[model$selected.terms, , drop = FALSE]
   cuts <- model$cuts[model$selected.terms, , drop = FALSE]
@@ -954,6 +1027,144 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
   }
   grid_x <- sort(unique(grid_x))
   grid_x <- grid_x[grid_x >= x_min & grid_x <= x_max]
+
+  # --- Factor-aware: separate line per factor level / combination ---
+  if (length(factor_vars) == 1L) {
+    # Single factor: color by factor level
+    fvar <- factor_vars[1]
+    levels_in_data <- sort(unique(as.character(data[[fvar]])))
+
+    line_dfs <- list()
+    label_dfs <- list()
+    for (lvl in levels_in_data) {
+      eval_row <- data[1L, , drop = FALSE]
+      eval_row[[fvar]] <- lvl
+      grid_y <- vapply(grid_x, function(xv) {
+        eval_row[[var]] <- xv
+        eval_g_function_(model, grp, eval_row, response_idx = ri)
+      }, numeric(1))
+      line_dfs[[lvl]] <- data.frame(x = grid_x, y = grid_y, level = lvl,
+                                    stringsAsFactors = FALSE)
+
+      breaks <- c(x_min, knots, x_max)
+      break_y <- vapply(breaks, function(xv) {
+        eval_row[[var]] <- xv
+        eval_g_function_(model, grp, eval_row, response_idx = ri)
+      }, numeric(1))
+      n_seg <- length(breaks) - 1L
+      if (n_seg > 0L) {
+        sdf <- data.frame(
+          x_mid = (breaks[-length(breaks)] + breaks[-1]) / 2,
+          y_mid = (break_y[-length(break_y)] + break_y[-1]) / 2,
+          slope = diff(break_y) / diff(breaks),
+          level = lvl,
+          stringsAsFactors = FALSE
+        )
+        sdf$label <- format_slope_labels_(sdf$slope, breaks)
+        label_dfs[[lvl]] <- sdf
+      }
+    }
+
+    all_lines <- do.call(rbind, line_dfs)
+    all_labels <- if (length(label_dfs) > 0L) do.call(rbind, label_dfs) else
+      data.frame(x_mid = numeric(0), y_mid = numeric(0), slope = numeric(0),
+                 level = character(0), label = character(0))
+
+    # Scatter points colored by factor level
+    contrib <- rowSums(sweep(bx[, term_indices, drop = FALSE], 2,
+                             coefs[term_indices], "*"))
+    plot_df <- data.frame(x = var_col, y = contrib,
+                          level = as.character(data[[fvar]]),
+                          stringsAsFactors = FALSE)
+
+    p <- ggplot2::ggplot(plot_df,
+           ggplot2::aes(x = .data$x, y = .data$y, color = .data$level)) +
+      ggplot2::geom_point(alpha = 0.4) +
+      ggplot2::geom_line(data = all_lines,
+                         ggplot2::aes(x = .data$x, y = .data$y,
+                                      color = .data$level),
+                         linewidth = 0.9)
+
+    if (nrow(all_labels) > 0L) {
+      p <- p + ggplot2::geom_label(
+        data = all_labels,
+        ggplot2::aes(x = .data$x_mid, y = .data$y_mid, label = .data$label,
+                     color = .data$level),
+        size = 3.0, fill = "white", alpha = 0.85,
+        label.padding = ggplot2::unit(0.15, "lines"),
+        label.size = 0.3, show.legend = FALSE,
+        family = eui_font_family_()
+      )
+    }
+
+    if (length(knots) > 0L) {
+      p <- p + ggplot2::geom_vline(xintercept = knots, linetype = "dashed",
+                                   color = "grey50", alpha = 0.5)
+    }
+
+    return(
+      p + ggplot2::scale_x_continuous(labels = comma_format_) +
+        ggplot2::scale_y_continuous(labels = dollar_format_) +
+        ggplot2::labs(title = title, x = var,
+                      y = paste("Contribution to", target_label),
+                      color = fvar) +
+        ggplot2::theme_minimal() +
+        ggplot2::theme(
+          plot.title = ggplot2::element_text(face = "bold", size = 13))
+    )
+  }
+
+  if (length(factor_vars) >= 2L) {
+    # Two+ factors: color by first factor, linetype by second
+    fvar1 <- factor_vars[1]
+    fvar2 <- factor_vars[2]
+    lvls1 <- sort(unique(as.character(data[[fvar1]])))
+    lvls2 <- sort(unique(as.character(data[[fvar2]])))
+    combos <- expand.grid(f1 = lvls1, f2 = lvls2, stringsAsFactors = FALSE)
+
+    line_dfs <- list()
+    for (i in seq_len(nrow(combos))) {
+      eval_row <- data[1L, , drop = FALSE]
+      eval_row[[fvar1]] <- combos$f1[i]
+      eval_row[[fvar2]] <- combos$f2[i]
+      grid_y <- vapply(grid_x, function(xv) {
+        eval_row[[var]] <- xv
+        eval_g_function_(model, grp, eval_row, response_idx = ri)
+      }, numeric(1))
+      line_dfs[[i]] <- data.frame(x = grid_x, y = grid_y,
+                                  f1 = combos$f1[i], f2 = combos$f2[i],
+                                  stringsAsFactors = FALSE)
+    }
+    all_lines <- do.call(rbind, line_dfs)
+
+    p <- ggplot2::ggplot(all_lines,
+           ggplot2::aes(x = .data$x, y = .data$y,
+                        color = .data$f1, linetype = .data$f2)) +
+      ggplot2::geom_line(linewidth = 0.9)
+
+    if (length(knots) > 0L) {
+      p <- p + ggplot2::geom_vline(xintercept = knots, linetype = "dashed",
+                                   color = "grey50", alpha = 0.5)
+    }
+
+    return(
+      p + ggplot2::scale_x_continuous(labels = comma_format_) +
+        ggplot2::scale_y_continuous(labels = dollar_format_) +
+        ggplot2::labs(title = title, x = var,
+                      y = paste("Contribution to", target_label),
+                      color = fvar1, linetype = fvar2) +
+        ggplot2::theme_minimal() +
+        ggplot2::theme(
+          plot.title = ggplot2::element_text(face = "bold", size = 13))
+    )
+  }
+
+  # --- No factors: single line (original behavior) ---
+  contrib <- rowSums(sweep(bx[, term_indices, drop = FALSE], 2,
+                           coefs[term_indices], "*"))
+
+  plot_df <- data.frame(x = var_col, y = contrib)
+  plot_df <- plot_df[order(plot_df$x), ]
 
   eval_row <- data[1L, , drop = FALSE] # nolint: object_usage_linter. Used in closures below.
   grid_y <- vapply(grid_x, function(xv) {
@@ -1033,6 +1244,10 @@ plot_g_3d_ <- function(earth_result, grp, response_idx = NULL) {
   title <- sprintf("%s  (%d term%s)", grp$label,
                    length(grp$terms), if (length(grp$terms) > 1L) "s" else "")
 
+  # Detect factor variables in the group
+  factor_vars <- grp$base_vars[grp$base_vars %in% earth_result$categoricals]
+  factor_vars <- factor_vars[factor_vars %in% names(data)]
+
   n_grid <- 50L
   x1_seq <- seq(min(data[[var1]], na.rm = TRUE),
                 max(data[[var1]], na.rm = TRUE), length.out = n_grid)
@@ -1040,26 +1255,76 @@ plot_g_3d_ <- function(earth_result, grp, response_idx = NULL) {
                 max(data[[var2]], na.rm = TRUE), length.out = n_grid)
   grid <- expand.grid(x1 = x1_seq, x2 = x2_seq)
 
+  # --- Plotly unavailable: fall back to faceted ggplot contour ---
+  if (!requireNamespace("plotly", quietly = TRUE)) {
+    return(plot_g_contour_(earth_result, grp, response_idx = ri))
+  }
+
+  # --- Factor-aware: dropdown to switch between factor levels ---
+  if (length(factor_vars) > 0L) {
+    fvar <- factor_vars[1]
+    levels_in_data <- sort(unique(as.character(data[[fvar]])))
+    n_lvl <- length(levels_in_data)
+
+    fig <- plotly::plot_ly()
+    for (i in seq_along(levels_in_data)) {
+      lvl <- levels_in_data[i]
+      eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
+      eval_data[[var1]] <- grid$x1
+      eval_data[[var2]] <- grid$x2
+      eval_data[[fvar]] <- lvl
+      z_vals <- eval_g_function_(model, grp, eval_data, response_idx = ri)
+      z_mat <- matrix(z_vals, nrow = n_grid, ncol = n_grid)
+
+      fig <- fig |> plotly::add_surface(
+        x = x1_seq, y = x2_seq, z = z_mat,
+        colorscale = list(c(0, "#2166AC"), c(0.5, "#f7f7f7"), c(1, "#B2182B")),
+        opacity = 0.85,
+        colorbar = list(title = paste("Contribution\nto", target_label)),
+        name = lvl,
+        visible = (i == 1L),
+        showlegend = FALSE
+      )
+    }
+
+    buttons <- lapply(seq_along(levels_in_data), function(i) {
+      vis <- rep(FALSE, n_lvl)
+      vis[i] <- TRUE
+      list(method = "update",
+           args = list(list(visible = as.list(vis))),
+           label = levels_in_data[i])
+    })
+
+    return(
+      fig |> plotly::layout(
+        font = list(family = eui_font_family_()),
+        title = list(text = title, font = list(family = eui_font_family_(),
+                                                size = 14)),
+        updatemenus = list(list(
+          type = "dropdown", active = 0L,
+          buttons = buttons,
+          x = 0.0, xanchor = "left", y = 1.12, yanchor = "top"
+        )),
+        annotations = list(list(
+          text = fvar, x = 0.0, xref = "paper", xanchor = "right",
+          y = 1.12, yref = "paper", yanchor = "top",
+          showarrow = FALSE, font = list(size = 12)
+        )),
+        scene = list(
+          xaxis = list(title = var1),
+          yaxis = list(title = var2),
+          zaxis = list(title = paste("Contribution to", target_label))
+        )
+      )
+    )
+  }
+
+  # --- No factors: single surface (original behavior) ---
   eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
   eval_data[[var1]] <- grid$x1
   eval_data[[var2]] <- grid$x2
   z_vals <- eval_g_function_(model, grp, eval_data, response_idx = ri)
   z_mat <- matrix(z_vals, nrow = n_grid, ncol = n_grid)
-
-  if (!requireNamespace("plotly", quietly = TRUE)) {
-    grid$z <- z_vals
-    return(
-      ggplot2::ggplot(grid, ggplot2::aes(x = .data$x1, y = .data$x2)) +
-        ggplot2::geom_contour_filled(ggplot2::aes(z = .data$z), bins = 15) +
-        ggplot2::scale_x_continuous(labels = comma_format_) +
-        ggplot2::scale_y_continuous(labels = comma_format_) +
-        ggplot2::labs(title = title, x = var1, y = var2,
-                      fill = paste("Contribution\nto", target_label)) +
-        ggplot2::theme_minimal() +
-        ggplot2::theme(
-          plot.title = ggplot2::element_text(face = "bold", size = 13))
-    )
-  }
 
   term_indices <- vapply(grp$terms, function(t) t$index, integer(1))
   bx <- model$bx
@@ -1113,12 +1378,48 @@ plot_g_contour_ <- function(earth_result, grp, response_idx = NULL) {
   title <- sprintf("%s  (%d term%s)", grp$label,
                    length(grp$terms), if (length(grp$terms) > 1L) "s" else "")
 
+  # Detect factor variables in the group
+  factor_vars <- grp$base_vars[grp$base_vars %in% earth_result$categoricals]
+  factor_vars <- factor_vars[factor_vars %in% names(data)]
+
   n_grid <- 80L
   x1_seq <- seq(min(data[[var1]], na.rm = TRUE),
                 max(data[[var1]], na.rm = TRUE), length.out = n_grid)
   x2_seq <- seq(min(data[[var2]], na.rm = TRUE),
                 max(data[[var2]], na.rm = TRUE), length.out = n_grid)
 
+  if (length(factor_vars) > 0L) {
+    # Factor-aware: separate contour per factor level, faceted
+    fvar <- factor_vars[1]
+    levels_in_data <- sort(unique(as.character(data[[fvar]])))
+    all_grids <- list()
+    for (lvl in levels_in_data) {
+      grid <- expand.grid(x1 = x1_seq, x2 = x2_seq)
+      eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
+      eval_data[[var1]] <- grid$x1
+      eval_data[[var2]] <- grid$x2
+      eval_data[[fvar]] <- lvl
+      grid$z <- eval_g_function_(model, grp, eval_data, response_idx = ri)
+      grid$level <- lvl
+      all_grids[[lvl]] <- grid
+    }
+    all_grid <- do.call(rbind, all_grids)
+
+    return(
+      ggplot2::ggplot(all_grid, ggplot2::aes(x = .data$x1, y = .data$x2)) +
+        ggplot2::geom_contour_filled(ggplot2::aes(z = .data$z), bins = 15) +
+        ggplot2::facet_wrap(~ level) +
+        ggplot2::scale_x_continuous(labels = comma_format_) +
+        ggplot2::scale_y_continuous(labels = comma_format_) +
+        ggplot2::labs(title = title, x = var1, y = var2,
+                      fill = paste("Contribution\nto", target_label)) +
+        ggplot2::theme_minimal() +
+        ggplot2::theme(
+          plot.title = ggplot2::element_text(face = "bold", size = 13))
+    )
+  }
+
+  # No factors: single contour
   grid <- expand.grid(x1 = x1_seq, x2 = x2_seq)
   eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
   eval_data[[var1]] <- grid$x1
@@ -1157,53 +1458,88 @@ plot_g_persp_ <- function(earth_result, grp, theta = 30, phi = 25,
   title <- sprintf("%s  (%d term%s)", grp$label,
                    length(grp$terms), if (length(grp$terms) > 1L) "s" else "")
 
+  # Detect factor variables in the group
+  factor_vars <- grp$base_vars[grp$base_vars %in% earth_result$categoricals]
+  factor_vars <- factor_vars[factor_vars %in% names(data)]
+
   n_grid <- 50L
   x1_seq <- seq(min(data[[var1]], na.rm = TRUE),
                 max(data[[var1]], na.rm = TRUE), length.out = n_grid)
   x2_seq <- seq(min(data[[var2]], na.rm = TRUE),
                 max(data[[var2]], na.rm = TRUE), length.out = n_grid)
-
   grid <- expand.grid(x1 = x1_seq, x2 = x2_seq)
-  eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
-  eval_data[[var1]] <- grid$x1
-  eval_data[[var2]] <- grid$x2
-  z_vals <- eval_g_function_(model, grp, eval_data, response_idx = ri)
-  z_mat <- matrix(z_vals, nrow = n_grid, ncol = n_grid)
-
-  # Color the surface facets by z-value (blue -> white -> red)
-  z_facet <- z_mat[-1, -1] + z_mat[-n_grid, -1] +
-             z_mat[-1, -n_grid] + z_mat[-n_grid, -n_grid]
-  z_facet <- z_facet / 4  # average of 4 corners
-
-  z_range <- range(z_facet, na.rm = TRUE)
-  if (diff(z_range) == 0) {
-    z_norm <- rep(0.5, length(z_facet))
-  } else {
-    z_norm <- (z_facet - z_range[1]) / diff(z_range)
-  }
 
   # Blue (#2166AC) -> White (#F7F7F7) -> Red (#B2182B)
   n_cols <- 256L
   col_ramp <- grDevices::colorRampPalette(
     c("#2166AC", "#F7F7F7", "#B2182B")
   )(n_cols)
-  facet_col <- col_ramp[pmax(1L, pmin(n_cols, as.integer(z_norm * (n_cols - 1L)) + 1L))]
+
+  # Helper: draw one persp panel given a z matrix and subtitle
+  draw_persp_ <- function(z_mat, subtitle) {
+    z_range_mat <- range(z_mat, na.rm = TRUE)
+    if (diff(z_range_mat) == 0) {
+      # Flat surface (e.g. reference level) — add tiny offset so persp() works
+      z_mat[1, 1] <- z_range_mat[1] + 1e-6
+    }
+    z_facet <- z_mat[-1, -1] + z_mat[-n_grid, -1] +
+               z_mat[-1, -n_grid] + z_mat[-n_grid, -n_grid]
+    z_facet <- z_facet / 4
+    z_range <- range(z_facet, na.rm = TRUE)
+    if (diff(z_range) == 0) {
+      z_norm <- rep(0.5, length(z_facet))
+    } else {
+      z_norm <- (z_facet - z_range[1]) / diff(z_range)
+    }
+    facet_col <- col_ramp[pmax(1L, pmin(n_cols,
+                          as.integer(z_norm * (n_cols - 1L)) + 1L))]
+    graphics::persp(
+      x = x1_seq, y = x2_seq, z = z_mat,
+      theta = theta, phi = phi,
+      col = facet_col, shade = 0.3, border = NA,
+      xlab = var1, ylab = var2,
+      zlab = paste("Contribution to", target_label),
+      main = subtitle,
+      cex.main = 1.0, font.main = 2,
+      ticktype = "detailed", nticks = 5
+    )
+  }
 
   # Save and restore par
   old_par <- graphics::par(no.readonly = TRUE)
   on.exit(graphics::par(old_par), add = TRUE)
-  graphics::par(mar = c(2, 2, 3, 2), family = eui_font_family_())
+  graphics::par(family = eui_font_family_())
 
-  graphics::persp(
-    x = x1_seq, y = x2_seq, z = z_mat,
-    theta = theta, phi = phi,
-    col = facet_col, shade = 0.3, border = NA,
-    xlab = var1, ylab = var2,
-    zlab = paste("Contribution to", target_label),
-    main = title,
-    cex.main = 1.1, font.main = 2,
-    ticktype = "detailed", nticks = 5
-  )
+  if (length(factor_vars) > 0L) {
+    # Factor-aware: side-by-side persp panels per factor level
+    fvar <- factor_vars[1]
+    levels_in_data <- sort(unique(as.character(data[[fvar]])))
+    n_lvl <- length(levels_in_data)
+
+    graphics::par(mfrow = c(1L, n_lvl), mar = c(2, 1, 3, 1), oma = c(0, 0, 2, 0))
+
+    for (lvl in levels_in_data) {
+      eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
+      eval_data[[var1]] <- grid$x1
+      eval_data[[var2]] <- grid$x2
+      eval_data[[fvar]] <- lvl
+      z_vals <- eval_g_function_(model, grp, eval_data, response_idx = ri)
+      z_mat <- matrix(z_vals, nrow = n_grid, ncol = n_grid)
+      draw_persp_(z_mat, paste0(fvar, " = ", lvl))
+    }
+
+    graphics::mtext(title, outer = TRUE, cex = 1.1, font = 2)
+  } else {
+    # No factors: single panel
+    graphics::par(mar = c(2, 2, 3, 2))
+
+    eval_data <- data[rep(1L, nrow(grid)), , drop = FALSE]
+    eval_data[[var1]] <- grid$x1
+    eval_data[[var2]] <- grid$x2
+    z_vals <- eval_g_function_(model, grp, eval_data, response_idx = ri)
+    z_mat <- matrix(z_vals, nrow = n_grid, ncol = n_grid)
+    draw_persp_(z_mat, title)
+  }
 
   invisible(NULL)
 }

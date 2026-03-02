@@ -1,8 +1,8 @@
 ---
-title: "The g-Function Notation for MARS Models"
+title: "The g-Function Notation for Earth Models"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{The g-Function Notation for MARS Models}
+  %\VignetteIndexEntry{The g-Function Notation for Earth Models}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,8 +16,9 @@ knitr::opts_chunk$set(
 
 ## Overview
 
-A MARS model (Multivariate Adaptive Regression Splines, implemented by the
-`earth` package) produces a sum of a base constant plus additional terms, each
+An earth model (Enhanced Adaptive Regression Through Hinges, implementing
+Multivariate Adaptive Regression Splines^[MARS is a registered trademark of
+Minitab, LLC.]) produces a sum of a base constant plus additional terms, each
 involving one to three variables. To analyze and visualize such a model, we
 first split it into individual terms, then combine terms that share the same
 set of variables into single interaction expressions called **g-functions**.
@@ -28,7 +29,7 @@ vignette describes that notation and the reasoning behind it.
 
 ## Grouping Model Terms
 
-Assume the maximum degree of interaction is 3. A fitted MARS model can be
+Assume the maximum degree of interaction is 3. A fitted earth model can be
 partitioned into four groups of expressions:
 
 - **Group 0**: the base constant.
@@ -105,14 +106,14 @@ variable at different values to show a subset of the function's behavior.
 
 ## The Model Equation
 
-The MARS model is broken into four groups of expressions. The indexing
+The earth model is broken into four groups of expressions. The indexing
 ${}^{f_{j,k}}g^{j}_{k}$ tells us:
 
 - $j$: the group and number of variables.
 - $f_{j,k}$: the number of factor variables.
 - $d = j - f_{j,k}$: the graph dimension.
 
-The estimated response $\hat{P}$ provided by the MARS model can be expressed
+The estimated response $\hat{P}$ provided by the earth model can be expressed
 as:
 
 $$
@@ -157,33 +158,323 @@ interactions warrant graphing, as identified by the model.
 
 ## Example
 
+To demonstrate the full range of g-function types, we model the daily
+operating cost of a food-processing plant that operates across three
+U.S. regions, runs two shifts, and processes three product types.
+
+**The operation.** A national food company operates identical
+processing plants in three U.S. climate zones. Each plant receives raw
+agricultural product, runs it through gas-fired drying ovens, cools the
+output with electric refrigeration compressors, and packages it for
+shipment. Plants run a Day shift and a Night shift, processing one of
+three product types per batch.
+
+**What each variable measures and why it drives cost:**
+
+- **gas_gallons** (5–30): natural gas consumed by the drying ovens.
+  More throughput requires more gas. The burners lose efficiency above
+  about 15 gallons/day, so the per-gallon cost rises with heavy use.
+- **electric_kwh** (100–500): electricity consumed by the refrigeration
+  compressors and conveyor motors. The local utility applies demand
+  surcharges above 300 kWh, increasing the per-kWh rate.
+- **labor_hours** (10–80): total crew-hours worked on the shift. Larger
+  batches need more workers on the line, and hours above 40 trigger
+  overtime pay.
+- **region** (North / South / West): the plant's climate zone. Climate
+  affects both the *baseline* cost and the *marginal* cost of increased
+  throughput:
+    - *North*: cold winters drive the highest base cost (supplemental
+      space heating, winter pipeline surcharges). However, the Northern
+      plants were built with heavy-duty infrastructure — oversized
+      boilers, redundant compressors, high-capacity gas feeds — so
+      marginal costs stay low when throughput increases.
+    - *South*: warm climate gives the lowest base cost. However, the
+      Southern plants have lighter infrastructure (smaller gas feeds,
+      no on-site fuel storage, fewer night-shift contractors), so
+      marginal costs escalate steeply when gas or electric draw
+      exceeds normal levels.
+    - *West*: moderate climate and mid-range infrastructure place
+      these plants between North and South for both base and marginal
+      costs.
+- **shift** (Day / Night): which shift ran the batch. Night shifts
+  incur an overtime wage premium, and the utility charges peak rates for
+  nighttime industrial draw.
+- **product** (Canned / Dried / Frozen): the product type processed
+  in that batch:
+    - *Canned*: straightforward cook-seal-label workflow. Moderate,
+      predictable energy use — the baseline product type.
+    - *Dried*: extended oven time drives heavy gas consumption; drying
+      cycles are sensitive to ambient humidity (varies by region).
+    - *Frozen*: blast-freezer compressors draw heavy electricity;
+      cooling efficiency depends on ambient temperature and on whether
+      the utility is charging peak Night rates.
+
+**Why these variables interact.**
+
+- *Gas × electricity*: when the dryers and compressors both run at high
+  capacity simultaneously, the plant's total demand spikes above the
+  utility's threshold and triggers compounding demand surcharges.
+- *Gas × electricity × labor*: the most expensive days occur when
+  throughput is maximal — heavy gas, heavy electric, and a full crew on
+  overtime — producing a three-way compounding effect.
+- *Gas × region*: per-gallon fuel costs rise steeply in the South
+  because the lighter gas infrastructure hits capacity limits sooner.
+  Northern plants, with heavy-duty pipeline connections, absorb
+  increased gas usage at lower marginal cost.
+- *Electricity × shift*: the utility's peak-rate surcharge is larger at
+  night, so high electric draw costs more on the Night shift.
+- *Region × shift*: the night-shift premium varies dramatically by
+  region. Southern plants — which lack on-site fuel storage and
+  night-shift maintenance crews — incur the largest Night surcharge.
+  Western plants face a moderate Night premium, while Northern plants
+  (already staffed for round-the-clock winter operations) add only a
+  small Night increment.
+- *Gas × electricity × region*: when both gas and electric draw are
+  high, Southern plants face the steepest compounding surcharges
+  because their lighter utility grid penalizes simultaneous peak
+  demand most aggressively. Northern plants, with heavy-duty
+  infrastructure, see only a small three-way premium.
+- *Gas × region × shift*: the per-gallon gas surcharge on Night shifts
+  varies by region. Southern Night shifts pay the steepest per-gallon
+  premium (no on-site fuel storage forces emergency deliveries at
+  night). Western Night shifts face a moderate premium.
+- *Product × region × shift*: certain product-region-shift
+  combinations compound costs beyond what the individual effects would
+  predict. Frozen product at a Southern plant on the Night shift is the
+  most expensive triple combination — blast-freezer compressors running
+  in warm ambient air at peak nighttime electricity rates. Dried
+  product at a Southern Night shift also incurs a premium because the
+  drying ovens must run longer in humid conditions with no on-site gas
+  reserves.
+
+The synthetic cost function below encodes these relationships. We then
+fit a degree-3 earth model to recover them:
+
 ```{r}
 library(earthUI)
 
-result <- fit_earth(
-  df = mtcars,
-  target = "mpg",
-  predictors = c("cyl", "disp", "hp", "wt", "qsec"),
-  degree = 2
+set.seed(42)
+n <- 2000
+df <- data.frame(
+  gas_gallons  = runif(n, 5, 30),
+  electric_kwh = runif(n, 100, 500),
+  labor_hours  = runif(n, 10, 80),
+  region       = factor(sample(c("North", "South", "West"), n, replace = TRUE)),
+  shift        = factor(sample(c("Day", "Night"), n, replace = TRUE)),
+  product      = factor(sample(c("Canned", "Dried", "Frozen"), n, replace = TRUE))
 )
+df$cost <- 2000 +
+  40 * pmax(0, df$gas_gallons - 15) + 25 * pmax(0, 15 - df$gas_gallons) +
+  3 * pmax(0, df$electric_kwh - 300) +
+  ifelse(df$region == "North", 400, ifelse(df$region == "South", 100, 200)) +
+  ifelse(df$shift == "Night", 100, 0) +
+  ifelse(df$product == "Frozen", 200, ifelse(df$product == "Dried", 100, 0)) +
+  ifelse(df$region == "North", 5, ifelse(df$region == "South", 35, 15)) *
+    pmax(0, df$gas_gallons - 12) +
+  ifelse(df$shift == "Night", 5, 1) * pmax(0, df$electric_kwh - 250) +
+  ifelse(df$region == "South" & df$shift == "Night", 1200,
+         ifelse(df$region == "West" & df$shift == "Night", 700,
+         ifelse(df$region == "North" & df$shift == "Night", 100, 0))) +
+  0.8 * pmax(0, df$gas_gallons - 15) * pmax(0, df$electric_kwh - 300) +
+  0.02 * pmax(0, df$gas_gallons - 15) * pmax(0, df$electric_kwh - 300) *
+    pmax(0, df$labor_hours - 40) +
+  ifelse(df$region == "North", 0.05, ifelse(df$region == "South", 0.5, 0.25)) *
+    pmax(0, df$gas_gallons - 12) * pmax(0, df$electric_kwh - 250) +
+  (ifelse(df$region == "South" & df$shift == "Night", 30,
+     ifelse(df$region == "West" & df$shift == "Night", 25, 0))) *
+    pmax(0, df$gas_gallons - 10) +
+  ifelse(df$product == "Frozen" & df$region == "South" & df$shift == "Night", 800,
+    ifelse(df$product == "Frozen" & df$region == "West" & df$shift == "Night", 400,
+      ifelse(df$product == "Dried" & df$region == "South" & df$shift == "Night", 300,
+        ifelse(df$product == "Dried" & df$region == "West" & df$shift == "Night", 150, 0)))) +
+  rnorm(n, 0, 30)
 
-# List the g-functions and their indices
+result <- fit_earth(
+  df = df,
+  target = "cost",
+  predictors = c("gas_gallons", "electric_kwh", "labor_hours",
+                 "region", "shift", "product"),
+  categoricals = c("region", "shift", "product"),
+  degree = 3,
+  nk = 80
+)
+```
+
+### The g-Function Table
+
+```{r}
 gf <- list_g_functions(result)
 gf
 ```
 
-The g-function table shows each group with its label, group index $j$
-(`g_j`), position index $k$ (`g_k`), factor count $f$ (`g_f`), graph
-dimension $d$, and number of terms. The `earthUI` package uses this structure
-to automatically select the appropriate plot type for each g-function.
+The columns are: group index $j$ (`g_j`), position $k$ (`g_k`), factor
+count $f$ (`g_f`), graph dimension $d = j - f$, and number of hinge terms.
+
+### 1st-Degree: Numeric Variable (d = 1)
+
+A single numeric variable with piecewise-linear hinge functions. The slope
+labels show the marginal cost per unit (e.g., dollars per gallon):
 
 ```{r fig.width=7, fig.height=4}
-# Plot a first-degree g-function (2D line)
-plot_g_function(result, 1)
+idx <- which(gf$g_j == 1 & gf$g_f == 0)[1]
+plot_g_function(result, idx)
 ```
+
+### 1st-Degree: Factor Variable (d = 0)
+
+A categorical variable contributes a fixed offset for each level. No
+continuous axis is needed — the contribution is a single value per category:
+
+```{r fig.width=7, fig.height=4}
+idx <- which(gf$g_j == 1 & gf$g_f == 1)[1]
+plot_g_function(result, idx)
+```
+
+### 2nd-Degree: No Factors (d = 2)
+
+Two numeric variables interacting. Shown as a filled contour — the color
+represents the joint contribution to cost:
+
+```{r fig.width=7, fig.height=5}
+idx <- which(gf$g_j == 2 & gf$g_f == 0)[1]
+plot_g_contour(result, idx)
+```
+
+### 2nd-Degree: 1 Factor (d = 1)
+
+Here `electric_kwh` (numeric) interacts with `shift` (a factor with
+levels Day and Night). The factor variable acts as an indicator function
+that selects which hinge terms are active, reducing the dimension from
+$d = 2$ to $d = 1$. Instead of a 3D surface, the plot shows a separate
+piecewise-linear contribution curve for each factor level on a single 2D
+chart — `electric_kwh` on the x-axis and its contribution to `cost` on
+the y-axis.
+
+**Note:** This plot shows only the **interaction** contribution — i.e.,
+how the effect of `electric_kwh` *differs* between Day and Night shifts.
+The main effect of `electric_kwh` (which increases cost for all shifts)
+is captured separately in the 1st-degree g-function above. The total
+effect on cost is the sum of both.
+
+```{r fig.width=7, fig.height=4}
+idx <- which(gf$g_j == 2 & gf$g_f == 1)[1]
+plot_g_function(result, idx)
+```
+
+### 2nd-Degree: 2 Factors (d = 0)
+
+Here `region` (North/South/West) interacts with `shift` (Day/Night).
+Both variables are factors, so $d = 2 - 2 = 0$ — there is no continuous
+axis at all. The heatmap below shows the interaction contribution for
+every region–shift combination. South Night has the largest value because
+Southern plants — lacking night-shift infrastructure — pay a steep
+premium that the main effects of region and shift alone do not capture.
+West Night shows a moderate premium; other combinations contribute zero
+because the main effects already account for them.
+
+**Note:** This plot shows only the **non-additive** part of the cost —
+the amount beyond what the separate main effects of `region` and `shift`
+would predict. A cell reading $0 does not mean that combination is free;
+it means the cost for that combination equals the sum of its individual
+main effects (shown in the 1st-degree g-functions above).
+
+```{r fig.width=7, fig.height=4}
+idx <- which(gf$g_j == 2 & gf$g_f == 2)[1]
+plot_g_function(result, idx)
+```
+
+### 3rd-Degree: No Factors (d = 3)
+
+Here `gas_gallons`, `electric_kwh`, and `labor_hours` all interact.
+With three numeric variables and no factors, $d = 3 - 0 = 3$. Since we
+can only display two dimensions at a time, `earthUI` shows a contour of
+two variables with the third fixed at a representative value. To see the
+full behavior, generate multiple plots at different fixed values of the
+third variable:
+
+```{r fig.width=7, fig.height=5}
+idx <- which(gf$g_j == 3 & gf$g_f == 0)[1]
+if (!is.na(idx)) plot_g_contour(result, idx)
+```
+
+### 3rd-Degree: 1 Factor (d = 2)
+
+Here `gas_gallons` and `electric_kwh` (numeric) interact with `region`
+(North/South/West). The factor reduces the dimension from $d = 3$ to
+$d = 2$, so `earthUI` shows a separate contour for each factor level
+present in the model.
+
+The South panel shows the strongest compounding effect — its lighter
+utility grid imposes the steepest surcharges when both gas and electric
+draw are high simultaneously. The West panel shows a moderate effect.
+The North panel appears flat because North is the **reference level**
+in the earth model's factor encoding: the model expresses interaction
+corrections *relative to North*, so North's three-way contribution is
+zero by construction. North's actual three-way cost is captured in the
+non-factor 3rd-degree g-function above.
+
+```{r fig.width=7, fig.height=5}
+idx <- which(gf$g_j == 3 & gf$g_f == 1)[1]
+if (!is.na(idx)) plot_g_contour(result, idx)
+```
+
+### 3rd-Degree: 2 Factors (d = 1)
+
+Here `gas_gallons` (numeric) interacts with both `region`
+(North/South/West) and `shift` (Day/Night). Two factors reduce the
+dimension from $d = 3$ to $d = 1$, producing a 2D line plot with
+`gas_gallons` on the x-axis. Each factor combination gets its own
+line — color encodes `region`, line style encodes `shift`.
+
+The two Night-shift lines (dashed) rise steeply with gas consumption:
+South-Night (green-dashed) shows the largest per-gallon surcharge
+because Southern plants must arrange emergency off-site gas deliveries
+for Night shifts. West-Night (blue-dashed) shows a similar but
+slightly smaller premium. All Day-shift lines (solid) and
+North-Night sit at zero — their three-way interaction is fully
+captured by the lower-order terms (main effects and two-way
+interactions).
+
+```{r fig.width=8, fig.height=5}
+idx <- which(gf$g_j == 3 & gf$g_f == 2)[1]
+if (!is.na(idx)) plot_g_function(result, idx)
+```
+
+### 3rd-Degree: 3 Factors (d = 0)
+
+Here `product` (Canned/Dried/Frozen), `region` (North/South/West),
+and `shift` (Day/Night) all interact. Three factors reduce the
+dimension from $d = 3$ to $d = 0$ — there is no continuous axis.
+`earthUI` shows faceted heatmaps: the first two factors form the
+grid of each panel, and the third factor creates the facets.
+
+The Day panel is entirely zero — the three-way interaction premium
+only kicks in on Night shifts. The Night panel reveals the costly
+combinations: Frozen product at a Southern plant ($835) tops the
+chart because blast-freezer compressors fighting warm ambient air at
+peak nighttime rates compound all three factors simultaneously.
+Frozen-West-Night ($339) and Dried-South-Night ($387) show smaller
+but substantial premiums. Canned product and Northern plants show
+zero because their three-way interaction is fully captured by the
+lower-order terms.
+
+```{r fig.width=12, fig.height=5}
+idx <- which(gf$g_j == 3 & gf$g_f == 3)[1]
+if (!is.na(idx)) plot_g_function(result, idx)
+```
+
+### Visualization Summary for 3rd-Degree Terms
+
+Third-degree terms are uncommon but require careful visualization:
+
+| Factors | d | Visualization |
+|---------|---|---------------|
+| 0 | 3 | 3D surface of 2 variables, fixing the 3rd at representative values |
+| 1 (N levels) | 2 | N separate contours or surfaces, one per factor level |
+| 2 (L $\times$ M levels) | 1 | 2D line plot of the numeric variable; color = first factor, line style = second factor |
+| 3 (K $\times$ L $\times$ M) | 0 | Faceted heatmaps: two factors form the grid, third factor creates facet panels |
 
 ## Reference
 
-Craytor, W.B. (2025). *Real Estate Appraisal: A Regression-Centric
-Approach*. Zenodo. DOI:
-[10.5281/zenodo.14787917](https://doi.org/10.5281/zenodo.14787917)
+Craytor, W.B. (2025). *Residual Constraint Approach (RCA)*. Zenodo. DOI:
+[10.5281/zenodo.14970844](https://zenodo.org/records/14970844)

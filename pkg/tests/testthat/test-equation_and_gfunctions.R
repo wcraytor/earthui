@@ -163,6 +163,22 @@ test_that("plot_g_contour returns a ggplot for 1D g-function", {
   }
 })
 
+test_that("plot_g_function shows separate lines per factor level for d=1 with factor", {
+  df <- mtcars
+  df$am_cat <- as.character(df$am)
+  result <- fit_earth(df, "mpg", c("wt", "am_cat"),
+                      categoricals = "am_cat", degree = 2L)
+  gf <- list_g_functions(result)
+  # Look for a 2nd-degree g-function with 1 factor (d = 1)
+  idx <- which(gf$g_j == 2L & gf$g_f == 1L)
+  if (length(idx) > 0L) {
+    p <- plot_g_function(result, idx[1])
+    expect_s3_class(p, "ggplot")
+    # Should have a color aesthetic mapped to the factor variable
+    expect_true(!is.null(p$labels$colour))
+  }
+})
+
 test_that("plot_g_function rejects invalid group_index", {
   result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
   expect_error(plot_g_function(result, 999L), "must be between")
