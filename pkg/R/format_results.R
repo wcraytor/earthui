@@ -226,9 +226,13 @@ format_variable_importance <- function(earth_result) {
 #'
 #' @return A list containing:
 #'   \describe{
-#'     \item{latex}{Character string. LaTeX array environment.}
+#'     \item{latex}{Character string. LaTeX array environment for
+#'       HTML/MathJax rendering.}
 #'     \item{latex_inline}{Character string. Wrapped in display math
 #'       delimiters for MathJax/HTML rendering.}
+#'     \item{latex_pdf}{Character string. LaTeX for native PDF output
+#'       with escaped special characters in text blocks.}
+#'     \item{latex_word}{Character string. LaTeX for Word/docx output.}
 #'     \item{groups}{List of group structures for programmatic access.}
 #'   }
 #'
