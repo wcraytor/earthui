@@ -36,8 +36,9 @@ jobs:
       - uses: r-lib/actions/setup-tinytex@v2
 
       - name: Install LaTeX packages
-        run: tlmgr install courier ec inconsolata
-        shell: bash
+        run: |
+          echo "$APPDATA/TinyTeX/bin/windows" >> $GITHUB_PATH
+          tlmgr install courier ec inconsolata || "$APPDATA/TinyTeX/bin/windows/tlmgr.bat" install courier ec inconsolata
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
