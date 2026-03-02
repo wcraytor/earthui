@@ -1,11 +1,20 @@
 ---
 title: "The g-Function Notation for Earth Models"
+author: "William Craytor"
+date: "February 28, 2026"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{The g-Function Notation for Earth Models}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+```{css, echo = FALSE}
+.author, .date {
+  text-align: center;
+  font-family: "Calibri Light", "Calibri", sans-serif;
+}
+```
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
@@ -155,6 +164,10 @@ For factor variables with many levels (e.g., an area identifier with 12
 values interacting with living area), graphing can become complex. However,
 `earth` rarely finds all combinations significant; typically only a few key
 interactions warrant graphing, as identified by the model.
+
+The number of charts can be reduced through creative graphing such as you
+see below in "3rd-Degree: 2 Factors (d = 1)" and "3rd-Degree: 3 Factors
+(d = 0)".
 
 ## Example
 
