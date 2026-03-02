@@ -35,6 +35,11 @@ jobs:
 
       - uses: r-lib/actions/setup-tinytex@v2
 
+      - name: Install LaTeX packages
+        run: |
+          tinytex::tlmgr_install(c("courier", "ec", "inconsolata"))
+        shell: Rscript {0}
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           working-directory: pkg
