@@ -1,0 +1,30 @@
+build_allowed_function
+                        Build an allowed function for earth()
+build_allowed_matrix    Build an allowed interaction matrix
+detect_categoricals     Detect likely categorical variables in a data
+                        frame
+fit_earth               Fit an earth model
+format_anova            Format ANOVA decomposition
+format_model_equation   Format earth model as LaTeX equation
+format_summary          Format earth model summary
+format_variable_importance
+                        Format variable importance
+import_data             Import data from CSV or Excel files
+launch                  Launch the earthui Shiny application
+list_g_functions        List g-function groups from a fitted earth
+                        model
+plot_actual_vs_predicted
+                        Plot actual vs predicted values
+plot_contribution       Plot variable contribution
+plot_correlation_matrix
+                        Plot correlation matrix
+plot_g_contour          Plot g-function as a static contour (for
+                        reports)
+plot_g_function         Plot g-function contribution
+plot_partial_dependence
+                        Plot partial dependence
+plot_qq                 Plot Q-Q plot of residuals
+plot_residuals          Plot residual diagnostics
+plot_variable_importance
+                        Plot variable importance
+render_report           Render an earth model report

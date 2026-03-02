@@ -1,0 +1,158 @@
+---
+title: "Getting Started with earthui"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with earthui}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+
+`earthui` provides both an interactive Shiny GUI and a set of composable R
+functions for building Earth (MARS-style) models using the `earth` package.
+
+This vignette demonstrates the programmatic API. To launch the interactive
+app, simply run:
+```{r eval=FALSE}
+library(earthui)
+launch()
+```
+
+## Basic Workflow
+
+### 1. Import Data
+
+```{r}
+library(earthui)
+
+# For this example, we use the built-in mtcars dataset
+df <- mtcars
+head(df)
+```
+
+You can also import from files:
+```{r eval=FALSE}
+df <- import_data("my_data.csv")        # CSV
+df <- import_data("my_data.xlsx")       # Excel
+```
+
+### 2. Detect Categorical Variables
+
+```{r}
+cats <- detect_categoricals(df)
+cats
+```
+
+Variables with few unique values (default: 10 or fewer) are flagged as likely
+categorical. Character and factor columns are always flagged.
+
+### 3. Fit the Model
+
+```{r}
+result <- fit_earth(
+  df = df,
+  target = "mpg",
+  predictors = c("cyl", "disp", "hp", "wt", "qsec", "am", "gear"),
+  categoricals = c("am", "gear"),
+  degree = 1
+)
+```
+
+**Important defaults:**
+
+- `degree = 1` — no interaction terms. This is intentional to avoid overfitting.
+  Set `degree = 2` or higher only when you have domain knowledge supporting
+  interactions.
+- When `degree >= 2`, cross-validation (10-fold) is automatically enabled.
+
+### 4. Examine Results
+
+```{r}
+# Model summary
+s <- format_summary(result)
+cat(sprintf("R²: %.4f\nGRSq: %.4f\nTerms: %d\n",
+            s$r_squared, s$grsq, s$n_terms))
+```
+
+```{r}
+# Coefficients
+s$coefficients
+```
+
+```{r}
+# Variable importance
+format_variable_importance(result)
+```
+
+```{r}
+# ANOVA decomposition
+format_anova(result)
+```
+
+### 5. Plots
+
+```{r fig.width=7, fig.height=4}
+plot_variable_importance(result)
+```
+
+```{r fig.width=7, fig.height=4}
+plot_partial_dependence(result, "wt")
+```
+
+```{r fig.width=7, fig.height=4}
+plot_actual_vs_predicted(result)
+```
+
+```{r fig.width=7, fig.height=4}
+plot_residuals(result)
+```
+
+## Controlling Interactions
+
+When using `degree >= 2`, you can control which variable pairs are allowed
+to interact:
+
+```{r}
+# Build default all-allowed matrix
+preds <- c("wt", "hp", "cyl", "disp")
+mat <- build_allowed_matrix(preds)
+
+# Block wt-cyl interaction
+mat["wt", "cyl"] <- FALSE
+mat["cyl", "wt"] <- FALSE
+
+# Convert to earth-compatible function
+allowed_fn <- build_allowed_function(mat)
+
+# Fit with interactions
+result2 <- fit_earth(
+  df = df,
+  target = "mpg",
+  predictors = preds,
+  degree = 2,
+  allowed_func = allowed_fn
+)
+
+s2 <- format_summary(result2)
+cat(sprintf("Training R²: %.4f\nCV R²: %s\n",
+            s2$r_squared,
+            if (!is.na(s2$cv_rsq)) sprintf("%.4f", s2$cv_rsq) else "N/A"))
+```
+
+## Exporting Reports
+
+Generate publication-quality reports in HTML, PDF, or Word:
+
+```{r eval=FALSE}
+render_report(result, output_format = "html", output_file = "my_report.html")
+```
+
+This requires the `quarto` R package and a Quarto installation.
