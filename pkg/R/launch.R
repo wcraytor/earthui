@@ -33,6 +33,24 @@ launch <- function(port = 7878L, ...) {
     }
   }
 
+  # Kill any existing process on the port (avoids "address already in use")
+  if (.Platform$OS.type == "unix") {
+    tryCatch(
+      system2("lsof", c("-ti", paste0(":", port)),
+              stdout = TRUE, stderr = FALSE),
+      error = function(e) character(0)
+    ) -> pids
+    pids <- pids[nzchar(pids)]
+    if (length(pids) > 0L) {
+      message("earthUI: killing existing process on port ", port,
+              " (PIDs: ", paste(pids, collapse = ", "), ")")
+      for (pid in pids) {
+        tryCatch(tools::pskill(as.integer(pid)), error = function(e) NULL)
+      }
+      Sys.sleep(0.5)
+    }
+  }
+
   app_dir <- system.file("app", package = "earthUI")
   if (app_dir == "") {
     stop("Could not find the Shiny app directory. ",
