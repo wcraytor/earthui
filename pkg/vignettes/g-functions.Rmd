@@ -3,6 +3,9 @@ title: "The g-Function Notation for Earth Models"
 author: "William Craytor"
 date: "February 28, 2026"
 output: rmarkdown::html_vignette
+editor_options:
+  markdown:
+    mode: source
 vignette: >
   %\VignetteIndexEntry{The g-Function Notation for Earth Models}
   %\VignetteEngine{knitr::rmarkdown}

@@ -35,6 +35,8 @@ fluidPage(
     .eui-matrix-rowlabel { position: sticky; left: 0; z-index: 1; background: var(--bs-body-bg, #fff); }
     .eui-type-select { appearance: auto; -webkit-appearance: auto; }
     [data-bs-theme='dark'] .eui-type-select { background: #2c3e50 !important; color: #ecf0f1 !important; border-color: #555 !important; }
+    .eui-special-select { appearance: auto; -webkit-appearance: auto; }
+    [data-bs-theme='dark'] .eui-special-select { background: #2c3e50 !important; color: #ecf0f1 !important; border-color: #555 !important; }
   "))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -166,13 +168,23 @@ fluidPage(
             // Numeric inputs
             ['nprune','thresh','penalty','minspan','endspan','fast_k','nfold_override',
              'nk','newvar_penalty','fast_beta','ncross','varmod_exponent','varmod_conv',
-             'varmod_clamp','varmod_minspan','adjust_endspan','exhaustive_tol'].forEach(function(id) {
+             'varmod_clamp','varmod_minspan','adjust_endspan','exhaustive_tol',
+             'output_folder'].forEach(function(id) {
               if (s[id] !== undefined) $('#' + id).val(s[id]).trigger('change');
             });
             // Checkbox inputs
             ['stratify','keepxy','scale_y','auto_linpreds','use_beta_cache',
-             'force_xtx_prune','get_leverages','force_weights'].forEach(function(id) {
+             'force_xtx_prune','get_leverages','force_weights',
+             'appraiser_mode','add_sale_age'].forEach(function(id) {
               if (s[id] !== undefined) $('#' + id).prop('checked', s[id]).trigger('change');
+            });
+            // Date inputs (Shiny dateInput wraps <input> in a <div>)
+            ['effective_date'].forEach(function(id) {
+              if (s[id] !== undefined && s[id] !== null) {
+                var $inp = $('#' + id + ' input');
+                if ($inp.length) { $inp.val(s[id]).trigger('change'); }
+                else { $('#' + id).val(s[id]).trigger('change'); }
+              }
             });
           }
           // Apply variable checkboxes
@@ -198,6 +210,9 @@ fluidPage(
                   $('#eui_lin_' + i).prop('checked', sv.lin);
                   if (sv.type) {
                     $('#eui_type_' + i).val(sv.type);
+                  }
+                  if (sv.special) {
+                    $('#eui_special_' + i).val(sv.special);
                   }
                 }
               }
@@ -279,12 +294,24 @@ fluidPage(
           }
         }
       }
+      // Reset special dropdowns to 'no'
+      $('[id^=eui_special_]').val('no');
       // Check all interaction checkboxes (allowed = NULL)
       $('.eui-interaction-cb').prop('checked', true);
       // Trigger change events
       if ($('.eui-var-cb').length) $('.eui-var-cb').first().trigger('change');
       if ($('.eui-type-select').length) $('.eui-type-select').first().trigger('change');
       if ($('.eui-interaction-cb').length) $('.eui-interaction-cb').first().trigger('change');
+    });
+
+    // Pre-seed sale_age as included in localStorage when computed
+    Shiny.addCustomMessageHandler('sale_age_added', function(msg) {
+      var fn = msg.filename || 'default';
+      var storageKey = 'earthUI_vars_' + fn;
+      var saved = {};
+      try { saved = JSON.parse(localStorage.getItem(storageKey)) || {}; } catch(e) {}
+      saved['sale_age'] = { inc: true, fac: false, lin: false, type: 'integer', special: 'no' };
+      try { localStorage.setItem(storageKey, JSON.stringify(saved)); } catch(e) {}
     });
 
     // Collect current settings from localStorage and save as defaults
@@ -313,6 +340,10 @@ fluidPage(
     sidebarPanel(
       width = 4,
 
+      # --- Appraiser Mode ---
+      checkboxInput("appraiser_mode", "Appraiser Features", value = FALSE),
+      hr(),
+
       # --- Data Import ---
       h4("1. Import Data"),
       fileInput("file_input", "Choose CSV or Excel file",
@@ -326,9 +357,16 @@ fluidPage(
         condition = "output.data_loaded",
         h4("2. Variable Configuration"),
         uiOutput("target_selector"),
+        conditionalPanel(
+          condition = "input.appraiser_mode",
+          checkboxInput("add_sale_age", "Add sale_age, if missing", value = FALSE),
+          conditionalPanel(
+            condition = "input.add_sale_age",
+            dateInput("effective_date", "Effective Date", value = Sys.Date())
+          )
+        ),
         h5("Predictor Settings"),
-        tags$p(class = "text-muted", style = "font-size: 0.8em; margin-bottom: 5px;",
-               "Type = column data type, Inc = include as predictor, Factor = treat as categorical, Linear = linear-only (no hinges)"),
+        uiOutput("predictor_hint_text"),
         div(style = "max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 4px;",
             uiOutput("variable_table")),
         hr(),
@@ -626,6 +664,16 @@ fluidPage(
                                   "Word" = "docx")),
           downloadButton("export_report", "Download Report",
                          class = "btn-success",
+                         style = "width: 100%;")
+        ),
+        conditionalPanel(
+          condition = "output.data_loaded",
+          hr(),
+          h4("Download Data"),
+          textInput("output_folder", "Output folder",
+                    value = path.expand("~/Downloads")),
+          downloadButton("export_data", "Download Data (Excel)",
+                         class = "btn-outline-primary",
                          style = "width: 100%;")
         )
       )

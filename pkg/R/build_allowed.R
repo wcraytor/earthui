@@ -73,18 +73,30 @@ build_allowed_function <- function(allowed_matrix) {
 
   # Capture the matrix in the closure
   mat <- allowed_matrix
+  mat_names <- rownames(mat)
+
+  # Map expanded factor names (e.g. "conditionGood") back to original
+  # predictor names used in the matrix
+  resolve_name_ <- function(nm) {
+    if (nm %in% mat_names) return(nm)
+    # Try prefix matching: earth expands factor "x" to "xLevel1", "xLevel2"
+    for (mn in mat_names) {
+      if (startsWith(nm, mn)) return(mn)
+    }
+    nm
+  }
 
   function(degree, pred, parents, namesx, first) {
     if (degree < 2L) return(TRUE)
 
     # pred is the index (1-based) of the candidate predictor
-    # parents is a logical vector indicating which predictors are already
-    # in the interaction term
-    pred_name <- namesx[pred]
-    parent_names <- namesx[parents]
+    # parents is an integer vector (length = ncol(x)); non-zero entries
+    # indicate which predictors are already in the interaction term
+    pred_name <- resolve_name_(namesx[pred])
+    parent_names <- vapply(namesx[parents != 0], resolve_name_, character(1))
 
     # All predictors involved in this term
-    involved <- c(pred_name, parent_names)
+    involved <- unique(c(pred_name, parent_names))
 
     # Check all pairwise combinations are allowed
     for (i in seq_along(involved)) {
@@ -92,7 +104,7 @@ build_allowed_function <- function(allowed_matrix) {
         a <- involved[i]
         b <- involved[j]
         # Variables not in the matrix are allowed by default
-        if (a %in% rownames(mat) && b %in% colnames(mat)) {
+        if (a %in% mat_names && b %in% mat_names) {
           if (!isTRUE(mat[a, b])) return(FALSE)
         }
       }

@@ -62,6 +62,23 @@ gf <- list_g_functions(result)
 | Predictors in model | `r summary_info$n_predictors` |
 `r if (multi) paste0("| Response variables | ", length(targets), " |")`
 
+```{r interaction-matrix, results='asis', eval=result$degree >= 2 && !is.null(result$allowed_matrix)}
+cat("\n## Allowed Interactions\n\n")
+mat <- result$allowed_matrix
+preds <- rownames(mat)
+n <- length(preds)
+
+# Build markdown table
+cat("|  |", paste(preds, collapse = " | "), "|\n")
+cat("|", paste(rep("---", n + 1L), collapse = "|"), "|\n")
+for (i in seq_len(n)) {
+  row_vals <- vapply(seq_len(n), function(j) {
+    if (i == j) "-" else if (mat[i, j]) "Yes" else "No"
+  }, character(1))
+  cat("|", preds[i], "|", paste(row_vals, collapse = " | "), "|\n")
+}
+```
+
 ```{r single-response-results, results='asis', eval=!multi}
 cat("\n## Results Summary\n\n")
 cat("| Metric | Value |\n|--------|-------|\n")

@@ -19,6 +19,9 @@
 #'   (no interactions). When >= 2, cross-validation is automatically enabled.
 #' @param allowed_func Function or `NULL`. An allowed function as returned by
 #'   [build_allowed_function()]. Only used when `degree >= 2`.
+#' @param allowed_matrix Logical matrix or `NULL`. The allowed interaction
+#'   matrix. Stored in the result for report export. Not used for fitting
+#'   (use `allowed_func` instead).
 #' @param nfold Integer. Number of cross-validation folds. Automatically set
 #'   to 10 when `degree >= 2` unless explicitly provided. Set to 0 to disable.
 #' @param nprune Integer or `NULL`. Maximum number of terms in the pruned model.
@@ -93,6 +96,7 @@
 fit_earth <- function(df, target, predictors, categoricals = NULL,
                       linpreds = NULL, type_map = NULL,
                       degree = 1L, allowed_func = NULL,
+                      allowed_matrix = NULL,
                       nfold = NULL, nprune = NULL, thresh = NULL,
                       penalty = NULL, minspan = NULL, endspan = NULL,
                       fast.k = NULL, pmethod = NULL, glm = NULL,
@@ -321,16 +325,17 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
 
   # --- Return structured result ---
   result <- list(
-    model        = model,
-    target       = target,
-    predictors   = predictors,
-    categoricals = if (is.null(categoricals)) character(0) else categoricals,
-    linpreds     = if (is.null(linpreds)) character(0) else linpreds,
-    degree       = degree,
-    cv_enabled   = cv_enabled,
-    data         = model_df,
-    elapsed      = elapsed,
-    trace_output = trace_output
+    model          = model,
+    target         = target,
+    predictors     = predictors,
+    categoricals   = if (is.null(categoricals)) character(0) else categoricals,
+    linpreds       = if (is.null(linpreds)) character(0) else linpreds,
+    degree         = degree,
+    cv_enabled     = cv_enabled,
+    allowed_matrix = allowed_matrix,
+    data           = model_df,
+    elapsed        = elapsed,
+    trace_output   = trace_output
   )
   class(result) <- "earthUI_result"
   result

@@ -218,11 +218,12 @@ function(input, output, session) {
                           'fast_k', 'nfold_override', 'nk', 'newvar_penalty',
                           'fast_beta', 'ncross', 'varmod_exponent', 'varmod_conv',
                           'varmod_clamp', 'varmod_minspan', 'adjust_endspan',
-                          'exhaustive_tol'];
+                          'exhaustive_tol', 'output_folder'];
         var checkboxIds = ['stratify', 'keepxy', 'scale_y', 'auto_linpreds',
                            'use_beta_cache', 'force_xtx_prune', 'get_leverages',
-                           'force_weights'];
-        var allIds = selectIds.concat(numericIds).concat(checkboxIds);
+                           'force_weights', 'appraiser_mode', 'add_sale_age'];
+        var dateIds = ['effective_date'];
+        var allIds = selectIds.concat(numericIds).concat(checkboxIds).concat(dateIds);
 
         var saved = null;
         try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
@@ -258,6 +259,16 @@ function(input, output, session) {
               }
             }
           });
+          dateIds.forEach(function(id) {
+            if (saved[id] !== undefined && saved[id] !== null) {
+              var $inp = $('#' + id + ' input');
+              if ($inp.length) {
+                $inp.val(saved[id]).trigger('change');
+              } else {
+                $('#' + id).val(saved[id]).trigger('change');
+              }
+            }
+          });
         }
 
         function saveSettings() {
@@ -271,6 +282,10 @@ function(input, output, session) {
           });
           checkboxIds.forEach(function(id) {
             state[id] = $('#' + id).is(':checked');
+          });
+          dateIds.forEach(function(id) {
+            var $inp = $('#' + id + ' input');
+            state[id] = $inp.length ? $inp.val() : $('#' + id).val();
           });
           try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
         }
@@ -307,6 +322,14 @@ function(input, output, session) {
     )
   })
 
+  output$predictor_hint_text <- renderUI({
+    hint <- "Type = column data type, Inc = include as predictor, Factor = treat as categorical, Linear = linear-only (no hinges)"
+    if (isTRUE(input$appraiser_mode)) {
+      hint <- paste0(hint, ", Special = column role (e.g. contract_date)")
+    }
+    tags$p(class = "text-muted", style = "font-size: 0.8em; margin-bottom: 5px;", hint)
+  })
+
   output$variable_table <- renderUI({
     req(rv$data, input$target)
     candidates <- setdiff(names(rv$data), input$target)
@@ -319,15 +342,30 @@ function(input, output, session) {
     type_options <- c("numeric", "integer", "character", "logical",
                       "factor", "Date", "POSIXct", "unknown")
 
+    appraiser <- isTRUE(input$appraiser_mode)
+
+    # Special column options
+    special_options <- c("no", "contract_date", "latitude", "longitude")
+
     # Header row
-    header <- tags$div(
-      style = "display: flex; align-items: center; padding: 4px 0; border-bottom: 2px solid #ccc; font-weight: bold; font-size: 0.85em;",
+    header_cols <- list(
       tags$div(style = "flex: 1; min-width: 100px;", "Variable"),
       tags$div(style = "width: 85px; text-align: center;", "Type"),
-      tags$div(style = "width: 45px; text-align: center;", "Inc?"),
+      tags$div(style = "width: 45px; text-align: center;", "Inc?")
+    )
+    if (appraiser) {
+      header_cols <- c(header_cols, list(
+        tags$div(style = "width: 95px; text-align: center;", "Special")
+      ))
+    }
+    header_cols <- c(header_cols, list(
       tags$div(style = "width: 55px; text-align: center;", "Factor"),
       tags$div(style = "width: 55px; text-align: center;", "Linear"),
       tags$div(style = "width: 50px; text-align: right; padding-right: 4px;", "NAs")
+    ))
+    header <- tags$div(
+      style = "display: flex; align-items: center; padding: 4px 0; border-bottom: 2px solid #ccc; font-weight: bold; font-size: 0.85em;",
+      header_cols
     )
 
     # Build rows using numeric index for IDs
@@ -353,8 +391,8 @@ function(input, output, session) {
         }
       })
 
-      tags$div(
-        style = "display: flex; align-items: center; padding: 2px 0; border-bottom: 1px solid #eee;",
+      # Build row cells
+      row_cells <- list(
         tags$div(style = "flex: 1; min-width: 100px; font-size: 0.82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
                  title = col, col),
         tags$div(style = "width: 85px; text-align: center;",
@@ -364,7 +402,21 @@ function(input, output, session) {
                              option_tags)),
         tags$div(style = "width: 45px; text-align: center;",
                  tags$input(type = "checkbox", id = paste0("eui_inc_", i),
-                            class = "eui-var-cb")),
+                            class = "eui-var-cb"))
+      )
+      if (appraiser) {
+        special_option_tags <- lapply(special_options, function(opt) {
+          tags$option(value = opt, opt)
+        })
+        row_cells <- c(row_cells, list(
+          tags$div(style = "width: 95px; text-align: center;",
+                   tags$select(id = paste0("eui_special_", i),
+                               class = "eui-special-select",
+                               style = "width: 90px; font-size: 0.75em; padding: 1px 2px; border: 1px solid #ccc; border-radius: 3px; background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #333);",
+                               special_option_tags))
+        ))
+      }
+      row_cells <- c(row_cells, list(
         tags$div(style = "width: 55px; text-align: center;",
                  tags$input(type = "checkbox", id = paste0("eui_fac_", i),
                             class = "eui-var-cb")),
@@ -373,6 +425,11 @@ function(input, output, session) {
                             class = "eui-var-cb")),
         tags$div(style = paste0("width: 50px; text-align: right; font-size: 0.8em; padding-right: 4px;", na_style),
                  if (n_na > 0L) as.character(n_na) else "")
+      ))
+
+      tags$div(
+        style = "display: flex; align-items: center; padding: 2px 0; border-bottom: 1px solid #eee;",
+        row_cells
       )
     })
 
@@ -393,6 +450,7 @@ function(input, output, session) {
     col_json <- jsonlite::toJSON(candidates, auto_unbox = FALSE)
     n_cols <- length(candidates)
     storage_key_json <- jsonlite::toJSON(storage_key, auto_unbox = TRUE)
+    appraiser_json <- if (appraiser) "true" else "false"
     js <- tags$script(HTML(sprintf("
       (function() {
         var cols = %s;
@@ -400,31 +458,45 @@ function(input, output, session) {
         var storageKeyRaw = %s;
         var storageKey = 'earthUI_vars_' + storageKeyRaw;
         var detectedTypes = %s;
+        var appraiser = %s;
 
         function gatherState() {
           var inc = [], fac = [], lin = [];
           var types = {};
+          var specials = {};
           for (var i = 1; i <= n; i++) {
             if ($('#eui_inc_' + i).is(':checked')) inc.push(cols[i-1]);
             if ($('#eui_fac_' + i).is(':checked')) fac.push(cols[i-1]);
             if ($('#eui_lin_' + i).is(':checked')) lin.push(cols[i-1]);
             types[cols[i-1]] = $('#eui_type_' + i).val();
+            if (appraiser) {
+              var sp = $('#eui_special_' + i).val();
+              if (sp) specials[cols[i-1]] = sp;
+            }
           }
           Shiny.setInputValue('predictors', inc.length > 0 ? inc : null);
           Shiny.setInputValue('categoricals', fac.length > 0 ? fac : null);
           Shiny.setInputValue('linpreds', lin.length > 0 ? lin : null);
           Shiny.setInputValue('col_types', types);
+          if (appraiser) {
+            Shiny.setInputValue('col_specials', specials);
+          }
         }
 
         function saveState() {
           var state = {};
           for (var i = 1; i <= n; i++) {
-            state[cols[i-1]] = {
+            var entry = {
               inc: $('#eui_inc_' + i).is(':checked'),
               fac: $('#eui_fac_' + i).is(':checked'),
               lin: $('#eui_lin_' + i).is(':checked'),
               type: $('#eui_type_' + i).val()
             };
+            if (appraiser) {
+              var sp = $('#eui_special_' + i).val();
+              if (sp) entry.special = sp;
+            }
+            state[cols[i-1]] = entry;
           }
           try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
         }
@@ -441,6 +513,9 @@ function(input, output, session) {
                 $('#eui_lin_' + i).prop('checked', s.lin);
                 if (s.type) {
                   $('#eui_type_' + i).val(s.type);
+                }
+                if (appraiser && s.special) {
+                  $('#eui_special_' + i).val(s.special);
                 }
               }
             }
@@ -470,11 +545,28 @@ function(input, output, session) {
           if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(storageKeyRaw);
         });
 
+        // On special dropdown change: enforce single per special type, save and sync
+        $(document).off('change.euispecial').on('change.euispecial', '.eui-special-select', function() {
+          var idx = parseInt(this.id.replace('eui_special_', ''));
+          var val = $(this).val();
+          if (val !== 'no') {
+            // Only one column per special type
+            for (var j = 1; j <= n; j++) {
+              if (j !== idx && $('#eui_special_' + j).val() === val) {
+                $('#eui_special_' + j).val('no');
+              }
+            }
+          }
+          saveState();
+          gatherState();
+          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(storageKeyRaw);
+        });
+
         // Expose detectedTypes for earth defaults reset
         window.euiDetectedTypes = detectedTypes;
         window.euiCols = cols;
       })();
-    ", col_json, n_cols, storage_key_json, detected_types_json)))
+    ", col_json, n_cols, storage_key_json, detected_types_json, appraiser_json)))
 
     tagList(header, rows, js)
   })
@@ -648,8 +740,10 @@ function(input, output, session) {
     degree <- as.integer(input$degree)
 
     allowed_func <- NULL
+    allowed_matrix_arg <- NULL
     if (degree >= 2) {
-      allowed_func <- build_allowed_function(get_allowed_matrix())
+      allowed_matrix_arg <- get_allowed_matrix()
+      allowed_func <- build_allowed_function(allowed_matrix_arg)
     }
 
     glm_arg <- NULL
@@ -683,6 +777,7 @@ function(input, output, session) {
       type_map        = type_map_arg,
       degree          = degree,
       allowed_func    = allowed_func,
+      allowed_matrix  = allowed_matrix_arg,
       nfold           = na_to_null(input$nfold_override),
       nprune          = na_to_null(input$nprune),
       thresh          = na_to_null(input$thresh),
@@ -719,6 +814,84 @@ function(input, output, session) {
 
   observeEvent(input$run_model, {
     req(rv$data, input$target, input$predictors)
+
+    # --- Appraiser: add sale_age if requested ---
+    if (isTRUE(input$appraiser_mode) && isTRUE(input$add_sale_age)) {
+      if (!("sale_age" %in% names(rv$data) && is.numeric(rv$data[["sale_age"]]))) {
+        # Find contract_date column
+        specials <- input$col_specials
+        contract_col <- NULL
+        if (!is.null(specials)) {
+          for (nm in names(specials)) {
+            if (specials[[nm]] == "contract_date") { contract_col <- nm; break }
+          }
+        }
+
+        if (is.null(contract_col)) {
+          showNotification(
+            "Please set a column as 'contract_date' in the Special dropdown before fitting.",
+            type = "error", duration = 10
+          )
+          return()
+        }
+
+        # Parse effective_date
+        eff_date <- as.POSIXct(as.character(input$effective_date))
+
+        # Parse contract date values
+        contract_vals <- rv$data[[contract_col]]
+        if (inherits(contract_vals, "POSIXct")) {
+          contract_posix <- contract_vals
+        } else if (inherits(contract_vals, "Date")) {
+          contract_posix <- as.POSIXct(contract_vals)
+        } else if (is.character(contract_vals)) {
+          contract_posix <- suppressWarnings(as.POSIXct(contract_vals))
+          if (all(is.na(contract_posix[!is.na(contract_vals)]))) {
+            showNotification(
+              paste0("Cannot parse '", contract_col, "' as dates for sale_age calculation."),
+              type = "error", duration = 10
+            )
+            return()
+          }
+        } else if (is.numeric(contract_vals)) {
+          # Excel serial date number -> Date -> POSIXct
+          contract_posix <- as.POSIXct(as.Date(contract_vals, origin = "1899-12-30"))
+        } else {
+          showNotification(
+            paste0("Column '", contract_col, "' cannot be interpreted as dates for sale_age."),
+            type = "error", duration = 10
+          )
+          return()
+        }
+
+        # Calculate sale_age in integer days
+        sale_age <- as.integer(difftime(eff_date, contract_posix, units = "days"))
+        rv$data[["sale_age"]] <- sale_age
+        rv$col_types[["sale_age"]] <- "integer"
+
+        # Pre-seed sale_age as included in localStorage so it appears checked
+        session$sendCustomMessage("sale_age_added", list(
+          filename = rv$file_name
+        ))
+
+        showNotification(
+          paste0("Added 'sale_age' column (", sum(!is.na(sale_age)),
+                 " values, integer days). Click Fit again to include it."),
+          type = "message", duration = 8
+        )
+        return()
+      }
+    }
+
+    # --- Appraiser: round latitude/longitude to 3 decimal places ---
+    if (isTRUE(input$appraiser_mode) && !is.null(input$col_specials)) {
+      for (nm in names(input$col_specials)) {
+        if (input$col_specials[[nm]] %in% c("latitude", "longitude") &&
+            nm %in% names(rv$data) && is.numeric(rv$data[[nm]])) {
+          rv$data[[nm]] <- round(rv$data[[nm]], 3L)
+        }
+      }
+    }
 
     fit_args <- build_fit_args_()
 
@@ -797,6 +970,7 @@ function(input, output, session) {
             linpreds = fit_args$linpreds,
             degree = fit_args$degree,
             allowed_func = fit_args$allowed_func,
+            allowed_matrix = fit_args$allowed_matrix,
             nfold = fit_args$nfold,
             nprune = fit_args$nprune,
             thresh = fit_args$thresh,
@@ -1350,5 +1524,24 @@ function(input, output, session) {
       }
     },
     contentType = NA
+  )
+
+  # --- Export Data (Excel) ---
+  output$export_data <- downloadHandler(
+    filename = function() {
+      base <- tools::file_path_sans_ext(rv$file_name %||% "data")
+      paste0(base, "_modified_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx")
+    },
+    content = function(file) {
+      req(rv$data)
+      if (!requireNamespace("writexl", quietly = TRUE)) {
+        showNotification(
+          "Package 'writexl' required. Install with: install.packages('writexl')",
+          type = "error", duration = 10)
+        return()
+      }
+      writexl::write_xlsx(rv$data, file)
+    },
+    contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   )
 }
