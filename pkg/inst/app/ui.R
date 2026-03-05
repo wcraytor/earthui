@@ -37,6 +37,18 @@ fluidPage(
     [data-bs-theme='dark'] .eui-type-select { background: #2c3e50 !important; color: #ecf0f1 !important; border-color: #555 !important; }
     .eui-special-select { appearance: auto; -webkit-appearance: auto; }
     [data-bs-theme='dark'] .eui-special-select { background: #2c3e50 !important; color: #ecf0f1 !important; border-color: #555 !important; }
+    details.eui-section > summary { cursor: pointer; list-style: none; }
+    details.eui-section > summary::-webkit-details-marker { display: none; }
+    details.eui-section > summary h4 { display: inline; }
+    details.eui-section > summary::before { content: '\\25B6'; margin-right: 6px; font-size: 0.75em; transition: transform 0.2s; display: inline-block; }
+    details.eui-section[open] > summary::before { transform: rotate(90deg); }
+    .radio-inline { margin-right: 16px; }
+    .shiny-input-radiogroup input[type='radio'] { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; border: 3px solid #222; border-radius: 50%; margin-right: 5px; vertical-align: middle; cursor: pointer; position: relative; }
+    .shiny-input-radiogroup input[type='radio']:checked { border-color: #222; }
+    .shiny-input-radiogroup input[type='radio']:checked::after { content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: #222; }
+    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio'] { border-color: #fff; }
+    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked { border-color: #fff; }
+    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked::after { background: #fff; }
   "))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -79,10 +91,25 @@ fluidPage(
     })();
   ")),
   tags$script(HTML("
+    // --- Checkmark helper ---
+    function addCheck(btnId) {
+      var $btn = $('#' + btnId);
+      if ($btn.length && !$btn.find('.eui-check').length) {
+        $btn.append(' <span class=\"eui-check\" style=\"color:#fff;\">&#10003;</span>');
+      }
+    }
+    function removeCheck(btnId) {
+      $('#' + btnId + ' .eui-check').remove();
+    }
+
     Shiny.addCustomMessageHandler('fitting_start', function(msg) {
-      // Remove any previous overlays
+      // Remove any previous overlays and checkmarks
       $('#eui-fitting-modal').remove();
       clearInterval(window.euiTimerInterval);
+      removeCheck('run_model');
+      removeCheck('export_data');
+      removeCheck('export_data_nonadj');
+      removeCheck('rca_output_btn');
 
       var start = Date.now();
       var modal = $(
@@ -91,7 +118,7 @@ fluidPage(
         'width:520px;max-width:90vw;font-family:monospace;overflow:hidden;\">' +
           '<div style=\"background:#2c3e50;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;\">' +
             '<span style=\"font-size:0.95em;font-weight:bold;\">Fitting Earth Model</span>' +
-            '<span id=\"eui-timer\" style=\"font-size:0.85em;color:#bdc3c7;\">0s</span>' +
+            '<span id=\"eui-timer\" style=\"font-size:0.85em;color:#bdc3c7;margin-right:30px;\">0s</span>' +
           '</div>' +
           '<div id=\"eui-trace-log\" style=\"padding:8px 12px;height:300px;overflow-y:auto;font-size:0.78em;line-height:1.5;\"></div>' +
         '</div>'
@@ -120,8 +147,6 @@ fluidPage(
         else if (msg.text.match(/error|fail/i)) color = '#e74c3c';
         var $line = $('<div style=\"color:' + color + ';\">').text(msg.text);
         $log.append($line);
-        // Keep last 200 lines
-        while ($log.children().length > 200) { $log.children().first().remove(); }
         $log.scrollTop($log[0].scrollHeight);
       }
     });
@@ -129,12 +154,27 @@ fluidPage(
     Shiny.addCustomMessageHandler('fitting_done', function(msg) {
       clearInterval(window.euiTimerInterval);
       var $log = $('#eui-trace-log');
-      $log.append($('<div style=\"color:#2ecc71;font-weight:bold;margin-top:4px;\">').text(msg.text));
+      var hasError = msg.text === 'Error' || $log.find('div').filter(function() {
+        return $(this).text().match(/error|fail/i);
+      }).length > 0;
+      var color = hasError ? '#e74c3c' : '#2ecc71';
+      $log.append($('<div style=\"color:' + color + ';font-weight:bold;margin-top:4px;\">').text(msg.text));
       $log.scrollTop($log[0].scrollHeight);
-      // Fade out after 2.5 seconds
-      setTimeout(function() {
-        $('#eui-fitting-modal, #eui-fitting-backdrop').fadeOut(500, function(){ $(this).remove(); });
-      }, 2500);
+      if (!hasError) addCheck('run_model');
+      // Add close X button — user dismisses manually
+      if (!$('#eui-fitting-close').length) {
+        var $btn = $('<span id=\"eui-fitting-close\" style=\"position:absolute;top:8px;right:12px;' +
+          'color:#bdc3c7;cursor:pointer;font-size:1.3em;line-height:1;\">&times;</span>');
+        $btn.on('click', function() {
+          $('#eui-fitting-modal, #eui-fitting-backdrop').fadeOut(300, function(){ $(this).remove(); });
+        });
+        $('#eui-fitting-modal').css('position', 'fixed').append($btn);
+      }
+    });
+
+    // Check download buttons on completion
+    Shiny.addCustomMessageHandler('download_check', function(msg) {
+      addCheck(msg.id);
     });
 
     // --- SQLite settings bridge ---
@@ -172,10 +212,14 @@ fluidPage(
              'output_folder'].forEach(function(id) {
               if (s[id] !== undefined) $('#' + id).val(s[id]).trigger('change');
             });
+            // Radio button inputs
+            if (s['purpose'] !== undefined) {
+              $('input[name=purpose][value=' + s['purpose'] + ']').prop('checked', true).trigger('change');
+            }
             // Checkbox inputs
             ['stratify','keepxy','scale_y','auto_linpreds','use_beta_cache',
              'force_xtx_prune','get_leverages','force_weights',
-             'appraiser_mode','add_sale_age'].forEach(function(id) {
+             'skip_subject_row'].forEach(function(id) {
               if (s[id] !== undefined) $('#' + id).prop('checked', s[id]).trigger('change');
             });
             // Date inputs (Shiny dateInput wraps <input> in a <div>)
@@ -274,11 +318,13 @@ fluidPage(
       for (var id in numerics) {
         $('#' + id).val(numerics[id]).trigger('change');
       }
+      // Reset purpose radio to General
+      $('input[name=purpose][value=general]').prop('checked', true).trigger('change');
       // Checkbox inputs
       var checks = {
         keepxy: false, stratify: true, scale_y: true, auto_linpreds: true,
         use_beta_cache: true, force_xtx_prune: false, get_leverages: true,
-        force_weights: false
+        force_weights: false, skip_subject_row: false
       };
       for (var id in checks) {
         $('#' + id).prop('checked', checks[id]).trigger('change');
@@ -340,8 +386,19 @@ fluidPage(
     sidebarPanel(
       width = 4,
 
-      # --- Appraiser Mode ---
-      checkboxInput("appraiser_mode", "Appraiser Features", value = FALSE),
+      # --- Purpose ---
+      tags$div(
+        style = "font-weight: bold;",
+        radioButtons("purpose", "Purpose:",
+                     choices = c("General" = "general",
+                                 "For Appraisal" = "appraisal",
+                                 "Market Area Analysis" = "market"),
+                     selected = "general", inline = TRUE)
+      ),
+      conditionalPanel(
+        condition = "input.purpose === 'market'",
+        checkboxInput("skip_subject_row", "Skip first row (subject property)", value = FALSE)
+      ),
       hr(),
 
       # --- Data Import ---
@@ -355,35 +412,34 @@ fluidPage(
       # --- Variable Configuration ---
       conditionalPanel(
         condition = "output.data_loaded",
-        h4("2. Variable Configuration"),
-        uiOutput("target_selector"),
-        conditionalPanel(
-          condition = "input.appraiser_mode",
-          checkboxInput("add_sale_age", "Add sale_age, if missing", value = FALSE),
+        tags$details(class = "eui-section",
+          tags$summary(h4("2. Variable Configuration")),
+          uiOutput("target_selector"),
           conditionalPanel(
-            condition = "input.add_sale_age",
+            condition = "input.purpose !== 'general'",
             dateInput("effective_date", "Effective Date", value = Sys.Date())
-          )
+          ),
+          h5("Predictor Settings"),
+          uiOutput("predictor_hint_text"),
+          div(style = "max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 4px;",
+              uiOutput("variable_table"))
         ),
-        h5("Predictor Settings"),
-        uiOutput("predictor_hint_text"),
-        div(style = "max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 4px;",
-            uiOutput("variable_table")),
         hr(),
 
         # --- Earth Call Parameters ---
-        h4("3. Earth Call Parameters"),
+        tags$details(class = "eui-section",
+          tags$summary(h4("3. Earth Call Parameters")),
         tags$div(
-          style = "margin-bottom: 8px; font-size: 0.85em; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;",
+          style = "margin-bottom: 4px; font-size: 0.85em;",
           radioButtons("eui_defaults_action", NULL,
                        choices = c("Use last settings for input file" = "last",
                                    "Use default settings" = "use_default",
                                    "Earth defaults" = "earth_defaults"),
-                       selected = "last", inline = TRUE),
-          actionButton("eui_save_defaults", "Save current as default",
-                       class = "btn-outline-secondary btn-sm",
-                       style = "padding: 2px 8px; font-size: 0.85em;")
+                       selected = "last", inline = TRUE)
         ),
+        actionButton("eui_save_defaults", "Save current as default",
+                     class = "btn-dark btn-sm",
+                     style = "padding: 2px 8px; font-size: 0.85em; margin-bottom: 8px;"),
         actionButton("param_info", "Parameter Info",
                      class = "btn-info btn-sm",
                      style = "margin-bottom: 10px; width: 100%;"),
@@ -646,35 +702,63 @@ fluidPage(
               numericInput("exhaustive_tol", "Exhaustive.tol", value = 1e-10, min = 0, step = 1e-11),
               "Default 1e-10. If reciprocal condition number < this, forces pmethod='backward'. Only applies with pmethod='exhaustive'.")
           )
-        ),
+        )),
         hr(),
 
-        # --- Run ---
-        actionButton("run_model", "Fit Earth Model",
-                     class = "btn-primary btn-lg",
-                     style = "width: 100%; margin-top: 10px;"),
-        hr(),
-
-        # --- Export ---
-        conditionalPanel(
-          condition = "output.model_fitted",
-          h4("5. Export Report"),
-          selectInput("export_format", "Format",
-                      choices = c("HTML" = "html", "PDF" = "pdf",
-                                  "Word" = "docx")),
-          downloadButton("export_report", "Download Report",
-                         class = "btn-success",
-                         style = "width: 100%;")
+        # --- 4. Fit ---
+        tags$details(class = "eui-section",
+          tags$summary(h4("4. Fit Earth Model")),
+          actionButton("run_model", "Fit Earth Model",
+                       class = "btn-success btn-lg",
+                       style = "width: 100%; margin-top: 10px;")
         ),
+
+        # --- 5. Download Estimated Sale Prices & Residuals ---
         conditionalPanel(
           condition = "output.data_loaded",
           hr(),
-          h4("Download Data"),
-          textInput("output_folder", "Output folder",
-                    value = path.expand("~/Downloads")),
-          downloadButton("export_data", "Download Data (Excel)",
-                         class = "btn-outline-primary",
-                         style = "width: 100%;")
+          tags$details(class = "eui-section",
+            tags$summary(h4("5. Download Estimated Sale Prices & Residuals")),
+            textInput("output_folder", "Output folder",
+                      value = path.expand("~/Downloads")),
+            conditionalPanel(
+              condition = "input.purpose === 'appraisal'",
+              downloadButton("export_data", "Download Intermediate Output (Excel)",
+                             class = "btn-success",
+                             style = "width: 100%;")
+            ),
+            conditionalPanel(
+              condition = "input.purpose !== 'appraisal'",
+              downloadButton("export_data_nonadj", "Download Output (Excel)",
+                             class = "btn-success",
+                             style = "width: 100%;")
+            )
+          )
+        ),
+
+        # --- 6. Calculate RCA Adjustments (Appraisal only) ---
+        conditionalPanel(
+          condition = "output.model_fitted && input.purpose === 'appraisal'",
+          hr(),
+          h4("6. Calculate RCA Adjustments & Download"),
+          actionButton("rca_output_btn", "Calculate RCA Adjustments & Download",
+                       class = "btn-success",
+                       style = "width: 100%;")
+        ),
+
+        # --- Download Report ---
+        conditionalPanel(
+          condition = "output.model_fitted",
+          hr(),
+          tags$details(class = "eui-section",
+            tags$summary(uiOutput("report_heading", inline = TRUE)),
+            selectInput("export_format", "Format",
+                        choices = c("HTML" = "html", "PDF" = "pdf",
+                                    "Word" = "docx")),
+            downloadButton("export_report", "Download Report",
+                           class = "btn-success",
+                           style = "width: 100%;")
+          )
         )
       )
     ),
@@ -694,7 +778,17 @@ fluidPage(
       conditionalPanel(
         condition = "output.data_loaded && !output.model_fitted",
         h4("Data Preview"),
-        DT::dataTableOutput("data_preview")
+        conditionalPanel(
+          condition = "input.purpose === 'appraisal'",
+          h5("Subject Property"),
+          DT::dataTableOutput("data_subjects"),
+          h5("Comparable Sales"),
+          DT::dataTableOutput("data_comps")
+        ),
+        conditionalPanel(
+          condition = "input.purpose !== 'appraisal'",
+          DT::dataTableOutput("data_preview")
+        )
       ),
       conditionalPanel(
         condition = "output.model_fitted",
@@ -703,7 +797,17 @@ fluidPage(
           tabPanel(
             "Data",
             br(),
-            DT::dataTableOutput("data_preview_tab")
+            conditionalPanel(
+              condition = "input.purpose === 'appraisal'",
+              h5("Subject Property"),
+              DT::dataTableOutput("data_subjects_tab"),
+              h5("Comparable Sales"),
+              DT::dataTableOutput("data_comps_tab")
+            ),
+            conditionalPanel(
+              condition = "input.purpose !== 'appraisal'",
+              DT::dataTableOutput("data_preview_tab")
+            )
           ),
           tabPanel(
             "Equation",

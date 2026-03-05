@@ -6,6 +6,24 @@ function(input, output, session) {
     earthUI:::settings_db_disconnect_(settings_con)
   })
 
+  # --- Write fitting log to output folder ---
+  write_fit_log_ <- function(output_folder, lines, file_name) {
+    tryCatch({
+      folder <- if (is.null(output_folder) || !nzchar(output_folder)) {
+        path.expand("~/Downloads")
+      } else {
+        output_folder
+      }
+      if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
+      base <- tools::file_path_sans_ext(file_name %||% "earthui")
+      log_path <- file.path(folder, paste0(base, "_earth_log_",
+                            format(Sys.time(), "%Y%m%d_%H%M%S"), ".txt"))
+      writeLines(c(paste("earthUI fitting log:", Sys.time()), "", lines), log_path)
+    }, error = function(e) {
+      message("earthUI: failed to write log: ", e$message)
+    })
+  }
+
   # --- Reactive values ---
   rv <- reactiveValues(
     data = NULL,
@@ -89,6 +107,11 @@ function(input, output, session) {
 
   output$model_fitted <- reactive(!is.null(rv$result))
   outputOptions(output, "model_fitted", suspendWhenHidden = FALSE)
+
+  output$report_heading <- renderUI({
+    n <- if (identical(input$purpose, "appraisal")) "7" else "6"
+    h4(paste0(n, ". Download Report"))
+  })
 
   # --- Persist settings to SQLite (debounced from JS) ---
   observeEvent(input$eui_save_trigger, {
@@ -184,9 +207,18 @@ function(input, output, session) {
     });
   ")
 
-  output$data_preview <- DT::renderDataTable({
+  preview_data_ <- function() {
     req(rv$data)
-    DT::datatable(rv$data,
+    df <- rv$data
+    if (identical(input$purpose, "market") && isTRUE(input$skip_subject_row) && nrow(df) >= 2L) {
+      df <- df[2:nrow(df), , drop = FALSE]
+    }
+    df
+  }
+
+  output$data_preview <- DT::renderDataTable({
+    df <- preview_data_()
+    DT::datatable(df,
                   options = list(pageLength = 10, scrollX = TRUE),
                   rownames = FALSE,
                   class = "compact stripe",
@@ -194,13 +226,79 @@ function(input, output, session) {
   })
 
   output$data_preview_tab <- DT::renderDataTable({
-    req(rv$data)
-    DT::datatable(rv$data,
+    df <- preview_data_()
+    DT::datatable(df,
                   options = list(pageLength = 10, scrollX = TRUE),
                   rownames = FALSE,
                   class = "compact stripe",
                   callback = cell_popup_js)
   })
+
+  # --- Appraisal: subject (row 1) and comps (rows 2+) ---
+  render_subjects_ <- function() {
+    req(rv$data, input$purpose == "appraisal", nrow(rv$data) >= 1L)
+    tgt <- input$target
+    preds <- input$predictors
+    # Include display_only columns
+    display_cols <- character(0)
+    specials <- input$col_specials
+    if (!is.null(specials)) {
+      for (nm in names(specials)) {
+        if (specials[[nm]] == "display_only") display_cols <- c(display_cols, nm)
+      }
+    }
+    show_cols <- unique(c(display_cols, tgt, preds))
+    show_cols <- intersect(show_cols, names(rv$data))
+    subj <- rv$data[1L, show_cols, drop = FALSE]
+    if (!is.null(tgt) && length(tgt) > 0L) {
+      for (t in tgt) {
+        if (t %in% names(subj)) subj[[t]] <- NA
+      }
+    }
+    subj <- cbind(data.frame(row = 1L, check.names = FALSE), subj)
+    DT::datatable(subj,
+                  options = list(pageLength = 1, scrollX = TRUE, dom = "t"),
+                  rownames = FALSE, class = "compact stripe",
+                  callback = cell_popup_js)
+  }
+
+  render_comps_ <- function() {
+    req(rv$data, input$purpose == "appraisal", nrow(rv$data) >= 2L)
+    tgt <- input$target
+    preds <- input$predictors
+    display_cols <- character(0)
+    specials <- input$col_specials
+    if (!is.null(specials)) {
+      for (nm in names(specials)) {
+        if (specials[[nm]] == "display_only") display_cols <- c(display_cols, nm)
+      }
+    }
+    show_cols <- unique(c(display_cols, tgt, preds))
+    show_cols <- intersect(show_cols, names(rv$data))
+    comps <- rv$data[2:nrow(rv$data), show_cols, drop = FALSE]
+    comps <- cbind(data.frame(row = seq_len(nrow(comps)), check.names = FALSE), comps)
+    low_rows <- integer(0)
+    if (!is.null(tgt) && length(tgt) > 0L && tgt[1L] %in% names(comps)) {
+      col <- comps[[tgt[1L]]]
+      if (is.numeric(col)) {
+        low_rows <- which(col <= 100 | is.na(col))
+      }
+    }
+    dt <- DT::datatable(comps,
+                        options = list(pageLength = 10, scrollX = TRUE),
+                        rownames = FALSE, class = "compact stripe",
+                        callback = cell_popup_js)
+    if (length(low_rows) > 0L) {
+      dt <- DT::formatStyle(dt, columns = 0, target = "row",
+              backgroundColor = DT::styleRow(low_rows, "rgba(255,0,0,0.15)"))
+    }
+    dt
+  }
+
+  output$data_subjects     <- DT::renderDataTable(render_subjects_())
+  output$data_comps        <- DT::renderDataTable(render_comps_())
+  output$data_subjects_tab <- DT::renderDataTable(render_subjects_())
+  output$data_comps_tab    <- DT::renderDataTable(render_comps_())
 
   # --- Variable Configuration ---
   output$target_selector <- renderUI({
@@ -221,9 +319,10 @@ function(input, output, session) {
                           'exhaustive_tol', 'output_folder'];
         var checkboxIds = ['stratify', 'keepxy', 'scale_y', 'auto_linpreds',
                            'use_beta_cache', 'force_xtx_prune', 'get_leverages',
-                           'force_weights', 'appraiser_mode', 'add_sale_age'];
+                           'force_weights', 'skip_subject_row'];
+        var radioIds = ['purpose'];
         var dateIds = ['effective_date'];
-        var allIds = selectIds.concat(numericIds).concat(checkboxIds).concat(dateIds);
+        var allIds = selectIds.concat(numericIds).concat(checkboxIds).concat(radioIds).concat(dateIds);
 
         var saved = null;
         try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
@@ -259,6 +358,11 @@ function(input, output, session) {
               }
             }
           });
+          radioIds.forEach(function(id) {
+            if (saved[id] !== undefined) {
+              $('input[name=' + id + '][value=' + saved[id] + ']').prop('checked', true).trigger('change');
+            }
+          });
           dateIds.forEach(function(id) {
             if (saved[id] !== undefined && saved[id] !== null) {
               var $inp = $('#' + id + ' input');
@@ -282,6 +386,9 @@ function(input, output, session) {
           });
           checkboxIds.forEach(function(id) {
             state[id] = $('#' + id).is(':checked');
+          });
+          radioIds.forEach(function(id) {
+            state[id] = $('input[name=' + id + ']:checked').val();
           });
           dateIds.forEach(function(id) {
             var $inp = $('#' + id + ' input');
@@ -324,7 +431,7 @@ function(input, output, session) {
 
   output$predictor_hint_text <- renderUI({
     hint <- "Type = column data type, Inc = include as predictor, Factor = treat as categorical, Linear = linear-only (no hinges)"
-    if (isTRUE(input$appraiser_mode)) {
+    if (input$purpose %in% c("appraisal", "market")) {
       hint <- paste0(hint, ", Special = column role (e.g. contract_date)")
     }
     tags$p(class = "text-muted", style = "font-size: 0.8em; margin-bottom: 5px;", hint)
@@ -342,10 +449,10 @@ function(input, output, session) {
     type_options <- c("numeric", "integer", "character", "logical",
                       "factor", "Date", "POSIXct", "unknown")
 
-    appraiser <- isTRUE(input$appraiser_mode)
+    appraiser <- input$purpose %in% c("appraisal", "market")
 
     # Special column options
-    special_options <- c("no", "contract_date", "latitude", "longitude")
+    special_options <- c("no", "contract_date", "latitude", "longitude", "living_area", "display_only")
 
     # Header row
     header_cols <- list(
@@ -465,14 +572,12 @@ function(input, output, session) {
           var types = {};
           var specials = {};
           for (var i = 1; i <= n; i++) {
-            if ($('#eui_inc_' + i).is(':checked')) inc.push(cols[i-1]);
+            var sp = appraiser ? ($('#eui_special_' + i).val() || 'no') : 'no';
+            if (appraiser) specials[cols[i-1]] = sp;
+            if ($('#eui_inc_' + i).is(':checked') && sp !== 'display_only') inc.push(cols[i-1]);
             if ($('#eui_fac_' + i).is(':checked')) fac.push(cols[i-1]);
             if ($('#eui_lin_' + i).is(':checked')) lin.push(cols[i-1]);
             types[cols[i-1]] = $('#eui_type_' + i).val();
-            if (appraiser) {
-              var sp = $('#eui_special_' + i).val();
-              if (sp) specials[cols[i-1]] = sp;
-            }
           }
           Shiny.setInputValue('predictors', inc.length > 0 ? inc : null);
           Shiny.setInputValue('categoricals', fac.length > 0 ? fac : null);
@@ -549,8 +654,8 @@ function(input, output, session) {
         $(document).off('change.euispecial').on('change.euispecial', '.eui-special-select', function() {
           var idx = parseInt(this.id.replace('eui_special_', ''));
           var val = $(this).val();
-          if (val !== 'no') {
-            // Only one column per special type
+          if (val !== 'no' && val !== 'display_only') {
+            // Only one column per special type (except display_only allows multiple)
             for (var j = 1; j <= n; j++) {
               if (j !== idx && $('#eui_special_' + j).val() === val) {
                 $('#eui_special_' + j).val('no');
@@ -734,7 +839,7 @@ function(input, output, session) {
   })
 
   # --- Fit Model ---
-  build_fit_args_ <- function() {
+  build_fit_args_ <- function(df = rv$data) {
     na_to_null <- function(x) if (is.na(x) || is.null(x)) NULL else x
 
     degree <- as.integer(input$degree)
@@ -754,22 +859,22 @@ function(input, output, session) {
     # Weights column → numeric vector (or NULL)
     weights_arg <- NULL
     if (!is.null(input$weights_col) && input$weights_col != "null" &&
-        input$weights_col %in% names(rv$data)) {
-      weights_arg <- rv$data[[input$weights_col]]
+        input$weights_col %in% names(df)) {
+      weights_arg <- df[[input$weights_col]]
     }
 
     # wp column → numeric vector (or NULL)
     wp_arg <- NULL
     if (!is.null(input$wp_col) && input$wp_col != "null" &&
-        input$wp_col %in% names(rv$data)) {
-      wp_arg <- rv$data[[input$wp_col]]
+        input$wp_col %in% names(df)) {
+      wp_arg <- df[[input$wp_col]]
     }
 
     # Collect type_map from JS dropdown state
     type_map_arg <- input$col_types  # named list from gatherState()
 
     list(
-      df              = rv$data,
+      df              = df,
       target          = input$target,
       predictors      = input$predictors,
       categoricals    = input$categoricals,
@@ -815,8 +920,18 @@ function(input, output, session) {
   observeEvent(input$run_model, {
     req(rv$data, input$target, input$predictors)
 
-    # --- Appraiser: add sale_age if requested ---
-    if (isTRUE(input$appraiser_mode) && isTRUE(input$add_sale_age)) {
+    # --- Appraiser: round latitude/longitude to 3 decimal places ---
+    if (input$purpose %in% c("appraisal", "market") && !is.null(input$col_specials)) {
+      for (nm in names(input$col_specials)) {
+        if (input$col_specials[[nm]] %in% c("latitude", "longitude") &&
+            nm %in% names(rv$data) && is.numeric(rv$data[[nm]])) {
+          rv$data[[nm]] <- round(rv$data[[nm]], 3L)
+        }
+      }
+    }
+
+    # --- Appraiser: add sale_age if contract_date is designated ---
+    if (input$purpose %in% c("appraisal", "market")) {
       if (!("sale_age" %in% names(rv$data) && is.numeric(rv$data[["sale_age"]]))) {
         # Find contract_date column
         specials <- input$col_specials
@@ -829,11 +944,10 @@ function(input, output, session) {
 
         if (is.null(contract_col)) {
           showNotification(
-            "Please set a column as 'contract_date' in the Special dropdown before fitting.",
-            type = "error", duration = 10
+            "No 'contract_date' column designated — skipping sale_age calculation.",
+            type = "message", duration = 6
           )
-          return()
-        }
+        } else {
 
         # Parse effective_date
         eff_date <- as.POSIXct(as.character(input$effective_date))
@@ -880,24 +994,31 @@ function(input, output, session) {
           type = "message", duration = 8
         )
         return()
-      }
-    }
-
-    # --- Appraiser: round latitude/longitude to 3 decimal places ---
-    if (isTRUE(input$appraiser_mode) && !is.null(input$col_specials)) {
-      for (nm in names(input$col_specials)) {
-        if (input$col_specials[[nm]] %in% c("latitude", "longitude") &&
-            nm %in% names(rv$data) && is.numeric(rv$data[[nm]])) {
-          rv$data[[nm]] <- round(rv$data[[nm]], 3L)
         }
       }
     }
 
-    fit_args <- build_fit_args_()
+    # --- Skip subject row for Appraisal / Market Area Analysis ---
+    skip_first <- FALSE
+    if (input$purpose == "appraisal") {
+      skip_first <- TRUE
+    } else if (input$purpose == "market" && isTRUE(input$skip_subject_row)) {
+      skip_first <- TRUE
+    }
+    if (skip_first && nrow(rv$data) >= 2L) {
+      fit_data <- rv$data[2:nrow(rv$data), , drop = FALSE]
+      showNotification(
+        paste0("Skipping row 1 (subject). Fitting on ", nrow(fit_data), " rows."),
+        type = "message", duration = 4)
+    } else {
+      fit_data <- rv$data
+    }
+
+    fit_args <- build_fit_args_(df = fit_data)
 
     # --- Type validation before fitting ---
     if (!is.null(fit_args$type_map)) {
-      validation <- validate_types(rv$data, fit_args$type_map, fit_args$predictors)
+      validation <- validate_types(fit_data, fit_args$type_map, fit_args$predictors)
 
       if (length(validation$warnings) > 0L) {
         showNotification(
@@ -951,7 +1072,8 @@ function(input, output, session) {
         },
         args = list(args = fit_args),
         stdout = "|", stderr = "|",
-        supervise = TRUE
+        supervise = TRUE,
+        wd = tempdir()
       )
       rv$fitting <- TRUE
       session$sendCustomMessage("fitting_start", list())
@@ -1007,11 +1129,13 @@ function(input, output, session) {
           setProgress(1, detail = "Done")
           session$sendCustomMessage("fitting_done",
             list(text = sprintf("Done in %.1fs", elapsed)))
+          write_fit_log_(input$output_folder, rv$result$trace_output, rv$file_name)
         }, error = function(e) {
           session$sendCustomMessage("fitting_done",
             list(text = "Error"))
           showNotification(paste("Model error:", e$message),
                            type = "error", duration = 10)
+          write_fit_log_(input$output_folder, c(paste("ERROR:", e$message)), rv$file_name)
         })
       })
     }
@@ -1073,6 +1197,8 @@ function(input, output, session) {
           rv$result <- result
           session$sendCustomMessage("fitting_done",
             list(text = sprintf("Done in %.1fs", result$elapsed)))
+          # Write log file on success
+          write_fit_log_(input$output_folder, rv$trace_lines, rv$file_name)
         }, error = function(e) {
           # Extract the real error from callr's wrapper
           err_msg <- e$message
@@ -1088,6 +1214,9 @@ function(input, output, session) {
           session$sendCustomMessage("fitting_done", list(text = "Error"))
           showNotification(paste("Model error:", err_msg),
                            type = "error", duration = 15)
+          # Write log file on error
+          log_lines <- c(rv$trace_lines, paste("ERROR:", err_msg))
+          write_fit_log_(input$output_folder, log_lines, rv$file_name)
         })
 
         rv$fitting <- FALSE
@@ -1527,12 +1656,28 @@ function(input, output, session) {
   )
 
   # --- Export Data (Excel) ---
+  export_data_filename_ <- function() {
+    base <- tools::file_path_sans_ext(rv$file_name %||% "data")
+    paste0(base, "_modified_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx")
+  }
+
   output$export_data <- downloadHandler(
-    filename = function() {
-      base <- tools::file_path_sans_ext(rv$file_name %||% "data")
-      paste0(base, "_modified_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx")
-    },
+    filename = export_data_filename_,
     content = function(file) {
+      export_data_content_(file, "export_data")
+    },
+    contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  )
+
+  output$export_data_nonadj <- downloadHandler(
+    filename = export_data_filename_,
+    content = function(file) {
+      export_data_content_(file, "export_data_nonadj")
+    },
+    contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  )
+
+  export_data_content_ <- function(file, btn_id = "export_data") {
       req(rv$data)
       if (!requireNamespace("writexl", quietly = TRUE)) {
         showNotification(
@@ -1540,7 +1685,338 @@ function(input, output, session) {
           type = "error", duration = 10)
         return()
       }
-      writexl::write_xlsx(rv$data, file)
+
+      export_df <- rv$data
+
+      # --- Append model columns if a model is fitted ---
+      if (!is.null(rv$result)) {
+        model   <- rv$result$model
+        targets <- rv$result$target
+        eq      <- format_model_equation(rv$result)
+
+        # Find living_area column from specials
+        la_col <- NULL
+        specials <- input$col_specials
+        if (!is.null(specials)) {
+          for (nm in names(specials)) {
+            if (specials[[nm]] == "living_area" && nm %in% names(export_df)) {
+              la_col <- nm
+              break
+            }
+          }
+        }
+
+        multi <- length(targets) > 1L
+
+        for (ri in seq_along(targets)) {
+          tgt <- targets[ri]
+          suffix <- if (multi) paste0("_", ri) else ""
+
+          # Get equation groups for this response
+          if (multi) {
+            eq_ri <- eq$equations[[ri]]
+          } else {
+            eq_ri <- eq
+          }
+          groups <- eq_ri$groups
+
+          # --- est_<target> from predict() ---
+          actual <- export_df[[tgt]]
+          # In appraisal mode, subject (row 1) has no real sale price
+          if (input$purpose == "appraisal" && nrow(export_df) >= 1L) {
+            actual[1L] <- NA_real_
+          }
+          pred_mat <- stats::predict(model, newdata = export_df)
+          predicted <- if (multi) as.numeric(pred_mat[, ri]) else as.numeric(pred_mat)
+
+          est_col <- paste0("est_", tgt)
+          export_df[[est_col]] <- round(predicted, 1)
+
+          # residual = actual - predicted (from model)
+          resid_col <- paste0("residual", suffix)
+          export_df[[resid_col]] <- round(actual - predicted, 1)
+
+          # CQA: % of comps with smaller signed residual / 10
+          # Large positive residual = high CQA (~10), large negative = low CQA (~0)
+          resid_vals <- export_df[[resid_col]]
+          n_valid <- sum(!is.na(resid_vals))
+          cqa_col <- paste0("cqa", suffix)
+          cqa_vals <- vapply(resid_vals, function(r) {
+            if (is.na(r)) return(NA_real_)
+            sum(resid_vals < r, na.rm = TRUE) / n_valid * 10
+          }, numeric(1))
+          export_df[[cqa_col]] <- round(cqa_vals, 2)
+
+          # residual_sf = residual / living_area
+          if (!is.null(la_col)) {
+            la <- export_df[[la_col]]
+            resid_sf_col <- paste0("residual_sf", suffix)
+            export_df[[resid_sf_col]] <- round(export_df[[resid_col]] / la, 1)
+
+            # CQA_SF: % of comps with smaller signed residual_sf / 10
+            resid_sf_vals <- export_df[[resid_sf_col]]
+            n_valid_sf <- sum(!is.na(resid_sf_vals))
+            cqa_sf_col <- paste0("cqa_sf", suffix)
+            cqa_sf_vals <- vapply(resid_sf_vals, function(r) {
+              if (is.na(r)) return(NA_real_)
+              sum(resid_sf_vals < r, na.rm = TRUE) / n_valid_sf * 10
+            }, numeric(1))
+            export_df[[cqa_sf_col]] <- round(cqa_sf_vals, 2)
+          }
+
+          # --- Per-g-function contributions ---
+          intercept_group <- NULL
+          contrib_groups  <- list()
+          for (grp in groups) {
+            if (grp$degree == 0L) {
+              intercept_group <- grp
+            } else {
+              contrib_groups <- c(contrib_groups, list(grp))
+            }
+          }
+
+          # Basis (intercept) contribution — constant for all rows
+          basis_val <- if (!is.null(intercept_group)) {
+            intercept_group$terms[[1]]$coefficient
+          } else {
+            0
+          }
+
+          contrib_total <- rep(basis_val, nrow(export_df))
+          for (grp in contrib_groups) {
+            col_label <- gsub(" ", "_", grp$label)
+            col_name  <- paste0(col_label, "_contribution", suffix)
+            contrib   <- earthUI:::eval_g_function_(model, grp, export_df,
+                                                     response_idx = if (multi) ri else NULL)
+            export_df[[col_name]] <- round(contrib, 1)
+            contrib_total <- contrib_total + contrib
+          }
+
+          export_df[[paste0("basis", suffix)]] <- round(basis_val, 1)
+
+          # calc_residual = actual - (basis + all contributions)
+          calc_resid_col <- paste0("calc_residual", suffix)
+          export_df[[calc_resid_col]] <- round(actual - contrib_total, 1)
+
+        }
+      }
+
+      writexl::write_xlsx(export_df, file)
+      session$sendCustomMessage("download_check", list(id = btn_id))
+  }
+
+  # --- RCA Raw Output ---
+
+  # Show modal when button is clicked
+  observeEvent(input$rca_output_btn, {
+    req(rv$result, input$purpose == "appraisal")
+
+    # Check if living_area is designated (for CQA_SF option)
+    has_la <- FALSE
+    specials <- input$col_specials
+    if (!is.null(specials)) {
+      for (nm in names(specials)) {
+        if (specials[[nm]] == "living_area" && nm %in% names(rv$data)) {
+          has_la <- TRUE
+          break
+        }
+      }
+    }
+
+    cqa_choices <- c("CQA" = "cqa")
+    if (has_la) cqa_choices <- c(cqa_choices, "CQA per SF" = "cqa_sf")
+
+    showModal(modalDialog(
+      title = "RCA Raw Output — Subject CQA Score",
+      radioButtons("rca_cqa_type", "Score type:",
+                   choices = cqa_choices, selected = "cqa", inline = TRUE),
+      numericInput("rca_cqa_value", "CQA score for subject (0.00–9.99):",
+                   value = 5.00, min = 0, max = 9.99, step = 0.01),
+      footer = tagList(
+        modalButton("Cancel"),
+        downloadButton("export_rca", "Generate", class = "btn-success")
+      ),
+      size = "s"
+    ))
+  })
+
+  # RCA download handler
+  output$export_rca <- downloadHandler(
+    filename = function() {
+      base <- tools::file_path_sans_ext(rv$file_name %||% "data")
+      paste0(base, "_adjusted_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx")
+    },
+    content = function(file) {
+      req(rv$data, rv$result, input$purpose == "appraisal", nrow(rv$data) >= 2L)
+      removeModal()
+
+      if (!requireNamespace("writexl", quietly = TRUE)) {
+        showNotification("Package 'writexl' required.", type = "error", duration = 10)
+        return()
+      }
+
+      model   <- rv$result$model
+      targets <- rv$result$target
+      tgt     <- targets[1L]
+      eq      <- format_model_equation(rv$result)
+      eq_ri   <- if (length(targets) > 1L) eq$equations[[1L]] else eq
+      groups  <- eq_ri$groups
+      multi   <- length(targets) > 1L
+      ri      <- 1L
+
+      # Find living_area column
+      la_col <- NULL
+      specials <- input$col_specials
+      if (!is.null(specials)) {
+        for (nm in names(specials)) {
+          if (specials[[nm]] == "living_area" && nm %in% names(rv$data)) {
+            la_col <- nm
+            break
+          }
+        }
+      }
+
+      export_df <- rv$data
+
+      # --- Predict on all rows ---
+      pred_mat <- stats::predict(model, newdata = export_df)
+      predicted <- if (multi) as.numeric(pred_mat[, ri]) else as.numeric(pred_mat)
+      export_df[[paste0("est_", tgt)]] <- round(predicted, 1)
+
+      # Actual sale prices (subject = NA)
+      actual <- export_df[[tgt]]
+      actual[1L] <- NA_real_
+
+      # Residuals for comps
+      residuals_val <- actual - predicted
+      export_df[["residual"]] <- round(residuals_val, 1)
+
+      # Per-SF residuals
+      if (!is.null(la_col)) {
+        la <- export_df[[la_col]]
+        export_df[["residual_sf"]] <- round(residuals_val / la, 1)
+      }
+
+      # CQA scores (comps only, subject = NA)
+      comp_resid <- residuals_val[-1L]
+      n_comps <- sum(!is.na(comp_resid))
+      cqa_all <- vapply(residuals_val, function(r) {
+        if (is.na(r)) return(NA_real_)
+        sum(comp_resid < r, na.rm = TRUE) / n_comps * 10
+      }, numeric(1))
+      export_df[["cqa"]] <- round(cqa_all, 2)
+
+      if (!is.null(la_col)) {
+        resid_sf_vals <- export_df[["residual_sf"]]
+        comp_resid_sf <- resid_sf_vals[-1L]
+        n_comps_sf <- sum(!is.na(comp_resid_sf))
+        cqa_sf_all <- vapply(resid_sf_vals, function(r) {
+          if (is.na(r)) return(NA_real_)
+          sum(comp_resid_sf < r, na.rm = TRUE) / n_comps_sf * 10
+        }, numeric(1))
+        export_df[["cqa_sf"]] <- round(cqa_sf_all, 2)
+      }
+
+      # --- Step A: Interpolate subject residual from user CQA ---
+      use_sf <- (input$rca_cqa_type == "cqa_sf" && !is.null(la_col))
+      user_cqa <- input$rca_cqa_value
+
+      if (use_sf) {
+        comp_cqa_vals  <- export_df[["cqa_sf"]][-1L]
+        comp_resid_for_interp <- export_df[["residual_sf"]][-1L]
+      } else {
+        comp_cqa_vals  <- export_df[["cqa"]][-1L]
+        comp_resid_for_interp <- export_df[["residual"]][-1L]
+      }
+
+      # Remove NAs, sort by CQA ascending for interpolation
+      valid <- !is.na(comp_cqa_vals) & !is.na(comp_resid_for_interp)
+      cqa_sorted   <- comp_cqa_vals[valid]
+      resid_sorted <- comp_resid_for_interp[valid]
+      ord <- order(cqa_sorted)
+      cqa_sorted   <- cqa_sorted[ord]
+      resid_sorted <- resid_sorted[ord]
+
+      # Linear interpolation
+      subject_resid <- stats::approx(cqa_sorted, resid_sorted,
+                                     xout = user_cqa, rule = 2)$y
+
+      if (use_sf) {
+        # Convert per-SF residual back to total residual
+        subject_la <- export_df[[la_col]][1L]
+        subject_resid_total <- subject_resid * subject_la
+      } else {
+        subject_resid_total <- subject_resid
+      }
+
+      subject_est <- predicted[1L] + subject_resid_total
+      export_df[["residual"]][1L]           <- round(subject_resid_total, 1)
+      export_df[[paste0("est_", tgt)]][1L]  <- round(predicted[1L], 1)
+      export_df[["subject_value"]]          <- NA_real_
+      export_df[["subject_value"]][1L]      <- round(subject_est, 1)
+      export_df[["subject_cqa"]]            <- NA_real_
+      export_df[["subject_cqa"]][1L]        <- user_cqa
+
+      if (use_sf && !is.null(la_col)) {
+        export_df[["residual_sf"]][1L] <- round(subject_resid, 1)
+      }
+
+      # --- Step B: Per-g-function contributions and adjustments ---
+      intercept_group <- NULL
+      contrib_groups  <- list()
+      for (grp in groups) {
+        if (grp$degree == 0L) {
+          intercept_group <- grp
+        } else {
+          contrib_groups <- c(contrib_groups, list(grp))
+        }
+      }
+
+      basis_val <- if (!is.null(intercept_group)) {
+        intercept_group$terms[[1]]$coefficient
+      } else {
+        0
+      }
+      export_df[["basis"]] <- round(basis_val, 1)
+
+      # Compute contributions for all rows, then adjustments = subject - comp
+      adj_sum    <- rep(0, nrow(export_df))
+      gross_sum  <- rep(0, nrow(export_df))
+      contrib_labels <- character(0)
+
+      for (grp in contrib_groups) {
+        col_label <- gsub(" ", "_", grp$label)
+        contrib_col <- paste0(col_label, "_contribution")
+        adj_col     <- paste0(col_label, "_adjustment")
+
+        contrib <- earthUI:::eval_g_function_(model, grp, export_df,
+                                               response_idx = if (multi) ri else NULL)
+        export_df[[contrib_col]] <- round(contrib, 1)
+
+        # Adjustment = subject contribution - comp contribution
+        subject_contrib <- contrib[1L]
+        adjustment <- subject_contrib - contrib
+        export_df[[adj_col]] <- round(adjustment, 1)
+
+        adj_sum   <- adj_sum + adjustment
+        gross_sum <- gross_sum + abs(adjustment)
+        contrib_labels <- c(contrib_labels, col_label)
+      }
+
+      # residual_adjustment = subject residual - comp residual
+      resid_adj <- subject_resid_total - residuals_val
+      export_df[["residual_adjustment"]] <- round(resid_adj, 1)
+      adj_sum   <- adj_sum + resid_adj
+      gross_sum <- gross_sum + abs(resid_adj)
+
+      # adjusted_sale_price = sale_price + net_adjustments
+      sale_prices <- rv$data[[tgt]]
+      export_df[["net_adjustments"]]      <- round(adj_sum, 1)
+      export_df[["gross_adjustments"]]    <- round(gross_sum, 1)
+      export_df[["adjusted_sale_price"]]  <- round(sale_prices + adj_sum, 1)
+
+      writexl::write_xlsx(export_df, file)
+      session$sendCustomMessage("download_check", list(id = "rca_output_btn"))
     },
     contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   )
