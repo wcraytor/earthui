@@ -55,9 +55,18 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
 
 ## Key Conventions
 
-- **Async model fitting**: Uses `callr::r_bg()` with stdout/stderr piping and
-  a 300ms polling observer. Falls back to synchronous `fit_earth()` if callr
-  is unavailable.
+- **Async model fitting**: Uses `callr::r_bg()` with `wd = tempdir()`,
+  stdout/stderr piping, and a 300ms polling observer. Falls back to
+  synchronous `fit_earth()` if callr is unavailable.
+- **Purpose modes**: Radio button (`input$purpose`) with three options:
+  `"general"`, `"appraisal"`, `"market"`. Controls sidebar visibility,
+  subject row handling, special column options, and download workflows.
+- **Special columns**: Dropdown per predictor row with options: `no`,
+  `contract_date`, `latitude`, `longitude`, `living_area`, `display_only`.
+  Only one column per type (except `display_only` allows multiple).
+- **Subject row handling**: In appraisal mode, row 1 is the subject
+  property (excluded from fitting, sale price treated as NA). In market
+  mode, optional via "Skip first row" checkbox.
 - **Axis formatting**: `auto_digits_()` detects axis range and selects decimal
   places (range < 1 → 3 dp for lat/long; range >= 100 → 0 dp with commas).
   Slope labels scale units accordingly (`/0.001` for small-range axes,
@@ -66,12 +75,40 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
   `_`, `$`, `%`, `&`, `#` for both MathJax and PDF/LaTeX output.
 - **CSS sticky headers**: Allowed Interactions matrix uses `position: sticky`
   with `var(--bs-body-bg)` for light/dark mode support.
+- **Collapsible sections**: Sidebar sections 2–5 and Download Report use
+  `<details>/<summary>` with CSS class `eui-section`, defaulting to collapsed.
+- **Button checkmarks**: Green ✓ appended to Fit, Download, and RCA buttons
+  on completion; cleared when a new fit starts.
 - **PDF export**: Renders to a temp file first, then binary-copies to Shiny's
   download path. Uses base R `persp()` for 3D plots (no external dependencies).
+- **Fit log**: Written to the output folder on every fit (success or error)
+  as `<filename>_earth_log_<timestamp>.txt`.
 - **roxygen2**: All exported functions have roxygen docs. Run `roxygenise()`
   after editing any `@export` or `@param` tags.
 - **NAMESPACE**: Auto-generated. Never edit by hand.
 - **Port**: The Shiny app runs on fixed port 7878.
+
+## Download Workflows
+
+### Intermediate Output (Step 5)
+Appends model columns to `rv$data` and exports as Excel:
+- `est_<target>`: predicted value from `predict(model)`
+- `residual`: actual − predicted
+- `cqa`: % of comps with smaller signed residual ÷ 10 (2 dp)
+- `residual_sf`: residual ÷ living_area (if designated)
+- `cqa_sf`: CQA score on per-SF residuals
+- `X_contribution`: per-g-function value contribution
+- `basis`: intercept contribution
+- `calc_residual`: actual − (basis + contributions), verification column
+- Sorted by `residual_sf` descending (appraisal/market modes)
+
+### RCA Adjustments (Step 6, appraisal only)
+Modal prompts for subject CQA score (CQA or CQA_SF). Then:
+- Interpolates subject residual from comp CQA/residual pairs
+- Computes `subject_value` = model estimate + interpolated residual
+- `X_adjustment` = subject contribution − comp contribution
+- `residual_adjustment` = subject residual − comp residual
+- `net_adjustments`, `gross_adjustments`, `adjusted_sale_price`
 
 ## Dependencies
 
