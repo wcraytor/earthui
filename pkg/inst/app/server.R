@@ -1801,6 +1801,22 @@ function(input, output, session) {
         }
       }
 
+      # Sort by residual_sf (or residual) descending for appraisal/market
+      if (input$purpose %in% c("appraisal", "market") && !is.null(rv$result)) {
+        has_subject <- (input$purpose == "appraisal") ||
+                       (input$purpose == "market" && isTRUE(input$skip_subject_row))
+        sort_col <- if ("residual_sf" %in% names(export_df)) "residual_sf" else "residual"
+        if (sort_col %in% names(export_df)) {
+          if (has_subject && nrow(export_df) >= 2L) {
+            comps <- export_df[2:nrow(export_df), , drop = FALSE]
+            comps <- comps[order(comps[[sort_col]], decreasing = TRUE, na.last = TRUE), , drop = FALSE]
+            export_df <- rbind(export_df[1L, , drop = FALSE], comps)
+          } else {
+            export_df <- export_df[order(export_df[[sort_col]], decreasing = TRUE, na.last = TRUE), , drop = FALSE]
+          }
+        }
+      }
+
       writexl::write_xlsx(export_df, file)
       session$sendCustomMessage("download_check", list(id = btn_id))
   }
