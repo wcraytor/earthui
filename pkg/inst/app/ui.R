@@ -49,6 +49,12 @@ fluidPage(
     [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio'] { border-color: #fff; }
     [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked { border-color: #fff; }
     [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked::after { background: #fff; }
+    [data-bs-theme='dark'] .modal .btn-outline-primary { color: #fff; border-color: #fff; }
+    [data-bs-theme='dark'] .modal .btn-outline-primary:hover { background: #fff; color: #222; }
+    [data-bs-theme='dark'] .modal .btn-outline-secondary { color: #ccc; border-color: #ccc; }
+    [data-bs-theme='dark'] .modal .btn-outline-secondary:hover { background: #ccc; color: #222; }
+    [data-bs-theme='dark'] .modal .btn-outline-danger { color: #e74c3c; border-color: #e74c3c; }
+    [data-bs-theme='dark'] .modal .btn-outline-danger:hover { background: #e74c3c; color: #fff; }
   "))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -175,6 +181,18 @@ fluidPage(
     // Check download buttons on completion
     Shiny.addCustomMessageHandler('download_check', function(msg) {
       addCheck(msg.id);
+    });
+
+    // --- wp display and button state ---
+    Shiny.addCustomMessageHandler('update_wp_display', function(msg) {
+      $('#wp_display').text(msg.text);
+    });
+    Shiny.addCustomMessageHandler('wp_btn_state', function(msg) {
+      if (msg.disabled) {
+        $('#wp_set_btn').prop('disabled', true).addClass('disabled');
+      } else {
+        $('#wp_set_btn').prop('disabled', false).removeClass('disabled');
+      }
     });
 
     // --- SQLite settings bridge ---
@@ -304,7 +322,7 @@ fluidPage(
     Shiny.addCustomMessageHandler('apply_earth_defaults', function(msg) {
       // Selectize inputs (includes new params 1-4)
       var selects = {
-        subset_arg: 'null', weights_col: 'null', wp_col: 'null', na_action: 'na.fail',
+        weights_col: 'null',
         degree: '1', pmethod: 'backward', glm_family: 'none',
         trace: '0', varmod_method: 'lm'
       };
@@ -320,7 +338,8 @@ fluidPage(
         newvar_penalty: 0, fast_k: 20, fast_beta: 1,
         nprune: '', nfold_override: 10, ncross: 20,
         varmod_exponent: 1, varmod_conv: 1, varmod_clamp: 0.1, varmod_minspan: -3,
-        adjust_endspan: 2, exhaustive_tol: 1e-10
+        adjust_endspan: 2, exhaustive_tol: 1e-10,
+        subset_arg: ''
       };
       for (var id in numerics) {
         $('#' + id).val(numerics[id]).trigger('change');
@@ -453,10 +472,14 @@ fluidPage(
 
         # 1. subset
         param_with_help(
-          selectInput("subset_arg", "subset",
-                      choices = c("NULL (all rows)" = "null"),
-                      selected = "null"),
-          "Row subset. Default NULL uses all rows."),
+          tagList(
+            textInput("subset_arg", "subset", value = "",
+                      placeholder = "e.g. sale_age < 1000 & age > 20"),
+            actionButton("subset_builder_btn", "Build filter...",
+                         class = "btn-outline-secondary btn-sm",
+                         style = "margin-top: -10px; margin-bottom: 8px; width: 100%;")
+          ),
+          "Row filter expression using column names. Leave blank to use all rows. Examples: sale_age < 1000, area_id != 460, sale_price > 100000 & age < 50"),
 
         # 2. weights
         param_with_help(
@@ -465,21 +488,20 @@ fluidPage(
                       selected = "null"),
           "Case weights. Select a numeric column or NULL for no weighting."),
 
-        # 3. wp
+        # 3. wp (response weights — per-target numeric, not a column)
         param_with_help(
-          selectInput("wp_col", "wp (response weights)",
-                      choices = c("NULL (none)" = "null"),
-                      selected = "null"),
-          "Response weights for estimating the variance model. Default NULL."),
+          tagList(
+            tags$label("wp (response weights)", style = "font-weight: bold; font-size: 0.85em;"),
+            tags$div(id = "wp_display",
+                     style = "font-size: 0.85em; color: var(--bs-body-color, #666); margin-bottom: 4px;",
+                     "NULL (equal weights)"),
+            actionButton("wp_set_btn", "Set weights...",
+                         class = "btn-outline-secondary btn-sm",
+                         style = "margin-bottom: 8px; width: 100%;")
+          ),
+          "Response weights — one numeric weight per target variable. Only for multi-target models. Default NULL (equal weights)."),
 
-        # 4. na.action
-        param_with_help(
-          selectInput("na_action", "na.action",
-                      choices = c("na.fail" = "na.fail"),
-                      selected = "na.fail"),
-          "Only na.fail is allowed. Rows with NAs are removed before fitting."),
-
-        # 5. keepxy
+        # 4. keepxy (na.action removed — always na.fail)
         param_with_help(
           checkboxInput("keepxy", "Keep x,y in model (keepxy)", value = FALSE),
           "Default FALSE. Retain x, y, subset, weights in model object. Required for some CV statistics. Makes CV slower."),
@@ -760,8 +782,8 @@ fluidPage(
           tags$details(class = "eui-section",
             tags$summary(uiOutput("report_heading", inline = TRUE)),
             selectInput("export_format", "Format",
-                        choices = c("HTML" = "html", "PDF" = "pdf",
-                                    "Word" = "docx")),
+                        choices = c("HTML" = "html", "Word" = "docx",
+                                    "PDF" = "pdf")),
             downloadButton("export_report", "Download Report",
                            class = "btn-success",
                            style = "width: 100%;")

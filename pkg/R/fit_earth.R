@@ -172,6 +172,8 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   if (n_removed > 0L) {
     message("Removed ", n_removed, " rows with missing values.")
     model_df <- model_df[complete, , drop = FALSE]
+    # Subset row weights to match remaining rows
+    if (!is.null(weights)) weights <- weights[complete]
   }
   if (nrow(model_df) < 10L) {
     na_counts <- vapply(model_df, function(col) sum(is.na(col)), integer(1L))

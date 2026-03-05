@@ -37,7 +37,9 @@ function(input, output, session) {
     fitting = FALSE,
     bg_proc = NULL,
     trace_lines = character(0),
-    user_varmod = "lm"        # user's explicit varmod.method choice
+    user_varmod = "lm",       # user's explicit varmod.method choice
+    wp_weights = NULL,         # per-target response weights (numeric vector or NULL)
+    subset_conditions = list() # condition rows for subset filter builder
   )
 
   # Track user's explicit varmod.method changes
@@ -111,13 +113,12 @@ function(input, output, session) {
     rv$result <- NULL
   })
 
-  # Update weights/wp dropdowns with numeric column names when data loads
+  # Update weights dropdown with numeric column names when data loads
   observe({
     req(rv$data)
     num_cols <- names(rv$data)[vapply(rv$data, is.numeric, logical(1))]
     choices <- c("NULL (none)" = "null", stats::setNames(num_cols, num_cols))
     updateSelectInput(session, "weights_col", choices = choices, selected = "null")
-    updateSelectInput(session, "wp_col", choices = choices, selected = "null")
   })
 
   output$data_loaded <- reactive(!is.null(rv$data))
@@ -138,6 +139,282 @@ function(input, output, session) {
       "5. Download Estimated Sale Prices & Residuals"
     }
     h4(label)
+  })
+
+  # ── Subset Filter Builder Dialog ───────────────────────────────────
+  observeEvent(input$subset_builder_btn, {
+    req(rv$data)
+    rv$subset_conditions <- list(list(col = names(rv$data)[1], op = "==", val = ""))
+    show_subset_modal_()
+  })
+
+  show_subset_modal_ <- function() {
+    conds <- rv$subset_conditions
+    df <- rv$data
+    col_choices <- names(df)
+
+    cond_ui <- lapply(seq_along(conds), function(i) {
+      cond <- conds[[i]]
+      col_name <- cond$col
+      col_vals <- df[[col_name]]
+      col_class <- class(col_vals)[1]
+
+      # Type-aware value input
+      val_input <- if (inherits(col_vals, "Date")) {
+        dateInput(paste0("subset_val_", i), NULL,
+                  value = if (nzchar(cond$val)) as.Date(cond$val) else Sys.Date())
+      } else if (inherits(col_vals, "POSIXct") || inherits(col_vals, "POSIXlt")) {
+        dateInput(paste0("subset_val_", i), NULL,
+                  value = if (nzchar(cond$val)) as.Date(cond$val) else Sys.Date())
+      } else if (is.numeric(col_vals)) {
+        numericInput(paste0("subset_val_", i), NULL,
+                     value = if (nzchar(cond$val)) as.numeric(cond$val) else NA)
+      } else {
+        # Character/factor: selectInput with unique values
+        uvals <- sort(unique(as.character(col_vals[!is.na(col_vals)])))
+        selectInput(paste0("subset_val_", i), NULL,
+                    choices = uvals,
+                    selected = if (nzchar(cond$val) && cond$val %in% uvals) cond$val else uvals[1])
+      }
+
+      connector <- NULL
+      if (i > 1) {
+        connector <- radioButtons(paste0("subset_conn_", i), NULL,
+                                  choices = c("AND" = "&", "OR" = "|"),
+                                  selected = if (!is.null(cond$conn)) cond$conn else "&",
+                                  inline = TRUE)
+      }
+
+      tagList(
+        if (!is.null(connector)) tags$div(style = "margin: 4px 0;", connector),
+        fluidRow(
+          column(4, selectInput(paste0("subset_col_", i), NULL,
+                                choices = col_choices, selected = col_name)),
+          column(2, selectInput(paste0("subset_op_", i), NULL,
+                                choices = c("<", ">", "<=", ">=", "==", "!="),
+                                selected = cond$op)),
+          column(4, val_input),
+          column(2, tags$button("X", class = "btn btn-outline-danger btn-sm",
+                                style = "margin-top: 25px;",
+                                onclick = sprintf("Shiny.setInputValue('subset_remove_idx', %d, {priority: 'event'});", i)))
+        )
+      )
+    })
+
+    # Build preview expression
+    expr_text <- build_subset_expr_()
+    preview <- ""
+    if (nzchar(expr_text)) {
+      n_match <- tryCatch({
+        mask <- as.list(df)
+        mask[["TRUE"]] <- TRUE; mask[["FALSE"]] <- FALSE
+        mask$as.Date <- as.Date; mask$as.POSIXct <- as.POSIXct
+        rows <- eval(parse(text = expr_text), envir = mask, enclos = emptyenv())
+        if (is.logical(rows)) sum(rows & !is.na(rows)) else "?"
+      }, error = function(e) paste("Error:", e$message))
+      preview <- sprintf("%s of %d rows match", n_match, nrow(df))
+    }
+
+    # JS to detect column dropdown changes
+    n_conds <- length(conds)
+    col_change_js <- tags$script(HTML(sprintf("
+      $(function() {
+        for (var i = 1; i <= %d; i++) {
+          (function(idx) {
+            $('#subset_col_' + idx).off('change.subsetcol').on('change.subsetcol', function() {
+              Shiny.setInputValue('subset_col_changed',
+                {idx: idx, col: $(this).val(), t: Date.now()},
+                {priority: 'event'});
+            });
+          })(i);
+        }
+      });
+    ", n_conds)))
+
+    showModal(modalDialog(
+      title = "Build Subset Filter",
+      size = "l",
+      tags$div(id = "subset_conditions_container", cond_ui),
+      col_change_js,
+      actionButton("subset_add_condition", "+ Add condition",
+                   class = "btn-outline-primary btn-sm",
+                   style = "margin-top: 8px;"),
+      hr(),
+      tags$div(
+        tags$strong("Expression: "),
+        tags$code(if (nzchar(expr_text)) expr_text else "(none)")
+      ),
+      tags$div(
+        style = "margin-top: 4px; font-size: 0.9em;",
+        tags$strong("Preview: "), preview
+      ),
+      footer = tagList(
+        actionButton("subset_apply", "Apply", class = "btn-success"),
+        modalButton("Cancel")
+      )
+    ))
+  }
+
+  build_subset_expr_ <- function() {
+    conds <- rv$subset_conditions
+    if (length(conds) == 0) return("")
+    df <- rv$data
+    parts <- character(0)
+    for (i in seq_along(conds)) {
+      cond <- conds[[i]]
+      col_name <- cond$col
+      op <- cond$op
+      val <- cond$val
+      if (!nzchar(val) || is.na(val)) next
+
+      col_vals <- df[[col_name]]
+      # Format value based on column type
+      if (inherits(col_vals, "POSIXct") || inherits(col_vals, "POSIXlt")) {
+        val_str <- paste0('as.POSIXct("', val, '")')
+      } else if (inherits(col_vals, "Date")) {
+        val_str <- paste0('as.Date("', val, '")')
+      } else if (is.numeric(col_vals)) {
+        val_str <- val
+      } else {
+        val_str <- paste0('"', gsub('"', '\\\\"', val), '"')
+      }
+
+      expr_part <- paste0(col_name, " ", op, " ", val_str)
+      if (i > 1 && !is.null(cond$conn)) {
+        parts <- c(parts, cond$conn, expr_part)
+      } else {
+        parts <- c(parts, expr_part)
+      }
+    }
+    paste(parts, collapse = " ")
+  }
+
+  # Helper: read current condition values from modal inputs into rv
+  sync_subset_inputs_ <- function() {
+    conds <- rv$subset_conditions
+    for (i in seq_along(conds)) {
+      conds[[i]]$col <- input[[paste0("subset_col_", i)]] %||% conds[[i]]$col
+      conds[[i]]$op <- input[[paste0("subset_op_", i)]] %||% conds[[i]]$op
+      raw_val <- input[[paste0("subset_val_", i)]]
+      conds[[i]]$val <- if (is.null(raw_val) || identical(raw_val, "")) "" else as.character(raw_val)
+      if (i > 1) {
+        conds[[i]]$conn <- input[[paste0("subset_conn_", i)]] %||% "&"
+      }
+    }
+    rv$subset_conditions <- conds
+  }
+
+  # Add condition
+  observeEvent(input$subset_add_condition, {
+    sync_subset_inputs_()
+    conds <- rv$subset_conditions
+    conds[[length(conds) + 1]] <- list(col = names(rv$data)[1], op = "==", val = "", conn = "&")
+    rv$subset_conditions <- conds
+    removeModal()
+    show_subset_modal_()
+  })
+
+  # Remove condition buttons — use JS to send which index to remove
+  observeEvent(input$subset_remove_idx, {
+    idx <- input$subset_remove_idx
+    sync_subset_inputs_()
+    conds <- rv$subset_conditions
+    if (length(conds) > 1 && idx <= length(conds)) {
+      conds[[idx]] <- NULL
+      rv$subset_conditions <- conds
+      removeModal()
+      show_subset_modal_()
+    }
+  }, ignoreInit = TRUE)
+
+  # Column change — use JS to notify which index changed
+  observeEvent(input$subset_col_changed, {
+    idx <- input$subset_col_changed$idx
+    new_col <- input$subset_col_changed$col
+    conds <- rv$subset_conditions
+    if (idx <= length(conds) && !identical(conds[[idx]]$col, new_col)) {
+      sync_subset_inputs_()
+      conds <- rv$subset_conditions
+      conds[[idx]]$col <- new_col
+      conds[[idx]]$val <- ""
+      rv$subset_conditions <- conds
+      removeModal()
+      show_subset_modal_()
+    }
+  }, ignoreInit = TRUE)
+
+  # Apply subset filter
+  observeEvent(input$subset_apply, {
+    sync_subset_inputs_()
+    expr_text <- build_subset_expr_()
+    updateTextInput(session, "subset_arg", value = expr_text)
+    removeModal()
+  })
+
+  # ── Response Weights (wp) Dialog ───────────────────────────────────
+
+  # Reset wp when target changes to single
+  observeEvent(input$target, {
+    if (length(input$target) <= 1L) {
+      rv$wp_weights <- NULL
+      session$sendCustomMessage("update_wp_display",
+        list(text = "NULL (equal weights)"))
+    }
+  })
+
+  # Disable wp button when single target
+  observe({
+    if (length(input$target) > 1L) {
+      shinyjs_run <- function(code) {
+        session$sendCustomMessage("wp_btn_state", list(disabled = FALSE))
+      }
+      session$sendCustomMessage("wp_btn_state", list(disabled = FALSE))
+    } else {
+      session$sendCustomMessage("wp_btn_state", list(disabled = TRUE))
+    }
+  })
+
+  observeEvent(input$wp_set_btn, {
+    targets <- input$target
+    if (length(targets) <= 1L) {
+      showNotification("Response weights require multiple target variables.",
+                       type = "warning", duration = 4)
+      return()
+    }
+
+    # Build one numericInput per target
+    weight_inputs <- lapply(seq_along(targets), function(i) {
+      current_val <- if (!is.null(rv$wp_weights) && i <= length(rv$wp_weights)) {
+        rv$wp_weights[i]
+      } else {
+        1
+      }
+      numericInput(paste0("wp_val_", i), targets[i],
+                   value = current_val, min = 0, step = 0.1)
+    })
+
+    showModal(modalDialog(
+      title = "Response Weights (wp)",
+      tags$p("Set a numeric weight for each target variable.",
+             style = "font-size: 0.9em; color: #666;"),
+      weight_inputs,
+      footer = tagList(
+        actionButton("wp_apply", "Apply", class = "btn-success"),
+        modalButton("Cancel")
+      )
+    ))
+  })
+
+  observeEvent(input$wp_apply, {
+    targets <- input$target
+    weights <- vapply(seq_along(targets), function(i) {
+      val <- input[[paste0("wp_val_", i)]]
+      if (is.null(val) || is.na(val)) 1 else as.numeric(val)
+    }, numeric(1))
+    rv$wp_weights <- weights
+    display <- paste0(targets, " = ", weights, collapse = ", ")
+    session$sendCustomMessage("update_wp_display", list(text = display))
+    removeModal()
   })
 
   # --- Persist settings to SQLite (debounced from JS) ---
@@ -336,14 +613,14 @@ function(input, output, session) {
     js <- tags$script(HTML(sprintf("
       (function() {
         var storageKey = 'earthUI_settings_' + %s;
-        var selectIds = ['target', 'subset_arg', 'weights_col', 'wp_col', 'na_action',
+        var selectIds = ['target', 'weights_col',
                          'degree', 'pmethod', 'glm_family', 'trace',
                          'varmod_method'];
         var numericIds = ['nprune', 'thresh', 'penalty', 'minspan', 'endspan',
                           'fast_k', 'nfold_override', 'nk', 'newvar_penalty',
                           'fast_beta', 'ncross', 'varmod_exponent', 'varmod_conv',
                           'varmod_clamp', 'varmod_minspan', 'adjust_endspan',
-                          'exhaustive_tol', 'output_folder'];
+                          'exhaustive_tol', 'output_folder', 'subset_arg'];
         var checkboxIds = ['stratify', 'keepxy', 'scale_y', 'auto_linpreds',
                            'use_beta_cache', 'force_xtx_prune', 'get_leverages',
                            'force_weights', 'skip_subject_row'];
@@ -878,6 +1155,31 @@ function(input, output, session) {
   build_fit_args_ <- function(df = rv$data) {
     na_to_null <- function(x) if (is.na(x) || is.null(x)) NULL else x
 
+    # Evaluate subset expression (if any) to filter rows
+    subset_expr <- trimws(input$subset_arg %||% "")
+    if (nzchar(subset_expr)) {
+      subset_result <- tryCatch({
+        expr <- parse(text = subset_expr)
+        # Only allow column names from the data as variables
+        mask <- as.list(df)
+        mask[["TRUE"]] <- TRUE; mask[["FALSE"]] <- FALSE
+        mask$as.Date <- as.Date; mask$as.POSIXct <- as.POSIXct
+        rows <- eval(expr, envir = mask, enclos = emptyenv())
+        if (!is.logical(rows)) stop("Expression must evaluate to TRUE/FALSE")
+        rows[is.na(rows)] <- FALSE
+        rows
+      }, error = function(e) {
+        showNotification(paste("Subset error:", e$message),
+                         type = "error", duration = 10)
+        NULL
+      })
+      if (!is.null(subset_result)) {
+        n_before <- nrow(df)
+        df <- df[subset_result, , drop = FALSE]
+        message("earthUI: subset filter: ", sum(subset_result), " of ", n_before, " rows selected")
+      }
+    }
+
     degree <- as.integer(input$degree)
 
     allowed_func <- NULL
@@ -899,12 +1201,8 @@ function(input, output, session) {
       weights_arg <- df[[input$weights_col]]
     }
 
-    # wp column → numeric vector (or NULL)
-    wp_arg <- NULL
-    if (!is.null(input$wp_col) && input$wp_col != "null" &&
-        input$wp_col %in% names(df)) {
-      wp_arg <- df[[input$wp_col]]
-    }
+    # wp (response weights) — per-target numeric vector from dialog
+    wp_arg <- rv$wp_weights
 
     # Collect type_map from JS dropdown state
     type_map_arg <- input$col_types  # named list from gatherState()
@@ -1670,12 +1968,14 @@ function(input, output, session) {
       tmp_out <- tempfile(fileext = paste0(".", fmt))
       on.exit(unlink(tmp_out), add = TRUE)
 
+      render_ok <- FALSE
       withProgress(message = "Rendering report...", value = 0.3, {
         tryCatch({
           render_report(rv$result,
                         output_format = fmt,
                         output_file = tmp_out)
           setProgress(1, detail = "Done")
+          render_ok <- TRUE
         }, error = function(e) {
           message("earthUI export error: ", e$message)
           showNotification(paste("Export error:", e$message),
@@ -1684,8 +1984,11 @@ function(input, output, session) {
       })
 
       # Copy rendered file (binary-safe) to Shiny's download path
-      if (file.exists(tmp_out) && file.size(tmp_out) > 0L) {
+      if (render_ok && file.exists(tmp_out) && file.size(tmp_out) > 0L) {
         file.copy(tmp_out, file, overwrite = TRUE)
+      } else {
+        # Write a minimal fallback so Shiny doesn't 404
+        writeLines("Report rendering failed. Check the R console for details.", file)
       }
     },
     contentType = NA

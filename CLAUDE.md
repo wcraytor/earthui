@@ -79,8 +79,27 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
   `<details>/<summary>` with CSS class `eui-section`, defaulting to collapsed.
 - **Button checkmarks**: Green ✓ appended to Fit, Download, and RCA buttons
   on completion; cleared when a new fit starts.
+- **Subset filter builder**: Modal dialog to build row filter expressions
+  visually. Type-aware value inputs (numericInput for numbers, dateInput for
+  Date/POSIXct, selectInput for factors). AND/OR connectors between conditions.
+  Preview shows matching row count. Expression emits `as.Date()`/`as.POSIXct()`
+  wrappers for date columns. Eval mask includes `as.Date` and `as.POSIXct`.
+- **Response weights (wp)**: Per-target numeric weights via modal dialog
+  (not a column selector). Only enabled for multi-target models. Stored in
+  `rv$wp_weights`. Resets to NULL when target count drops to 1.
+- **na.action**: Always `na.fail` — removed from UI (rows with NAs are
+  removed before fitting in `fit_earth()`).
+- **Weights + NA removal**: `fit_earth()` subsets the `weights` vector by the
+  same `complete.cases()` mask used to remove NA rows, preventing length
+  mismatch errors.
 - **PDF export**: Renders to a temp file first, then binary-copies to Shiny's
   download path. Uses base R `persp()` for 3D plots (no external dependencies).
+- **Report: Allowed Interactions matrix**: Rendered in landscape mode across
+  all formats. PDF uses `pdflscape` (`\begin{landscape}`). Word uses raw
+  OpenXML section breaks for landscape pages. HTML uses custom table with
+  rotated column headers (60-degree CSS transform), compact cells, and
+  scrollable container. Checkmarks (✓) for allowed, em dashes (—) for
+  disallowed. Long predictor names truncated with ellipsis in PDF/Word.
 - **Fit log**: Written to the output folder on every fit (success or error)
   as `<filename>_earth_log_<timestamp>.txt`.
 - **roxygen2**: All exported functions have roxygen docs. Run `roxygenise()`
@@ -127,6 +146,11 @@ Modal prompts for subject CQA score (CQA or CQA_SF). Then:
 ## Common Pitfalls
 
 - `varmod.method != "none"` requires `nfold > 1` and `ncross > 1` in earth.
+  Multi-target models force `varmod.method = "none"`.
+- In `results='asis'` chunks for PDF/LaTeX output, use `\subsection{}` instead
+  of `## Heading` — the `#` character is special in LaTeX.
+- The eval mask for subset expressions uses `mask[["TRUE"]]` not `mask$TRUE`
+  — `TRUE`/`FALSE` are reserved words and can't follow `$`.
 - When inserting roxygen blocks, ensure you don't displace the block of the
   function below (this has caused lost exports).
 - macOS temp paths involve `/var` → `/private/var` symlinks; use

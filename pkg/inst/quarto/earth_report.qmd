@@ -22,6 +22,9 @@ format:
         \setmathfont{Latin Modern Math}
         \setmathfont{Roboto Condensed}[range=up/{num,latin,Latin}]
         \setmathfont{Roboto Condensed}[range=it/{latin,Latin}]
+        \usepackage{pdflscape}
+        \usepackage{longtable}
+        \usepackage{booktabs}
   docx:
     toc: true
     reference-doc: reference.docx
@@ -73,19 +76,82 @@ gf <- list_g_functions(result)
 `r if (multi) paste0("| Response variables | ", length(targets), " |")`
 
 ```{r interaction-matrix, results='asis', eval=result$degree >= 2 && !is.null(result$allowed_matrix)}
-cat("\n## Allowed Interactions\n\n")
 mat <- result$allowed_matrix
 preds <- rownames(mat)
 n <- length(preds)
 
-# Build markdown table
-cat("|  |", paste(preds, collapse = " | "), "|\n")
-cat("|", paste(rep("---", n + 1L), collapse = "|"), "|\n")
+# Build display matrix (Yes/No, diagonal = -)
+display <- matrix("", n, n, dimnames = list(preds, preds))
 for (i in seq_len(n)) {
-  row_vals <- vapply(seq_len(n), function(j) {
-    if (i == j) "-" else if (mat[i, j]) "Yes" else "No"
-  }, character(1))
-  cat("|", preds[i], "|", paste(row_vals, collapse = " | "), "|\n")
+  for (j in seq_len(n)) {
+    display[i, j] <- if (i == j) "" else if (mat[i, j]) "\u2713" else "\u2014"
+  }
+}
+
+fmt <- if (!is.null(knitr::pandoc_to())) knitr::pandoc_to() else "html"
+
+# Truncate long predictor names for compact display
+max_len <- if (n > 8) 12 else if (n > 5) 16 else 30
+short <- ifelse(nchar(preds) > max_len,
+                paste0(substr(preds, 1, max_len - 1), "\u2026"), preds)
+colnames(display) <- short
+rownames(display) <- short
+
+if (fmt == "latex") {
+  cat("\n\\newpage\n\\begin{landscape}\n")
+  cat("\\subsection{Allowed Interactions}\n\n")
+  cat("\\footnotesize\n")
+  print(knitr::kable(display, format = "latex", booktabs = TRUE))
+  cat("\n\\normalsize\n")
+  cat("\\end{landscape}\n\\newpage\n")
+} else if (fmt == "docx") {
+  # Start landscape section
+  cat('\n\n```{=openxml}\n')
+  cat('<w:p><w:pPr><w:sectPr><w:pgSz w:w="12240" w:h="15840"/>')
+  cat('<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>')
+  cat('</w:sectPr></w:pPr></w:p>\n')
+  cat('```\n\n')
+  cat("## Allowed Interactions\n\n")
+  print(knitr::kable(display, format = "pipe"))
+  cat('\n\n```{=openxml}\n')
+  cat('<w:p><w:pPr><w:sectPr><w:pgSz w:w="15840" w:h="12240" w:orient="landscape"/>')
+  cat('<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>')
+  cat('</w:sectPr></w:pPr></w:p>\n')
+  cat('```\n\n')
+} else {
+  # HTML: full-width with rotated column headers for large matrices
+  cat("\n## Allowed Interactions\n\n")
+  cat('<style>\n')
+  cat('.eui-matrix-wrap { overflow-x: auto; margin: 1em 0; }\n')
+  cat('.eui-matrix { border-collapse: collapse; font-size: 0.8em; }\n')
+  cat('.eui-matrix th, .eui-matrix td { border: 1px solid #ddd; padding: 3px 6px; text-align: center; }\n')
+  cat('.eui-matrix th.eui-rotate { height: 120px; white-space: nowrap; vertical-align: bottom; }\n')
+  cat('.eui-matrix th.eui-rotate > div { transform: rotate(-60deg); width: 1.5em; transform-origin: bottom left; margin-left: 50%; }\n')
+  cat('.eui-matrix td:first-child { text-align: left; font-weight: bold; white-space: nowrap; }\n')
+  cat('.eui-matrix .eui-check { color: #27ae60; font-weight: bold; }\n')
+  cat('.eui-matrix .eui-dash { color: #999; }\n')
+  cat('@media print { .eui-matrix-wrap { page-break-before: always; } @page { size: landscape; } }\n')
+  cat('</style>\n')
+  cat('<div class="eui-matrix-wrap">\n')
+  cat('<table class="eui-matrix">\n<thead><tr><th></th>')
+  for (j in seq_len(n)) {
+    cat(sprintf('<th class="eui-rotate"><div>%s</div></th>', preds[j]))
+  }
+  cat('</tr></thead>\n<tbody>\n')
+  for (i in seq_len(n)) {
+    cat(sprintf('<tr><td>%s</td>', preds[i]))
+    for (j in seq_len(n)) {
+      if (i == j) {
+        cat('<td></td>')
+      } else if (mat[i, j]) {
+        cat('<td class="eui-check">\u2713</td>')
+      } else {
+        cat('<td class="eui-dash">\u2014</td>')
+      }
+    }
+    cat('</tr>\n')
+  }
+  cat('</tbody></table>\n</div>\n')
 }
 ```
 
