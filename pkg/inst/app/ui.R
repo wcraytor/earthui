@@ -183,7 +183,7 @@ fluidPage(
       addCheck(msg.id);
     });
 
-    // --- wp display and button state ---
+    // --- wp display, button state, and persistence ---
     Shiny.addCustomMessageHandler('update_wp_display', function(msg) {
       $('#wp_display').text(msg.text);
     });
@@ -194,12 +194,30 @@ fluidPage(
         $('#wp_set_btn').prop('disabled', false).removeClass('disabled');
       }
     });
+    Shiny.addCustomMessageHandler('save_wp_weights', function(msg) {
+      try {
+        localStorage.setItem('earthUI_wp_' + msg.filename, JSON.stringify(msg.weights));
+      } catch(e) {}
+    });
+    // Restore wp weights when target selectize changes
+    $(document).on('change', '#target + .selectize-control', function() {
+      setTimeout(function() {
+        var fn = window.euiCurrentFilename || 'default';
+        try {
+          var saved = JSON.parse(localStorage.getItem('earthUI_wp_' + fn));
+          if (saved && Object.keys(saved).length > 0) {
+            Shiny.setInputValue('wp_weights_restored', saved, {priority: 'event'});
+          }
+        } catch(e) {}
+      }, 500);
+    });
 
     // --- SQLite settings bridge ---
 
     // Restore settings from SQLite into localStorage (and optionally apply to DOM)
     Shiny.addCustomMessageHandler('restore_all_settings', function(msg) {
       var fn = msg.filename;
+      window.euiCurrentFilename = fn;
       if (msg.settings && Object.keys(msg.settings).length > 0) {
         try { localStorage.setItem('earthUI_settings_' + fn, JSON.stringify(msg.settings)); } catch(e) {}
       }
@@ -435,11 +453,20 @@ fluidPage(
       uiOutput("data_preview_info"),
       hr(),
 
+      # --- 2. Output Folder ---
+      conditionalPanel(
+        condition = "output.data_loaded",
+        h4("2. Project Output Folder"),
+        textInput("output_folder", NULL,
+                  value = path.expand("~/Downloads")),
+        hr()
+      ),
+
       # --- Variable Configuration ---
       conditionalPanel(
         condition = "output.data_loaded",
         tags$details(class = "eui-section",
-          tags$summary(h4("2. Variable Configuration")),
+          tags$summary(h4("3. Variable Configuration")),
           uiOutput("target_selector"),
           conditionalPanel(
             condition = "input.purpose !== 'general'",
@@ -454,7 +481,7 @@ fluidPage(
 
         # --- Earth Call Parameters ---
         tags$details(class = "eui-section",
-          tags$summary(h4("3. Earth Call Parameters")),
+          tags$summary(h4("4. Earth Call Parameters")),
         tags$div(
           style = "margin-bottom: 4px; font-size: 0.85em;",
           radioButtons("eui_defaults_action", NULL,
@@ -734,22 +761,20 @@ fluidPage(
         )),
         hr(),
 
-        # --- 4. Fit ---
+        # --- 5. Fit ---
         tags$details(class = "eui-section",
-          tags$summary(h4("4. Fit Earth Model")),
+          tags$summary(h4("5. Fit Earth Model")),
           actionButton("run_model", "Fit Earth Model",
                        class = "btn-success btn-lg",
                        style = "width: 100%; margin-top: 10px;")
         ),
 
-        # --- 5. Download Estimated ... & Residuals ---
+        # --- 6. Download Estimated ... & Residuals ---
         conditionalPanel(
           condition = "output.data_loaded",
           hr(),
           tags$details(class = "eui-section",
             tags$summary(uiOutput("download_heading", inline = TRUE)),
-            textInput("output_folder", "Output folder",
-                      value = path.expand("~/Downloads")),
             conditionalPanel(
               condition = "input.purpose === 'appraisal'",
               downloadButton("export_data", "Download Intermediate Output (Excel)",
@@ -765,11 +790,11 @@ fluidPage(
           )
         ),
 
-        # --- 6. Calculate RCA Adjustments (Appraisal only) ---
+        # --- 7. Calculate RCA Adjustments (Appraisal only) ---
         conditionalPanel(
           condition = "output.model_fitted && input.purpose === 'appraisal'",
           hr(),
-          h4("6. Calculate RCA Adjustments & Download"),
+          h4("7. Calculate RCA Adjustments & Download"),
           actionButton("rca_output_btn", "Calculate RCA Adjustments & Download",
                        class = "btn-success",
                        style = "width: 100%;")
@@ -784,9 +809,9 @@ fluidPage(
             selectInput("export_format", "Format",
                         choices = c("HTML" = "html", "Word" = "docx",
                                     "PDF" = "pdf")),
-            downloadButton("export_report", "Download Report",
-                           class = "btn-success",
-                           style = "width: 100%;")
+            actionButton("export_report_btn", "Download Report",
+                         class = "btn-success",
+                         style = "width: 100%;")
           )
         )
       )

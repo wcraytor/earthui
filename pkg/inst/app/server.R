@@ -128,15 +128,15 @@ function(input, output, session) {
   outputOptions(output, "model_fitted", suspendWhenHidden = FALSE)
 
   output$report_heading <- renderUI({
-    n <- if (identical(input$purpose, "appraisal")) "7" else "6"
+    n <- if (identical(input$purpose, "appraisal")) "8" else "7"
     h4(paste0(n, ". Download Report"))
   })
 
   output$download_heading <- renderUI({
     label <- if (identical(input$purpose, "general")) {
-      "5. Download Estimated Target Variable(s) & Residuals"
+      "6. Download Estimated Target Variable(s) & Residuals"
     } else {
-      "5. Download Estimated Sale Prices & Residuals"
+      "6. Download Estimated Sale Prices & Residuals"
     }
     h4(label)
   })
@@ -414,8 +414,27 @@ function(input, output, session) {
     rv$wp_weights <- weights
     display <- paste0(targets, " = ", weights, collapse = ", ")
     session$sendCustomMessage("update_wp_display", list(text = display))
+    # Persist to localStorage
+    fn <- rv$file_name %||% "default"
+    wp_data <- stats::setNames(as.list(weights), targets)
+    session$sendCustomMessage("save_wp_weights", list(filename = fn, weights = wp_data))
     removeModal()
   })
+
+  # Restore wp weights from localStorage when data/target changes
+  observeEvent(input$wp_weights_restored, {
+    restored <- input$wp_weights_restored
+    if (!is.null(restored) && length(restored) > 0) {
+      targets <- input$target
+      weights <- vapply(targets, function(t) {
+        val <- restored[[t]]
+        if (is.null(val)) 1 else as.numeric(val)
+      }, numeric(1))
+      rv$wp_weights <- weights
+      display <- paste0(targets, " = ", weights, collapse = ", ")
+      session$sendCustomMessage("update_wp_display", list(text = display))
+    }
+  }, ignoreInit = TRUE)
 
   # --- Persist settings to SQLite (debounced from JS) ---
   observeEvent(input$eui_save_trigger, {
@@ -612,7 +631,8 @@ function(input, output, session) {
     # JavaScript: persist target variable + advanced parameters in localStorage
     js <- tags$script(HTML(sprintf("
       (function() {
-        var storageKey = 'earthUI_settings_' + %s;
+        var storageKeyRaw = %s;
+        var storageKey = 'earthUI_settings_' + storageKeyRaw;
         var selectIds = ['target', 'weights_col',
                          'degree', 'pmethod', 'glm_family', 'trace',
                          'varmod_method'];
@@ -713,6 +733,16 @@ function(input, output, session) {
           var degreeReady = degreeEl && degreeEl.selectize && degreeEl.selectize.isSetup;
           if (targetReady && degreeReady) {
             restoreSettings();
+            // Restore wp weights from localStorage
+            window.euiCurrentFilename = storageKeyRaw;
+            setTimeout(function() {
+              try {
+                var wpSaved = JSON.parse(localStorage.getItem('earthUI_wp_' + storageKeyRaw));
+                if (wpSaved && Object.keys(wpSaved).length > 0) {
+                  Shiny.setInputValue('wp_weights_restored', wpSaved, {priority: 'event'});
+                }
+              } catch(e) {}
+            }, 600);
             restoreComplete = true;
           } else if (attempts < 40) {
             attempts++;
@@ -1954,45 +1984,40 @@ function(input, output, session) {
     }
   })
 
-  # --- Export Report ---
-  output$export_report <- downloadHandler(
-    filename = function() {
-      ext <- input$export_format
-      paste0("earth_report_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".", ext)
-    },
-    content = function(file) {
-      req(rv$result)
-      fmt <- input$export_format
+  # --- Export Report (saves to output folder) ---
+  observeEvent(input$export_report_btn, {
+    req(rv$result)
+    fmt <- input$export_format
+    folder <- input$output_folder
+    if (is.null(folder) || !nzchar(folder)) {
+      folder <- path.expand("~/Downloads")
+    }
+    if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
 
-      # Render to a temp file with proper extension first, then copy
-      tmp_out <- tempfile(fileext = paste0(".", fmt))
-      on.exit(unlink(tmp_out), add = TRUE)
+    base <- tools::file_path_sans_ext(rv$file_name %||% "earth")
+    out_name <- paste0(base, "_report_",
+                       format(Sys.time(), "%Y%m%d_%H%M%S"), ".", fmt)
+    out_path <- file.path(folder, out_name)
 
-      render_ok <- FALSE
-      withProgress(message = "Rendering report...", value = 0.3, {
-        tryCatch({
-          render_report(rv$result,
-                        output_format = fmt,
-                        output_file = tmp_out)
-          setProgress(1, detail = "Done")
-          render_ok <- TRUE
-        }, error = function(e) {
-          message("earthUI export error: ", e$message)
-          showNotification(paste("Export error:", e$message),
-                           type = "error", duration = 15)
-        })
+    withProgress(message = "Rendering report...", value = 0.3, {
+      tryCatch({
+        render_report(rv$result,
+                      output_format = fmt,
+                      output_file = out_path)
+        setProgress(1, detail = "Done")
+        session$sendCustomMessage("download_check",
+                                  list(id = "export_report_btn"))
+        showNotification(
+          paste0("Report saved to: ", out_path),
+          type = "message", duration = 8)
+        message("earthUI: report saved to ", out_path)
+      }, error = function(e) {
+        message("earthUI export error: ", e$message)
+        showNotification(paste("Export error:", e$message),
+                         type = "error", duration = 15)
       })
-
-      # Copy rendered file (binary-safe) to Shiny's download path
-      if (render_ok && file.exists(tmp_out) && file.size(tmp_out) > 0L) {
-        file.copy(tmp_out, file, overwrite = TRUE)
-      } else {
-        # Write a minimal fallback so Shiny doesn't 404
-        writeLines("Report rendering failed. Check the R console for details.", file)
-      }
-    },
-    contentType = NA
-  )
+    })
+  })
 
   # --- Export Data (Excel) ---
   export_data_filename_ <- function() {
