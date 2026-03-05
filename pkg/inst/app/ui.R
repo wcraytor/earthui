@@ -202,7 +202,14 @@ fluidPage(
             ['target','degree','pmethod','glm_family','trace','varmod_method'].forEach(function(id) {
               if (s[id] !== undefined) {
                 var el = document.getElementById(id);
-                if (el && el.selectize) el.selectize.setValue(s[id], true);
+                if (el && el.selectize) {
+                  if (id === 'target' && Array.isArray(s[id])) {
+                    var valid = s[id].filter(function(v) { return el.selectize.options[v]; });
+                    if (valid.length > 0) el.selectize.setValue(valid, true);
+                  } else {
+                    el.selectize.setValue(s[id], true);
+                  }
+                }
               }
             });
             // Numeric inputs
@@ -713,12 +720,12 @@ fluidPage(
                        style = "width: 100%; margin-top: 10px;")
         ),
 
-        # --- 5. Download Estimated Sale Prices & Residuals ---
+        # --- 5. Download Estimated ... & Residuals ---
         conditionalPanel(
           condition = "output.data_loaded",
           hr(),
           tags$details(class = "eui-section",
-            tags$summary(h4("5. Download Estimated Sale Prices & Residuals")),
+            tags$summary(uiOutput("download_heading", inline = TRUE)),
             textInput("output_folder", "Output folder",
                       value = path.expand("~/Downloads")),
             conditionalPanel(

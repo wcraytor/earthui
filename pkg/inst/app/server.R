@@ -36,8 +36,26 @@ function(input, output, session) {
     file_ext = NULL,
     fitting = FALSE,
     bg_proc = NULL,
-    trace_lines = character(0)
+    trace_lines = character(0),
+    user_varmod = "lm"        # user's explicit varmod.method choice
   )
+
+  # Track user's explicit varmod.method changes
+  observeEvent(input$varmod_method, {
+    # Only record if single target (multi-target forces "none" in the UI)
+    if (length(input$target) <= 1L) {
+      rv$user_varmod <- input$varmod_method
+    }
+  })
+
+  # When target count changes, update the varmod dropdown
+  observeEvent(input$target, {
+    if (length(input$target) > 1L) {
+      updateSelectInput(session, "varmod_method", selected = "none")
+    } else {
+      updateSelectInput(session, "varmod_method", selected = rv$user_varmod)
+    }
+  })
 
   # --- Data Import ---
   observeEvent(input$file_input, {
@@ -111,6 +129,15 @@ function(input, output, session) {
   output$report_heading <- renderUI({
     n <- if (identical(input$purpose, "appraisal")) "7" else "6"
     h4(paste0(n, ". Download Report"))
+  })
+
+  output$download_heading <- renderUI({
+    label <- if (identical(input$purpose, "general")) {
+      "5. Download Estimated Target Variable(s) & Residuals"
+    } else {
+      "5. Download Estimated Sale Prices & Residuals"
+    }
+    h4(label)
   })
 
   # --- Persist settings to SQLite (debounced from JS) ---
@@ -334,9 +361,10 @@ function(input, output, session) {
               var el = document.getElementById(id);
               if (el && el.selectize) {
                 if (id === 'target') {
-                  if (el.selectize.options[saved[id]]) {
-                    el.selectize.setValue(saved[id]);
-                  }
+                  // target can be a single value or an array (multi-select)
+                  var vals = Array.isArray(saved[id]) ? saved[id] : [saved[id]];
+                  var valid = vals.filter(function(v) { return el.selectize.options[v]; });
+                  if (valid.length > 0) el.selectize.setValue(valid);
                 } else {
                   el.selectize.setValue(saved[id]);
                 }
@@ -397,23 +425,31 @@ function(input, output, session) {
           try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
         }
 
-        // Restore after selectize initializes (retry until target is ready)
+        // Restore after selectize initializes (retry until target AND degree are ready)
+        // Block saving until restore is complete to prevent defaults overwriting saved values
+        var restoreComplete = false;
         var attempts = 0;
         function tryRestore() {
-          var el = document.getElementById('target');
-          if (el && el.selectize && el.selectize.isSetup) {
+          var targetEl = document.getElementById('target');
+          var degreeEl = document.getElementById('degree');
+          var targetReady = targetEl && targetEl.selectize && targetEl.selectize.isSetup;
+          var degreeReady = degreeEl && degreeEl.selectize && degreeEl.selectize.isSetup;
+          if (targetReady && degreeReady) {
             restoreSettings();
-          } else if (attempts < 20) {
+            restoreComplete = true;
+          } else if (attempts < 40) {
             attempts++;
             setTimeout(tryRestore, 250);
+          } else {
+            restoreComplete = true;  // give up waiting, allow saves
           }
         }
         tryRestore();
 
-        // Save on any tracked input change
+        // Save on any tracked input change (only after restore is done)
         $(document).off('shiny:inputchanged.euisettings')
                    .on('shiny:inputchanged.euisettings', function(event) {
-          if (allIds.indexOf(event.name) >= 0) {
+          if (restoreComplete && allIds.indexOf(event.name) >= 0) {
             saveSettings();
             if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(%s);
           }
@@ -898,7 +934,7 @@ function(input, output, session) {
       fast.beta       = na_to_null(input$fast_beta),
       ncross          = na_to_null(input$ncross),
       stratify        = input$stratify,
-      varmod.method   = input$varmod_method,
+      varmod.method   = if (length(input$target) > 1L) "none" else input$varmod_method,
       varmod.exponent = na_to_null(input$varmod_exponent),
       varmod.conv     = na_to_null(input$varmod_conv),
       varmod.clamp    = na_to_null(input$varmod_clamp),
@@ -1678,6 +1714,7 @@ function(input, output, session) {
   )
 
   export_data_content_ <- function(file, btn_id = "export_data") {
+    tryCatch({
       req(rv$data)
       if (!requireNamespace("writexl", quietly = TRUE)) {
         showNotification(
@@ -1708,6 +1745,18 @@ function(input, output, session) {
 
         multi <- length(targets) > 1L
 
+        # Align factor levels in export_df with training data so predict() works
+        # for rows with unseen levels, predictions will be NA
+        train_df <- rv$result$data
+        pred_df  <- export_df
+        for (col in names(train_df)) {
+          if (is.factor(train_df[[col]]) && col %in% names(pred_df)) {
+            pred_df[[col]] <- factor(pred_df[[col]],
+                                     levels = levels(train_df[[col]]))
+          }
+        }
+        pred_mat <- stats::predict(model, newdata = pred_df)
+
         for (ri in seq_along(targets)) {
           tgt <- targets[ri]
           suffix <- if (multi) paste0("_", ri) else ""
@@ -1726,7 +1775,6 @@ function(input, output, session) {
           if (input$purpose == "appraisal" && nrow(export_df) >= 1L) {
             actual[1L] <- NA_real_
           }
-          pred_mat <- stats::predict(model, newdata = export_df)
           predicted <- if (multi) as.numeric(pred_mat[, ri]) else as.numeric(pred_mat)
 
           est_col <- paste0("est_", tgt)
@@ -1786,7 +1834,7 @@ function(input, output, session) {
           for (grp in contrib_groups) {
             col_label <- gsub(" ", "_", grp$label)
             col_name  <- paste0(col_label, "_contribution", suffix)
-            contrib   <- earthUI:::eval_g_function_(model, grp, export_df,
+            contrib   <- earthUI:::eval_g_function_(model, grp, pred_df,
                                                      response_idx = if (multi) ri else NULL)
             export_df[[col_name]] <- round(contrib, 1)
             contrib_total <- contrib_total + contrib
@@ -1819,6 +1867,13 @@ function(input, output, session) {
 
       writexl::write_xlsx(export_df, file)
       session$sendCustomMessage("download_check", list(id = btn_id))
+    }, error = function(e) {
+      msg <- paste("Download error:", conditionMessage(e))
+      message(msg)  # to R console
+      showNotification(msg, type = "error", duration = 15)
+      # Write a minimal file so Shiny doesn't 500
+      writexl::write_xlsx(data.frame(error = msg), file)
+    })
   }
 
   # --- RCA Raw Output ---
@@ -1894,8 +1949,18 @@ function(input, output, session) {
 
       export_df <- rv$data
 
+      # Align factor levels with training data
+      train_df <- rv$result$data
+      pred_df  <- export_df
+      for (col in names(train_df)) {
+        if (is.factor(train_df[[col]]) && col %in% names(pred_df)) {
+          pred_df[[col]] <- factor(pred_df[[col]],
+                                   levels = levels(train_df[[col]]))
+        }
+      }
+
       # --- Predict on all rows ---
-      pred_mat <- stats::predict(model, newdata = export_df)
+      pred_mat <- stats::predict(model, newdata = pred_df)
       predicted <- if (multi) as.numeric(pred_mat[, ri]) else as.numeric(pred_mat)
       export_df[[paste0("est_", tgt)]] <- round(predicted, 1)
 
@@ -2005,7 +2070,7 @@ function(input, output, session) {
         contrib_col <- paste0(col_label, "_contribution")
         adj_col     <- paste0(col_label, "_adjustment")
 
-        contrib <- earthUI:::eval_g_function_(model, grp, export_df,
+        contrib <- earthUI:::eval_g_function_(model, grp, pred_df,
                                                response_idx = if (multi) ri else NULL)
         export_df[[contrib_col]] <- round(contrib, 1)
 

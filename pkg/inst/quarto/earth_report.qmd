@@ -8,12 +8,20 @@ format:
     mainfont: "Roboto Condensed"
     include-in-header:
       text: |
-        <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
-        <style>body { font-family: 'Roboto Condensed', sans-serif; }</style>
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap');
+        body { font-family: 'Roboto Condensed', sans-serif; }
+        </style>
   pdf:
     toc: true
     mainfont: "Roboto Condensed"
     sansfont: "Roboto Condensed"
+    include-in-header:
+      text: |
+        \usepackage{unicode-math}
+        \setmathfont{Latin Modern Math}
+        \setmathfont{Roboto Condensed}[range=up/{num,latin,Latin}]
+        \setmathfont{Roboto Condensed}[range=it/{latin,Latin}]
   docx:
     toc: true
     reference-doc: reference.docx
@@ -26,10 +34,12 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 library(earthUI)
 library(ggplot2)
 
-# Load Roboto Condensed for plots in reports
+# Load Roboto Condensed for plots (skip download if already registered)
 if (requireNamespace("sysfonts", quietly = TRUE) &&
     requireNamespace("showtext", quietly = TRUE)) {
-  sysfonts::font_add_google("Roboto Condensed", "Roboto Condensed")
+  if (!"Roboto Condensed" %in% sysfonts::font_families()) {
+    sysfonts::font_add_google("Roboto Condensed", "Roboto Condensed")
+  }
   showtext::showtext_auto()
   theme_set(theme_minimal(base_family = "Roboto Condensed"))
 } else {
