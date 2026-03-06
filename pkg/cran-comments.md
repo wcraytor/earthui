@@ -8,10 +8,14 @@
 
 ## Test environments
 
-* Local: macOS Sequoia (aarch64), R 4.4.x
+* Local: macOS Tahoe (aarch64), R 4.5.2
 * GitHub Actions: ubuntu-latest (R release, R devel, R oldrel-1),
   macOS-latest (R release), windows-latest (R release)
 
-## Notes
+## Resubmission
 
-First submission.
+Addresses reviewer feedback from initial submission:
+
+* Single-quoted all software/package names in Title and Description
+* Replaced `\dontrun{}` with `\donttest{}` in examples
+* Examples now write to `tempdir()` instead of user filespace
