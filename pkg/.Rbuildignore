@@ -10,3 +10,5 @@
 \.DS_Store$
 ^\.lintr$
 ^cran-comments\.md$
+^Output$
+^demo_mls$

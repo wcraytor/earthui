@@ -21,7 +21,7 @@ A data frame with column names converted to snake_case.
 Duplicate column names are made unique by appending numeric suffixes.
 }
 \description{
-Reads a CSV (.csv) or Excel (.xlsx, .xls) file and returns a data frame.
+Reads a CSV (.csv) or 'Excel' (.xlsx, .xls) file and returns a data frame.
 Column names are converted to snake_case and duplicates are made unique.
 }
 \examples{

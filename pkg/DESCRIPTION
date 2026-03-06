@@ -1,15 +1,15 @@
 Package: earthUI
-Title: Interactive GUI for Enhanced Adaptive Regression Through Hinges
-Version: 0.1.0
+Title: Interactive 'shiny' GUI for the 'earth' Package
+Version: 0.1.1
 Authors@R:
     person("William", "Craytor", , "bcraytor@proton.me", role = c("aut", "cre"))
-Description: Provides a Shiny-based graphical user interface for the 'earth'
-    package, enabling interactive building and exploration of multivariate
-    adaptive regression spline models. Features include data import from CSV
-    and Excel files, automatic detection of categorical variables, interactive
-    control of interaction terms via an allowed matrix, comprehensive model
-    diagnostics with variable importance and partial dependence plots, and
-    publication-quality report generation via 'Quarto'.
+Description: Provides a 'shiny'-based graphical user interface for the 'earth'
+    package, enabling interactive building and exploration of Multivariate
+    Adaptive Regression Splines (MARS) models. Features include data import
+    from CSV and 'Excel' files, automatic detection of categorical variables,
+    interactive control of interaction terms via an allowed matrix,
+    comprehensive model diagnostics with variable importance and partial
+    dependence plots, and publication-quality report generation via 'Quarto'.
 License: AGPL (>= 3)
 URL: https://github.com/wcraytor/earthUI
 BugReports: https://github.com/wcraytor/earthUI/issues

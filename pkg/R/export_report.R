@@ -1,7 +1,7 @@
 #' Render an earth model report
 #'
-#' Renders a parameterized Quarto report from the fitted earth model results.
-#' Requires the `quarto` R package and a Quarto installation.
+#' Renders a parameterized 'Quarto' report from the fitted 'earth' model results.
+#' Requires the 'quarto' R package and a 'Quarto' installation.
 #'
 #' @param earth_result An object of class `"earthUI_result"` as returned by
 #'   [fit_earth()].
@@ -14,9 +14,10 @@
 #'
 #' @export
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
-#' render_report(result, output_format = "html", output_file = "report.html")
+#' render_report(result, output_format = "html",
+#'               output_file = tempfile(fileext = ".html"))
 #' }
 render_report <- function(earth_result, output_format = "html",
                           output_file = NULL) {

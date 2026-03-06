@@ -17,7 +17,7 @@ across sessions.}
 This function does not return a value; it launches the Shiny app.
 }
 \description{
-Opens an interactive Shiny GUI for building and exploring earth
+Opens an interactive 'shiny' GUI for building and exploring 'earth'
 (MARS-style) models. The application provides data import, variable
 configuration, model fitting, result visualization, and report export.
 }

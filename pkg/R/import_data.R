@@ -1,6 +1,6 @@
 #' Import data from CSV or Excel files
 #'
-#' Reads a CSV (.csv) or Excel (.xlsx, .xls) file and returns a data frame.
+#' Reads a CSV (.csv) or 'Excel' (.xlsx, .xls) file and returns a data frame.
 #' Column names are converted to snake_case and duplicates are made unique.
 #'
 #' @param filepath Character string. Path to the data file. Supported formats:

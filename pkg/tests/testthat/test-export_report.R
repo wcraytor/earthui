@@ -13,18 +13,7 @@ test_that("render_report rejects invalid output_format", {
 test_that("render_report errors when quarto package missing", {
   result <- fit_earth(mtcars, "mpg", c("wt", "hp"))
 
-  # Mock requireNamespace to return FALSE for quarto
-  mockr_available <- requireNamespace("mockr", quietly = TRUE) ||
-                     requireNamespace("testthat", quietly = TRUE)
-
-  # Use local mocking: temporarily hide quarto
-  skip_if_not(
-    is.null(tryCatch(find.package("quarto"), error = function(e) NULL)) ||
-    !is.null(tryCatch(find.package("quarto"), error = function(e) NULL)),
-    "Test environment check"
-  )
-
-  # Direct test: if quarto is not installed, we'll get the expected error
+  # If quarto is not installed, we'll get the expected error
   if (!requireNamespace("quarto", quietly = TRUE)) {
     expect_error(render_report(result, output_format = "html"),
                  "quarto.*package is required")

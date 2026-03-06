@@ -4,9 +4,9 @@
 \name{earthUI-package}
 \alias{earthUI}
 \alias{earthUI-package}
-\title{earthUI: Interactive GUI for Enhanced Adaptive Regression Through Hinges}
+\title{earthUI: Interactive 'shiny' GUI for the 'earth' Package}
 \description{
-Provides a Shiny-based graphical user interface for the 'earth' package, enabling interactive building and exploration of multivariate adaptive regression spline models. Features include data import from CSV and Excel files, automatic detection of categorical variables, interactive control of interaction terms via an allowed matrix, comprehensive model diagnostics with variable importance and partial dependence plots, and publication-quality report generation via 'Quarto'.
+Provides a 'shiny'-based graphical user interface for the 'earth' package, enabling interactive building and exploration of Multivariate Adaptive Regression Splines (MARS) models. Features include data import from CSV and 'Excel' files, automatic detection of categorical variables, interactive control of interaction terms via an allowed matrix, comprehensive model diagnostics with variable importance and partial dependence plots, and publication-quality report generation via 'Quarto'.
 }
 \seealso{
 Useful links:

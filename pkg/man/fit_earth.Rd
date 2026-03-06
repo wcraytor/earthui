@@ -13,6 +13,7 @@ fit_earth(
   type_map = NULL,
   degree = 1L,
   allowed_func = NULL,
+  allowed_matrix = NULL,
   nfold = NULL,
   nprune = NULL,
   thresh = NULL,
@@ -72,6 +73,10 @@ merged into \code{categoricals}. Default is \code{NULL} (no coercion).}
 
 \item{allowed_func}{Function or \code{NULL}. An allowed function as returned by
 \code{\link[=build_allowed_function]{build_allowed_function()}}. Only used when \code{degree >= 2}.}
+
+\item{allowed_matrix}{Logical matrix or \code{NULL}. The allowed interaction
+matrix. Stored in the result for report export. Not used for fitting
+(use \code{allowed_func} instead).}
 
 \item{nfold}{Integer. Number of cross-validation folds. Automatically set
 to 10 when \code{degree >= 2} unless explicitly provided. Set to 0 to disable.}

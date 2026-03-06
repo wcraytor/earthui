@@ -20,12 +20,13 @@ temporary file is created.}
 The path to the rendered output file (invisibly).
 }
 \description{
-Renders a parameterized Quarto report from the fitted earth model results.
-Requires the \code{quarto} R package and a Quarto installation.
+Renders a parameterized 'Quarto' report from the fitted 'earth' model results.
+Requires the 'quarto' R package and a 'Quarto' installation.
 }
 \examples{
-\dontrun{
+\donttest{
 result <- fit_earth(mtcars, "mpg", c("cyl", "disp", "hp", "wt"))
-render_report(result, output_format = "html", output_file = "report.html")
+render_report(result, output_format = "html",
+              output_file = tempfile(fileext = ".html"))
 }
 }
