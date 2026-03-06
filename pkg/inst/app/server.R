@@ -2025,21 +2025,27 @@ function(input, output, session) {
     paste0(base, "_modified_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx")
   }
 
-  output$export_data <- downloadHandler(
-    filename = export_data_filename_,
-    content = function(file) {
-      export_data_content_(file, "export_data")
-    },
-    contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  )
+  observeEvent(input$export_data, {
+    req(rv$data)
+    folder <- input$output_folder
+    if (is.null(folder) || !nzchar(folder)) folder <- path.expand("~/Downloads")
+    if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
+    out_path <- file.path(folder, export_data_filename_())
+    export_data_content_(out_path, "export_data")
+    showNotification(paste0("Output saved to: ", out_path),
+                     type = "message", duration = 8)
+  })
 
-  output$export_data_nonadj <- downloadHandler(
-    filename = export_data_filename_,
-    content = function(file) {
-      export_data_content_(file, "export_data_nonadj")
-    },
-    contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  )
+  observeEvent(input$export_data_nonadj, {
+    req(rv$data)
+    folder <- input$output_folder
+    if (is.null(folder) || !nzchar(folder)) folder <- path.expand("~/Downloads")
+    if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
+    out_path <- file.path(folder, export_data_filename_())
+    export_data_content_(out_path, "export_data_nonadj")
+    showNotification(paste0("Output saved to: ", out_path),
+                     type = "message", duration = 8)
+  })
 
   export_data_content_ <- function(file, btn_id = "export_data") {
     tryCatch({
@@ -2199,8 +2205,6 @@ function(input, output, session) {
       msg <- paste("Download error:", conditionMessage(e))
       message(msg)  # to R console
       showNotification(msg, type = "error", duration = 15)
-      # Write a minimal file so Shiny doesn't 500
-      writexl::write_xlsx(data.frame(error = msg), file)
     })
   }
 
@@ -2233,26 +2237,30 @@ function(input, output, session) {
                    value = 5.00, min = 0, max = 9.99, step = 0.01),
       footer = tagList(
         modalButton("Cancel"),
-        downloadButton("export_rca", "Generate", class = "btn-success")
+        actionButton("export_rca", "Generate", class = "btn-success")
       ),
       size = "s"
     ))
   })
 
   # RCA download handler
-  output$export_rca <- downloadHandler(
-    filename = function() {
-      base <- tools::file_path_sans_ext(rv$file_name %||% "data")
-      paste0(base, "_adjusted_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx")
-    },
-    content = function(file) {
+  observeEvent(input$export_rca, {
       req(rv$data, rv$result, input$purpose == "appraisal", nrow(rv$data) >= 2L)
       removeModal()
+
+      folder <- input$output_folder
+      if (is.null(folder) || !nzchar(folder)) folder <- path.expand("~/Downloads")
+      if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
+      base <- tools::file_path_sans_ext(rv$file_name %||% "data")
+      file <- file.path(folder, paste0(base, "_adjusted_",
+                                       format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx"))
 
       if (!requireNamespace("writexl", quietly = TRUE)) {
         showNotification("Package 'writexl' required.", type = "error", duration = 10)
         return()
       }
+
+    tryCatch({
 
       model   <- rv$result$model
       targets <- rv$result$target
@@ -2359,6 +2367,8 @@ function(input, output, session) {
       }
 
       subject_est <- predicted[1L] + subject_resid_total
+      actual[1L] <- subject_est
+      residuals_val[1L] <- subject_resid_total
       export_df[["residual"]][1L]           <- round(subject_resid_total, 1)
       export_df[[paste0("est_", tgt)]][1L]  <- round(predicted[1L], 1)
       export_df[["subject_value"]]          <- NA_real_
@@ -2368,6 +2378,31 @@ function(input, output, session) {
 
       if (use_sf && !is.null(la_col)) {
         export_df[["residual_sf"]][1L] <- round(subject_resid, 1)
+      }
+
+      # For weight-0 rows (rows 2+): use subject_value (est + subject residual)
+      # so the last 4 RCA columns can be computed.
+      # Sale price is left as-is; subject_value holds the conclusion.
+      zero_wt <- integer(0)
+      if (!is.null(input$weights_col) && input$weights_col != "null" &&
+          input$weights_col %in% names(export_df)) {
+        wvals <- export_df[[input$weights_col]]
+        message("earthUI RCA: weight col class=", class(wvals),
+                ", unique vals=", paste(head(sort(unique(wvals)), 10), collapse=","),
+                ", n_zero=", sum(wvals == 0, na.rm = TRUE),
+                ", n_na=", sum(is.na(wvals)))
+        zero_wt <- which(wvals == 0)
+      }
+      if (length(zero_wt) > 0L) {
+        sv <- predicted[zero_wt] + subject_resid_total
+        export_df[["subject_value"]][zero_wt] <- round(sv, 1)
+        actual[zero_wt] <- sv
+        residuals_val <- actual - predicted
+        export_df[["residual"]][zero_wt] <- round(residuals_val[zero_wt], 1)
+        if (!is.null(la_col)) {
+          la <- export_df[[la_col]]
+          export_df[["residual_sf"]][zero_wt] <- round(residuals_val[zero_wt] / la[zero_wt], 1)
+        }
       }
 
       # --- Step B: Per-g-function contributions and adjustments ---
@@ -2419,14 +2454,153 @@ function(input, output, session) {
       gross_sum <- gross_sum + abs(resid_adj)
 
       # adjusted_sale_price = sale_price + net_adjustments
-      sale_prices <- rv$data[[tgt]]
+      # Use 'actual' which has imputed prices for weight-0 rows
       export_df[["net_adjustments"]]      <- round(adj_sum, 1)
       export_df[["gross_adjustments"]]    <- round(gross_sum, 1)
-      export_df[["adjusted_sale_price"]]  <- round(sale_prices + adj_sum, 1)
+      export_df[["adjusted_sale_price"]]  <- round(actual + adj_sum, 1)
+
+      # --- Additional targets (e.g., rent) for weight-0 rows only ---
+      message("earthUI RCA: multi=", multi, ", length(targets)=", length(targets),
+              ", length(zero_wt)=", length(zero_wt),
+              ", weights_col=", input$weights_col %||% "NULL")
+      if (multi && length(zero_wt) > 0L) {
+        for (ri2 in 2:length(targets)) {
+          tgt2 <- targets[ri2]
+          eq_ri2 <- eq$equations[[ri2]]
+          groups2 <- eq_ri2$groups
+
+          # Column name prefix for this target (e.g., "rent")
+          tp <- tgt2
+
+          # Predictions for this target
+          predicted2 <- as.numeric(pred_mat[, ri2])
+          export_df[[paste0("est_", tp)]] <- NA_real_
+          export_df[[paste0("est_", tp)]][zero_wt] <- round(predicted2[zero_wt], 1)
+          # Subject prediction
+          export_df[[paste0("est_", tp)]][1L] <- round(predicted2[1L], 1)
+
+          # Residuals for comps with weight > 0 (for CQA interpolation)
+          actual2 <- export_df[[tgt2]]
+          actual2[1L] <- NA_real_
+          resid2 <- actual2 - predicted2
+
+          # CQA on this target (comps with weight > 0 only)
+          comp_resid2 <- resid2[-1L]
+          comp_resid2_valid <- comp_resid2[!is.na(comp_resid2)]
+          n_comps2 <- length(comp_resid2_valid)
+          cqa2 <- vapply(resid2, function(r) {
+            if (is.na(r)) return(NA_real_)
+            sum(comp_resid2_valid < r, na.rm = TRUE) / n_comps2 * 10
+          }, numeric(1))
+
+          # Interpolate subject residual for this target using same CQA score
+          if (use_sf) {
+            resid2_sf <- resid2 / la
+            comp_cqa2 <- cqa2[-1L]
+            comp_resid2_interp <- resid2_sf[-1L]
+          } else {
+            comp_cqa2 <- cqa2[-1L]
+            comp_resid2_interp <- resid2[-1L]
+          }
+          valid2 <- !is.na(comp_cqa2) & !is.na(comp_resid2_interp)
+          cqa2_sorted <- comp_cqa2[valid2]
+          resid2_sorted <- comp_resid2_interp[valid2]
+          ord2 <- order(cqa2_sorted)
+          cqa2_sorted <- cqa2_sorted[ord2]
+          resid2_sorted <- resid2_sorted[ord2]
+
+          subj_resid2 <- stats::approx(cqa2_sorted, resid2_sorted,
+                                        xout = user_cqa, rule = 2)$y
+          if (use_sf) {
+            subj_resid2_total <- subj_resid2 * export_df[[la_col]][1L]
+          } else {
+            subj_resid2_total <- subj_resid2
+          }
+
+          # Subject value for this target
+          subj_est2 <- predicted2[1L] + subj_resid2_total
+          sv_col <- paste0("subject_", tp, "_value")
+          export_df[[sv_col]] <- NA_real_
+          export_df[[sv_col]][1L] <- round(subj_est2, 1)
+
+          # Weight-0 rows: impute actual from est + subject residual
+          sv2 <- predicted2[zero_wt] + subj_resid2_total
+          export_df[[sv_col]][zero_wt] <- round(sv2, 1)
+          actual2[1L] <- subj_est2
+          actual2[zero_wt] <- sv2
+          resid2 <- actual2 - predicted2
+
+          export_df[[paste0(tp, "_residual")]] <- NA_real_
+          export_df[[paste0(tp, "_residual")]][1L] <- round(resid2[1L], 1)
+          export_df[[paste0(tp, "_residual")]][zero_wt] <- round(resid2[zero_wt], 1)
+
+          # Per-g-function contributions and adjustments for this target
+          intercept2 <- NULL
+          contrib_groups2 <- list()
+          for (grp in groups2) {
+            if (grp$degree == 0L) {
+              intercept2 <- grp
+            } else {
+              contrib_groups2 <- c(contrib_groups2, list(grp))
+            }
+          }
+
+          basis2 <- if (!is.null(intercept2)) intercept2$terms[[1]]$coefficient else 0
+          export_df[[paste0(tp, "_basis")]] <- NA_real_
+          export_df[[paste0(tp, "_basis")]][1L] <- round(basis2, 1)
+          export_df[[paste0(tp, "_basis")]][zero_wt] <- round(basis2, 1)
+
+          adj_sum2 <- rep(0, nrow(export_df))
+          gross_sum2 <- rep(0, nrow(export_df))
+
+          for (grp in contrib_groups2) {
+            col_label <- gsub(" ", "_", grp$label)
+            contrib_col2 <- paste0(tp, "_", col_label, "_contribution")
+            adj_col2 <- paste0(tp, "_", col_label, "_adjustment")
+
+            contrib2 <- earthUI:::eval_g_function_(model, grp, pred_df,
+                                                     response_idx = ri2)
+            export_df[[contrib_col2]] <- NA_real_
+            export_df[[contrib_col2]][1L] <- round(contrib2[1L], 1)
+            export_df[[contrib_col2]][zero_wt] <- round(contrib2[zero_wt], 1)
+
+            subj_contrib2 <- contrib2[1L]
+            adj2 <- subj_contrib2 - contrib2
+            export_df[[adj_col2]] <- NA_real_
+            export_df[[adj_col2]][1L] <- round(adj2[1L], 1)
+            export_df[[adj_col2]][zero_wt] <- round(adj2[zero_wt], 1)
+
+            adj_sum2 <- adj_sum2 + adj2
+            gross_sum2 <- gross_sum2 + abs(adj2)
+          }
+
+          resid_adj2 <- subj_resid2_total - resid2
+          export_df[[paste0(tp, "_residual_adjustment")]] <- NA_real_
+          export_df[[paste0(tp, "_residual_adjustment")]][1L] <- round(resid_adj2[1L], 1)
+          export_df[[paste0(tp, "_residual_adjustment")]][zero_wt] <- round(resid_adj2[zero_wt], 1)
+          adj_sum2 <- adj_sum2 + resid_adj2
+          gross_sum2 <- gross_sum2 + abs(resid_adj2)
+
+          export_df[[paste0(tp, "_net_adjustments")]] <- NA_real_
+          export_df[[paste0(tp, "_net_adjustments")]][1L] <- round(adj_sum2[1L], 1)
+          export_df[[paste0(tp, "_net_adjustments")]][zero_wt] <- round(adj_sum2[zero_wt], 1)
+          export_df[[paste0(tp, "_gross_adjustments")]] <- NA_real_
+          export_df[[paste0(tp, "_gross_adjustments")]][1L] <- round(gross_sum2[1L], 1)
+          export_df[[paste0(tp, "_gross_adjustments")]][zero_wt] <- round(gross_sum2[zero_wt], 1)
+          export_df[[paste0("adjusted_", tp)]] <- NA_real_
+          export_df[[paste0("adjusted_", tp)]][1L] <- round(actual2[1L] + adj_sum2[1L], 1)
+          export_df[[paste0("adjusted_", tp)]][zero_wt] <- round(actual2[zero_wt] + adj_sum2[zero_wt], 1)
+        }
+      }
 
       writexl::write_xlsx(export_df, file)
       session$sendCustomMessage("download_check", list(id = "rca_output_btn"))
-    },
-    contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  )
+      showNotification(paste0("RCA output saved to: ", file),
+                       type = "message", duration = 8)
+    }, error = function(e) {
+      msg <- paste("RCA export error:", conditionMessage(e))
+      message(msg)
+      showNotification(msg, type = "error", duration = 15)
+    })
+  })
 }

@@ -64,6 +64,13 @@ render_report <- function(earth_result, output_format = "html",
     docx = "docx"
   )
 
+  # Ensure QUARTO_R points to the running R (may be stale from a prior install)
+  old_quarto_r <- Sys.getenv("QUARTO_R", unset = NA)
+  Sys.setenv(QUARTO_R = file.path(R.home("bin"), "R"))
+  on.exit({
+    if (is.na(old_quarto_r)) Sys.unsetenv("QUARTO_R") else Sys.setenv(QUARTO_R = old_quarto_r)
+  }, add = TRUE)
+
   # Quarto may error during cleanup on macOS due to symlink path mismatches.
   # Catch that error and check if the output was actually produced.
   tryCatch(

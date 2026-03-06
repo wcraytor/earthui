@@ -1,0 +1,729 @@
+---
+title: ""
+format:
+  pdf:
+    documentclass: extarticle
+    classoption:
+      - 9pt
+    mainfont: "Roboto Condensed"
+    sansfont: "Roboto Condensed"
+    monofont: "DejaVu Sans Mono"
+    monofontoptions:
+      - Scale=0.8
+    fontsize: 9pt
+    geometry:
+      - top=1in
+      - bottom=1in
+      - left=1in
+      - right=1in
+    include-in-header:
+      text: |
+        \usepackage{xcolor}
+        \usepackage{fancyhdr}
+        \usepackage{tcolorbox}
+        \usepackage{tabularx}
+        \usepackage{colortbl}
+        \usepackage{titlesec}
+        \usepackage{enumitem}
+        \definecolor{earthgreen}{HTML}{2C4A3E}
+        \definecolor{earthaccent}{HTML}{5DAE8B}
+        \definecolor{earthheader}{HTML}{2C4A3E}
+        \definecolor{earthtableheader}{HTML}{2C4A3E}
+        \pagestyle{fancy}
+        \fancyhf{}
+        \fancyhead[L]{\small\textbf{earthUI}}
+        \fancyhead[R]{\small User Guide}
+        \fancyfoot[C]{\small Page \thepage\ | earthUI User Guide | Confidential \& Proprietary}
+        \renewcommand{\headrulewidth}{0.5pt}
+        \renewcommand{\footrulewidth}{0pt}
+        \titleformat{\section}{\large\bfseries\color{earthaccent}}{}{0em}{}
+        \titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+        \titleformat{\subsubsection}{\normalsize\bfseries\itshape}{}{0em}{}
+        \titlespacing*{\section}{0pt}{1.5ex plus .5ex minus .2ex}{0.8ex plus .2ex}
+        \titlespacing*{\subsection}{0pt}{1.2ex plus .4ex minus .2ex}{0.5ex plus .2ex}
+        \titlespacing*{\subsubsection}{0pt}{1ex plus .3ex minus .1ex}{0.4ex plus .1ex}
+        \setlength{\parskip}{0.4em}
+        \setlength{\parindent}{0pt}
+        \setlist{nosep, leftmargin=2em}
+        \setlist[itemize]{topsep=0.3em, itemsep=0.15em}
+        \setlist[enumerate]{topsep=0.3em, itemsep=0.15em}
+---
+
+<!-- Cover Page -->
+\thispagestyle{empty}
+\pagecolor{earthgreen}
+\color{white}
+
+\vspace*{3cm}
+
+\begin{center}
+{\fontsize{48}{56}\selectfont\textbf{earthUI}}\\[12pt]
+{\Large User Guide}\\[24pt]
+{\small General Use · Appraisal Features · Market Area Analysis · Complete Reference}
+\end{center}
+
+\vspace{2cm}
+
+\begin{center}
+\arrayrulecolor{earthaccent}
+\begin{tabular}{|>{\centering\arraybackslash}p{3cm}|>{\centering\arraybackslash}p{3cm}|>{\centering\arraybackslash}p{3cm}|}
+\hline
+\rowcolor{earthaccent}\textbf{Version} & \textbf{Audience} & \textbf{Last Updated} \\
+\hline
+1.0 & All Users & 2026 \\
+\hline
+\end{tabular}
+\end{center}
+
+\vfill
+
+\begin{center}
+{\footnotesize earthUI User Guide | Confidential \& Proprietary}
+\end{center}
+
+\newpage
+\pagecolor{white}
+\color{black}
+
+<!-- Table of Contents -->
+
+\begingroup\Huge\textbf{Table of Contents}\endgroup
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{1.5pt}}
+
+\medskip
+
+\begin{small}
+\begin{enumerate}[itemsep=0.2em, parsep=0.1em]
+\item \textbf{\textcolor{earthgreen}{Introduction}}
+  \begin{itemize}
+    \item What Is earthUI?
+    \item Three Purpose Modes
+    \item Real Estate--Specific Features
+    \item Getting Started
+  \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{General Purpose Mode}}
+  \begin{itemize}
+    \item Overview
+    \item The Sidebar Workflow
+    \item Main Panel Tabs
+    \item Settings Persistence
+    \item Dark Mode
+  \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{Appraisal Mode}}
+  \begin{itemize}
+    \item Subject Row Handling
+    \item Effective Date \& Sale Age
+    \item Special Column Designations
+    \item RCA Adjustments Overview
+  \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{Market Area Analysis Mode}}
+  \begin{itemize}
+    \item Differences from Appraisal Mode
+    \item When to Use Market Mode
+  \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{Variable Selection}}
+  \begin{itemize}
+    \item Target Variable(s)
+    \item The Predictor Table
+    \item Data Type Detection \& Overrides
+    \item Factor and Linear Flags
+    \item Multiple Targets
+  \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{Parameter Selection}}
+  \begin{itemize}
+    \item Basic Parameters
+    \item Forward Pass
+    \item Allowed Interactions
+    \item Pruning
+    \item Cross-Validation
+    \item Subset Filtering
+    \item Settings Defaults
+  \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{Fitting the Earth Model}}
+  \begin{itemize}
+    \item The Fit Button
+    \item Fitting Modal \& Trace Output
+    \item Fit Log
+  \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{Downloading Data}}
+  \begin{itemize}
+    \item Output Columns
+    \item CQA Scores
+    \item Sorting \& Subject Row
+  \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{RCA Calculations \& Downloading}}
+  \begin{itemize}
+    \item Opening the RCA Dialog
+    \item CQA Score Interpolation
+    \item Output Columns
+  \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{Downloading Reports}}
+  \begin{itemize}
+    \item Report Formats
+    \item Report Contents
+  \end{itemize}
+\end{enumerate}
+\end{small}
+
+\newpage
+
+<!-- CHAPTER 1 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 1}}\\[2pt]
+{\Huge\textbf{Introduction}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+## What Is earthUI?
+
+earthUI is a graphical user interface for the R `earth` package, which implements Multivariate Adaptive Regression Splines (MARS). It runs as a local Shiny application --- there is no login, no server, and no accounts. You launch it from R, import a dataset (CSV or Excel), configure your model, and fit it interactively.
+
+The application provides a complete workflow: data import, variable configuration, model fitting, diagnostic plots, variable importance, model equations, and downloadable reports in HTML, Word, or PDF format.
+
+## Three Purpose Modes
+
+When you launch earthUI, a **Purpose** radio button at the top of the sidebar lets you choose one of three modes:
+
+- **General** --- Earth regression for any type of population or dataset. This is the default mode. It provides the full MARS modeling workflow without any domain-specific additions.
+- **For Appraisal** --- Earth regression tailored for real estate appraisal. Adds features specific to single-property valuation, including subject property handling and Reconciliation by Comparable Adjustment (RCA) computations.
+- **Market Area Analysis** --- Earth regression tailored for market area studies. Adds features for analyzing groups of properties in a defined market, with an optional "Skip first row" checkbox for subject property exclusion.
+
+In all three modes, the core modeling engine is identical --- you are always fitting an Earth (MARS) model. The purpose setting controls which additional tools and interface elements are available.
+
+## Real Estate--Specific Features
+
+When either **For Appraisal** or **Market Area Analysis** is selected, earthUI activates several features designed for real estate analysis:
+
+- **Special column designations** --- Each predictor can be tagged with a special role: `contract_date`, `latitude`, `longitude`, `living_area`, or `display_only`. These designations control how the column is handled during fitting and output.
+- **Rounding of latitude and longitude** --- Columns designated as latitude or longitude are automatically rounded to 3 decimal places to prevent overfitting.
+- **Sale Age column** --- When a column is designated as `contract_date` and an Effective Date is provided, earthUI computes a `sale_age` column (days between sale date and effective date) and substitutes it as a predictor.
+- **RCA computations (appraisal only)** --- In appraisal mode, after fitting the model earthUI can compute Reconciliation by Comparable Adjustment (RCA) output, which produces per-comparable adjustments, net/gross adjustment summaries, and an adjusted sale price for the subject property.
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} The General purpose mode works for any dataset --- financial, scientific, engineering, or real estate. The appraisal and market modes simply add convenience features for real estate professionals.}
+\end{tcolorbox}
+
+## Getting Started
+
+To use earthUI:
+
+1. **Install the package** in R: `install.packages("earthUI")` or install from source.
+2. **Launch the application**: run `earthUI::launch()` in R, or from the command line run `Rscript -e 'earthUI::launch()'`. The app opens in your web browser on port 7878. You can also access the app directly by navigating to `http://localhost:7878` in your browser.
+3. **Import your data** using the file upload in Section 1 of the sidebar. earthUI accepts CSV and Excel files.
+4. **Select your Purpose** (General, For Appraisal, or Market Area Analysis).
+5. **Configure variables** --- choose your target(s) and predictors, set data types, and assign any special column roles.
+6. **Set Earth parameters** --- degree, nprune, subset filters, and other `earth()` arguments.
+7. **Fit the model** --- click "Fit Earth Model" and review the results in the main panel.
+8. **Export** --- download predictions as Excel, generate reports, or (in appraisal mode) compute RCA adjustments.
+
+Settings are automatically persisted in your browser's local storage and restored when you reload the same input file.
+
+\newpage
+
+<!-- CHAPTER 2 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 2}}\\[2pt]
+{\Huge\textbf{General Purpose Mode}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+## Overview
+
+General Purpose mode is the default when you launch earthUI. It provides the complete MARS modeling workflow for any dataset --- not just real estate. You can use earthUI for scientific data, financial analysis, engineering studies, or any regression problem where you want to explore non-linear relationships and interactions between variables.
+
+In General mode, the interface omits the real estate--specific features (special columns, sale age, coordinate rounding, RCA). The sidebar is streamlined to focus on variable selection, parameter configuration, model fitting, and export.
+
+## The Sidebar Workflow
+
+The sidebar is organized into numbered, collapsible sections that guide you from data import through export:
+
+**1. Import Data** --- File upload accepting CSV and Excel files. For Excel files with multiple sheets, a sheet selector appears. Column names are automatically converted to snake\_case.
+
+**2. Project Output Folder** --- A text field specifying where downloads and fit logs are saved (defaults to `~/Downloads`).
+
+**3. Variable Configuration** --- Target variable selector (supports multiple targets), predictor table with checkboxes for Include, Factor, and Linear. See Chapter 5 for full details.
+
+**4. Earth Call Parameters** --- All arguments to the `earth()` function: degree, penalty, nk, pruning method, cross-validation, and more. See Chapter 6 for the complete parameter reference.
+
+**5. Fit Earth Model** --- A single green button that runs the model asynchronously. See Chapter 7 for fitting details.
+
+**6. Download Output** --- Exports predictions, residuals, CQA scores, and per-g-function contributions as an Excel file. See Chapter 8.
+
+**7. Download Report** --- Generates a formatted report (HTML, Word, or PDF) saved to the output folder. See Chapter 10.
+
+## Main Panel Tabs
+
+After fitting, the main panel provides nine tabs:
+
+\begin{center}
+\arrayrulecolor{earthaccent}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|X|}
+\hline
+\rowcolor{earthtableheader}\color{white}\textbf{Tab} & \color{white}\textbf{Contents} \\
+\hline
+Data & Preview of imported data. In appraisal mode, split into Subject Property and Comparable Sales tables. \\
+\hline
+Equation & The fitted model equation displayed in LaTeX/MathJax, showing each basis function and its coefficient. \\
+\hline
+Summary & Key metrics (R\textsuperscript{2}, GRSq, GCV, RSS, CV R\textsuperscript{2}) and a coefficients table. \\
+\hline
+Variable Importance & Bar chart and ranked table of predictor importance scores. \\
+\hline
+Contribution & g-function contribution plots. Select a g-function from the dropdown; univariate predictors show line plots, bivariate interactions (degree $\geq$ 2) show 3D perspective and contour plots. \\
+\hline
+Correlation & Heatmap of predictor correlations. \\
+\hline
+Diagnostics & Three plots: Residuals vs Fitted, Normal Q-Q, and Actual vs Predicted. \\
+\hline
+ANOVA & ANOVA decomposition table showing each basis function's contribution to RSS. \\
+\hline
+Earth Output & Raw text output from `earth::summary()`, including the pruning pass details. \\
+\hline
+\end{tabularx}
+\end{center}
+
+## Settings Persistence
+
+earthUI automatically saves your configuration to the browser's local storage, keyed by the input filename. When you reload the same file, all settings are restored: target selection, predictor checkboxes, data types, earth parameters, and response weights. A **Reset to Defaults** button clears all saved settings.
+
+## Dark Mode
+
+Click the moon/sun icon in the upper-right corner to toggle between light and dark themes. The theme preference is saved in local storage and persists across sessions.
+
+\newpage
+
+<!-- CHAPTER 3 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 3}}\\[2pt]
+{\Huge\textbf{Appraisal Mode}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+When you select **For Appraisal** as the Purpose, earthUI configures itself for single-property valuation. All features described in Chapter 2 remain available; this chapter covers only the appraisal-specific additions.
+
+## Subject Row Handling
+
+In appraisal mode, **row 1 of your dataset is the subject property** and all remaining rows are comparable sales. Your input file must be organized accordingly. The subject's sale price can be left blank or set to any value --- earthUI automatically treats it as NA during fitting.
+
+After importing, the Data tab splits into two sections: **Subject Property** (row 1) and **Comparable Sales** (rows 2+). Row 1 is always excluded from model fitting --- the notification "Skipping row 1 (subject). Fitting on N rows." confirms this. After fitting, the model still generates predictions for the subject row, shown as `est_<target>` in the output.
+
+## Effective Date \& Sale Age
+
+In appraisal and market modes, an **Effective Date** field appears in the Variable Configuration section (defaulting to today's date). If you designate a column as `contract_date` in the Special column dropdown, earthUI computes a `sale_age` column --- the number of integer days between each sale's contract date and the effective date. This column replaces the original date column as a predictor.
+
+The first time you click Fit after designating a contract date, earthUI creates the `sale_age` column and notifies you to click Fit again to include it.
+
+## Special Column Designations
+
+In appraisal and market modes, a **Special** dropdown appears for each predictor in the Variable Configuration table. Options:
+
+- `contract_date` --- triggers automatic `sale_age` computation
+- `latitude` / `longitude` --- values rounded to 3 decimal places to prevent overfitting
+- `living_area` --- enables per-square-foot residual calculations (`residual_sf`, `cqa_sf`) in the download output
+- `display_only` --- column is included in exports but excluded from model fitting (multiple columns can have this designation)
+
+Only one column per special type is allowed (except `display_only`). Assigning a special to a second column automatically clears it from the first.
+
+## RCA Adjustments Overview
+
+The **Calculate RCA Adjustments \& Download** button (sidebar section 7, visible only in appraisal mode after fitting) computes market-derived adjustments for each comparable relative to the subject. The full RCA workflow is described in Chapter 9.
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} The CQA score you assign to the subject controls how much of the residual distribution is attributed to the subject. A score of 5.00 places the subject at the median of the comparables.}
+\end{tcolorbox}
+
+\newpage
+
+<!-- CHAPTER 4 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 4}}\\[2pt]
+{\Huge\textbf{Market Area Analysis Mode}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+When you select **Market Area Analysis** as the Purpose, earthUI provides the same real estate--specific features as appraisal mode (special columns, sale age, coordinate rounding) but is oriented toward analyzing a group of properties rather than valuing a single subject.
+
+## Differences from Appraisal Mode
+
+- **Skip first row is optional** --- a checkbox labeled "Skip first row (subject property)" appears below the Purpose selector. When checked, row 1 is excluded from fitting (like appraisal mode). When unchecked, all rows are included.
+- **No RCA section** --- the "Calculate RCA Adjustments \& Download" step is not available. Market mode focuses on model fitting and output, not per-comparable adjustments.
+- **Sidebar numbering** --- without the RCA step, the Download Report section is numbered 7 instead of 8.
+
+## When to Use Market Mode
+
+Market Area Analysis mode is appropriate when you are:
+
+- Building a regression model for a neighborhood or market area to understand value drivers
+- Analyzing how variables like square footage, age, lot size, and location affect sale prices across a group of properties
+- Preparing support for a market conditions analysis or neighborhood delineation
+- Working with a dataset that includes a subject property in row 1 but you want the option of including or excluding it from the fit
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} Market mode is also useful for general real estate regression where you want special column features (sale age, coordinate rounding) but do not need the RCA adjustment workflow.}
+\end{tcolorbox}
+
+\newpage
+
+<!-- CHAPTER 5 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 5}}\\[2pt]
+{\Huge\textbf{Variable Selection}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+Section 3 of the sidebar --- **Variable Configuration** --- is where you choose which columns participate in the model and how they are treated.
+
+## Target Variable(s)
+
+The **Target (response) variable(s)** dropdown at the top of Section 3 lists every column in your dataset. Select one column for a standard single-response model, or multiple columns for a multi-response model. When multiple targets are selected, the model fits all responses simultaneously using `earth(cbind(y1, y2, ...) ~ .)`.
+
+Columns selected as targets are automatically excluded from the predictor list.
+
+## The Predictor Table
+
+Below the target selector, a table lists every remaining column with the following fields:
+
+| Column | Description |
+|:-------|:------------|
+| **Variable** | Column name (full name shown in tooltip if truncated) |
+| **Type** | Data type dropdown: `numeric`, `integer`, `character`, `logical`, `factor`, `Date`, `POSIXct` |
+| **Inc?** | Checkbox --- include this column as a predictor in the model |
+| **Special** | Dropdown (appraisal/market only): `no`, `contract_date`, `latitude`, `longitude`, `living_area`, `display_only` |
+| **Factor** | Checkbox --- treat this column as a categorical variable |
+| **Linear** | Checkbox --- force linear entry only (no hinge functions) |
+| **NAs** | Count of missing values. Shown in red when more than 30\% of values are missing |
+
+A hint line above the table explains the abbreviations: "Type = column data type, Inc = include as predictor, Factor = treat as categorical, Linear = linear-only (no hinges)."
+
+## Data Type Detection \& Overrides
+
+earthUI automatically detects data types on import. Numeric, integer, logical, factor, and date columns are recognized. Character columns that look like dates (at least 80\% of values parse against common date formats) are classified as `Date`.
+
+You can override any detection by changing the **Type** dropdown. When you change a column to `character` or `factor`, the Factor checkbox is automatically checked. Changing types affects how the column is passed to the `earth()` function.
+
+## Factor and Linear Flags
+
+- **Factor** --- When checked, the column is treated as a categorical variable. This is appropriate for columns like `style`, `area_id`, or `grade` that represent discrete groups rather than continuous measurements. Factor columns enter the model as indicator (dummy) variables.
+- **Linear** --- When checked, the column is forced to enter the model linearly --- no hinge (piecewise-linear) functions are created for it. This is useful when you know a variable has a strictly linear relationship with the target.
+
+## Multiple Targets
+
+Selecting more than one target variable fits a multi-response Earth model. When multiple targets are selected:
+
+- The model predicts all responses simultaneously, sharing basis functions across targets
+- The **wp (response weights)** button becomes active, allowing you to assign a numeric weight to each target
+- Variance models (`varmod.method`) are disabled (not supported for multi-response)
+- Results tabs display per-response metrics, equations, and diagnostic plots
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} Columns designated as \texttt{display\_only} remain in your dataset and appear in the Excel export, but are excluded from the predictor table entirely. Use this for ID columns, addresses, or other reference fields.}
+\end{tcolorbox}
+
+\newpage
+
+<!-- CHAPTER 6 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 6}}\\[2pt]
+{\Huge\textbf{Parameter Selection}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+Section 4 of the sidebar --- **Earth Call Parameters** --- provides access to all arguments accepted by the `earth()` function. Each parameter has a blue help icon (**?**) with a tooltip explanation. Parameters are organized into collapsible subsections.
+
+## Basic Parameters
+
+| Parameter | Default | Description |
+|:----------|:--------|:------------|
+| **subset** | (empty) | Row filter expression. See "Subset Filtering" below. |
+| **weights** | NULL | Column selector for case (row) weights. Only numeric columns are listed. |
+| **wp** | NULL | Response weights for multi-target models. Button opens a dialog with one numeric input per target (default 1.0 each). |
+| **keepxy** | off | Retain x, y, subset, and weights in the model object. |
+| **trace** | 0 | Trace level for fitting output (0 through 5). |
+| **glm** | none | Optional GLM family: `gaussian`, `binomial`, or `poisson`. |
+| **degree** | 1 | Maximum interaction order. Setting degree $\geq$ 2 auto-enables cross-validation and reveals the Allowed Interactions matrix. |
+| **penalty** | 2 | GCV penalty per knot. Higher values produce simpler models. |
+
+## Forward Pass
+
+| Parameter | Default | Description |
+|:----------|:--------|:------------|
+| **nk** | auto | Maximum terms before pruning. Default: min(200, max(20, 2$\times$predictors)) + 1. |
+| **thresh** | 0.001 | Forward-step threshold. Smaller values allow more terms. |
+| **minspan** | 0 (auto) | Minimum span between knots. Negative values set the maximum knots per predictor. |
+| **endspan** | 0 (auto) | End span --- minimum distance from a knot to the edge of the data. |
+| **newvar.penalty** | 0 | Penalty for introducing a new variable (encourages reuse of existing predictors). |
+| **fast.k** | 20 | Number of parent terms to consider in the fast MARS algorithm. |
+| **fast.beta** | 1 | Controls the fast MARS aging factor. |
+
+## Allowed Interactions
+
+When **degree** is set to 2 or higher, an interaction matrix appears below the basic parameters. This is an upper-triangular grid of checkboxes, one for each predictor pair. A checked box means the two predictors are allowed to interact; unchecking it forbids that specific interaction.
+
+Clicking a predictor name (row or column label) toggles all interactions for that variable. **Allow All** and **Clear All** checkboxes at the top provide bulk control. The matrix uses sticky headers so column and row labels remain visible when scrolling.
+
+An info alert reminds you: "Interaction terms increase the risk of overfitting. Cross-validation has been enabled (10-fold)."
+
+## Pruning
+
+| Parameter | Default | Description |
+|:----------|:--------|:------------|
+| **pmethod** | backward | Pruning method: `backward`, `none`, `exhaustive`, `forward`, `seqrep`, or `cv`. |
+| **nprune** | NULL | Maximum terms after pruning. Leave empty for automatic selection. |
+
+## Cross-Validation
+
+| Parameter | Default | Description |
+|:----------|:--------|:------------|
+| **nfold** | 10 | Number of cross-validation folds. Set to 0 to disable CV. |
+| **ncross** | 20 | Number of cross-validation repetitions. |
+| **stratify** | on | Stratify CV samples so each fold has a similar response distribution. |
+
+When degree $\geq$ 2, cross-validation is automatically enabled (nfold set to 10) to help guard against overfitting from interactions.
+
+## Subset Filtering
+
+The **subset** text input accepts an R expression that filters which rows are used for model fitting. You can type an expression directly (e.g., `sale_age < 365 & area_id == 460`) or use the **Build filter...** button to construct one visually.
+
+**Build Filter Dialog** --- Click "Build filter..." to open a guided dialog. Each condition row has a column dropdown, operator (`<`, `>`, `<=`, `>=`, `==`, `!=`), and a value input that adapts to the column type: numeric input for numbers, date picker for dates, and dropdown of unique values for character/factor columns. Conditions are joined with AND (`&`) or OR (`|`) connectors. A preview at the bottom shows the expression and how many rows match. Click **Apply** to insert the expression into the text input.
+
+**Date columns** must use `as.Date("...")` or `as.POSIXct("...")` wrappers in manual expressions. The Build Filter dialog handles this automatically.
+
+**Subset filtering is non-destructive** --- excluded rows remain in the dataset and receive predictions in the Excel export.
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} Use parentheses to group OR conditions when combining with AND. Without parentheses, \texttt{A \& B | C} is evaluated as \texttt{(A \& B) | C}, which may not be what you intend.}
+\end{tcolorbox}
+
+## Settings Defaults
+
+A radio button at the top of Section 4 controls which defaults are loaded:
+
+- **Use last settings for input file** --- restores the settings you used last time with this particular file
+- **Use default settings** --- applies your saved custom defaults
+- **Earth defaults** --- resets all parameters to factory values
+
+Click **Save current as default** to store the current parameter configuration as your personal defaults.
+
+\newpage
+
+<!-- CHAPTER 7 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 7}}\\[2pt]
+{\Huge\textbf{Fitting the Earth Model}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+## The Fit Button
+
+Section 5 of the sidebar contains a single green button: **Fit Earth Model**. Before fitting, earthUI validates your configuration --- a target must be selected and at least one predictor must be included. In appraisal/market modes, latitude and longitude columns are rounded, and sale age is computed from the effective date and contract date (if designated).
+
+## Fitting Modal \& Trace Output
+
+When you click Fit, a dark modal overlay appears with:
+
+- **Header** --- "Fitting Earth Model" with an elapsed timer counting seconds
+- **Trace log** --- a scrollable, monospace text area showing real-time output from the `earth()` function: dataset info, forward pass progress, cross-validation folds, and completion time
+- **Color coding** --- default lines in green, cross-validation lines in yellow, errors in red
+
+earthUI fits models asynchronously using `callr::r_bg()`, which runs the computation in a separate R process. This keeps the application responsive during long-running fits. A 300ms polling observer reads output from the background process and streams it to the trace log.
+
+When fitting completes, a "Done in X.Xs" message appears and a close button (X) is added to the modal. **The modal does not auto-dismiss** --- you close it when you are ready to review results.
+
+On success, a green checkmark is appended to the Fit button. If an error occurs, the error message is displayed in the trace log and a notification appears.
+
+## Fit Log
+
+Every fit (success or failure) writes a log file to your output folder:
+
+- **Filename**: `<datafile>_earth_log_<YYYYMMDD_HHMMSS>.txt`
+- **Contents**: timestamp, all trace output from the fitting process, and any error messages
+- **Location**: the Project Output Folder specified in Section 2 (defaults to `~/Downloads`)
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} If callr is not installed, earthUI falls back to synchronous fitting with a simple progress bar. Install callr for the full trace-output experience.}
+\end{tcolorbox}
+
+\newpage
+
+<!-- CHAPTER 8 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 8}}\\[2pt]
+{\Huge\textbf{Downloading Data}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+After fitting a model, Section 6 of the sidebar lets you download an Excel file containing your original data plus model predictions and diagnostics. The button label adapts to the purpose mode:
+
+- General/Market: **Download Output (Excel)**
+- Appraisal: **Download Intermediate Output (Excel)**
+
+The filename format is `<datafile>_modified_<YYYYMMDD_HHMMSS>.xlsx`.
+
+## Output Columns
+
+For each target variable, the following columns are appended:
+
+| Column | Description |
+|:-------|:------------|
+| `est_<target>` | Model prediction (1 decimal place) |
+| `residual` | Actual minus predicted (1 dp) |
+| `cqa` | Comparative Quality Analysis score (2 dp, range 0--10) |
+| `residual_sf` | Residual divided by living area (if designated, 1 dp) |
+| `cqa_sf` | CQA on per-square-foot residuals (if designated, 2 dp) |
+| `<variable>_contribution` | Per-g-function contribution value (1 dp, one column per g-function) |
+| `basis` | Intercept contribution (constant for all rows, 1 dp) |
+| `calc_residual` | Actual minus (basis + all contributions) --- verification column (1 dp) |
+
+For multi-target models, a `_<i>` suffix is added to distinguish columns for each target.
+
+## CQA Scores
+
+The CQA (Comparative Quality Analysis) score ranks each row's residual against all other residuals. For a given row, the CQA is the percentage of rows with a smaller signed residual, multiplied by 10. This produces a 0--10 scale where:
+
+- **High CQA** ($\approx$ 9--10) --- the property sold for much more than the model predicted (large positive residual)
+- **Low CQA** ($\approx$ 0--1) --- the property sold for much less than predicted (large negative residual)
+- **CQA $\approx$ 5** --- the residual is near the median of all residuals
+
+When a `living_area` column is designated, `cqa_sf` provides the same ranking based on per-square-foot residuals.
+
+## Sorting \& Subject Row
+
+In appraisal and market modes, comparable rows are sorted by `residual_sf` descending (or `residual` if no living area is designated). The subject row (row 1) remains in position 1 and is not sorted. In general mode, rows are exported in their original order.
+
+Factor levels in the prediction data are aligned with the training data before calling `predict()`. Rows with unseen factor levels will produce NA predictions.
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} The \texttt{calc\_residual} column should always equal \texttt{residual} (within rounding). If they differ significantly, it indicates a computation issue worth investigating.}
+\end{tcolorbox}
+
+\newpage
+
+<!-- CHAPTER 9 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 9}}\\[2pt]
+{\Huge\textbf{RCA Calculations \& Downloading}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+The **Calculate RCA Adjustments \& Download** button appears in sidebar section 7, visible only in appraisal mode after a model has been fitted. RCA (Reconciliation by Comparable Adjustment) produces market-derived, per-comparable adjustments relative to the subject property.
+
+## Opening the RCA Dialog
+
+Clicking the button opens a small modal dialog with:
+
+- **Score type** --- radio buttons to choose **CQA** or **CQA per SF** (the SF option is available only when a `living_area` column is designated)
+- **CQA value** --- numeric input for the subject's CQA score (0.00--9.99, default 5.00). This score represents where you believe the subject falls in the quality distribution of the comparables.
+- **Generate** button --- computes the RCA output and downloads it as Excel
+
+## CQA Score Interpolation
+
+When you click Generate, earthUI interpolates the subject's residual from the comparable CQA/residual pairs:
+
+1. The comparables' CQA scores and residuals are sorted by CQA ascending
+2. Linear interpolation (`stats::approx()`) maps your entered CQA value to a residual
+3. If using CQA per SF, the per-SF residual is converted back to a total residual by multiplying by the subject's living area
+4. The subject's estimated value is computed as: model prediction + interpolated residual
+
+## Output Columns
+
+The RCA Excel file (`<datafile>_adjusted_<YYYYMMDD_HHMMSS>.xlsx`) includes all intermediate output columns plus:
+
+| Column | Description |
+|:-------|:------------|
+| `subject_value` | Model prediction + interpolated residual (row 1 only) |
+| `subject_cqa` | The CQA score you entered (row 1 only) |
+| `<variable>_adjustment` | Subject contribution minus comp contribution (per g-function) |
+| `residual_adjustment` | Subject residual minus comp residual |
+| `net_adjustments` | Sum of all adjustments (contribution + residual) |
+| `gross_adjustments` | Sum of absolute values of all adjustments |
+| `adjusted_sale_price` | Comp sale price + net adjustments |
+
+The adjustment columns tell you, for each comparable, how much the model attributes the difference to each variable. `adjusted_sale_price` is the comparable's sale price after applying all model-derived adjustments --- a set of adjusted sale prices that should cluster around the subject's estimated value.
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} A CQA score of 5.00 places the subject at the median of the comparables. Scores above 5 indicate the subject is above average quality; below 5 indicates below average.}
+\end{tcolorbox}
+
+\newpage
+
+<!-- CHAPTER 10 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 10}}\\[2pt]
+{\Huge\textbf{Downloading Reports}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+After fitting a model, the Download Report section (sidebar section 7 or 8, depending on the purpose mode) lets you generate a comprehensive formatted report.
+
+## Report Formats
+
+Three formats are available via the format dropdown:
+
+- **HTML** --- a self-contained `.html` file with interactive tables, embedded images, and a table of contents. Uses the Flatly Bootstrap theme and Roboto Condensed font.
+- **Word** --- a `.docx` file suitable for editing and distribution. Includes a table of contents and uses a custom reference template for consistent styling.
+- **PDF** --- typeset with LuaLaTeX for professional-quality output. Includes landscape pages for large interaction matrices and uses Roboto Condensed with Latin Modern Math for equations.
+
+Reports are rendered via Quarto and saved directly to the Project Output Folder as `<datafile>_report_<YYYYMMDD_HHMMSS>.<format>`. A notification confirms the file location on completion.
+
+## Report Contents
+
+Every report includes the following sections:
+
+1. **Dataset Description** --- number of observations, target variable(s), predictors used, categorical predictors
+2. **Model Specification** --- degree, cross-validation status, number of terms, predictors in model
+3. **Allowed Interactions** (degree $\geq$ 2 only) --- the interaction matrix with checkmarks, formatted for the output type
+4. **Results Summary** --- R$^2$, GRSq, GCV, RSS, and CV R$^2$ (if cross-validation was enabled)
+5. **Model Equation** --- the complete Earth model equation in LaTeX notation
+6. **Coefficients \& Basis Functions** --- table of all terms, their coefficients, and the basis functions that define them
+7. **Variable Importance** --- bar chart and ranked table of predictor importance scores
+8. **g-Function Contributions** --- plots for each g-function: line plots for univariate terms, 3D perspective and contour plots for bivariate interactions
+9. **Correlation Matrix** --- heatmap of predictor correlations
+10. **Diagnostics** --- Residuals vs Fitted, Normal Q-Q, and Actual vs Predicted plots
+11. **ANOVA Decomposition** --- table showing each basis function's contribution to RSS
+12. **Earth Output** --- raw text output from `earth::summary()`, including pruning pass details
+
+For multi-response models, sections 4--8 and 10 are repeated for each target variable.
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} Reports require the \texttt{quarto} R package. For PDF output, a LaTeX distribution (e.g., TinyTeX) must also be installed.}
+\end{tcolorbox}

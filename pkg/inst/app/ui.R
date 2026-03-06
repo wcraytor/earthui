@@ -11,7 +11,7 @@ fluidPage(
     ")),
     tags$style(HTML("
     .dataTable td, .dataTable th { padding: 4px 8px !important; }
-    .dataTables_wrapper { font-size: 0.9em; }
+    .dataTables_wrapper { font-size: 0.9em; overflow-x: auto; }
     .dataTable td { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
     #eui-cell-popup { display: none; }
     .eui-popup-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 9998; }
@@ -777,15 +777,15 @@ fluidPage(
             tags$summary(uiOutput("download_heading", inline = TRUE)),
             conditionalPanel(
               condition = "input.purpose === 'appraisal'",
-              downloadButton("export_data", "Download Intermediate Output (Excel)",
-                             class = "btn-success",
-                             style = "width: 100%;")
+              actionButton("export_data", "Download Intermediate Output (Excel)",
+                           class = "btn-success",
+                           style = "width: 100%;")
             ),
             conditionalPanel(
               condition = "input.purpose !== 'appraisal'",
-              downloadButton("export_data_nonadj", "Download Output (Excel)",
-                             class = "btn-success",
-                             style = "width: 100%;")
+              actionButton("export_data_nonadj", "Download Output (Excel)",
+                           class = "btn-success",
+                           style = "width: 100%;")
             )
           )
         ),
