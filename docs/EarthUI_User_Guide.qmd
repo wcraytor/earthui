@@ -332,6 +332,9 @@ In appraisal and market modes, an **Effective Date** field appears in the Variab
 
 The first time you click Fit after designating a contract date, earthUI creates the `sale_age` column and notifies you to click Fit again to include it.
 
+
+
+
 ## Special Column Designations
 
 In appraisal and market modes, a **Special** dropdown appears for each predictor in the Variable Configuration table. Options:

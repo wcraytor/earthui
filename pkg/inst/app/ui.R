@@ -1,7 +1,6 @@
 fluidPage(
   withMathJax(),
-  theme = bslib::bs_theme(version = 5, bootswatch = "flatly",
-                          base_font = bslib::font_google("Roboto Condensed")),
+  theme = nord_light,
   tags$head(
     tags$link(rel = "icon", type = "image/png", href = "favicon.png"),
     tags$script(type = "text/x-mathjax-config", HTML("
@@ -15,46 +14,46 @@ fluidPage(
     .dataTable td { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
     #eui-cell-popup { display: none; }
     .eui-popup-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 9998; }
-    .eui-popup-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border-radius: 8px; padding: 20px; max-width: 80vw; max-height: 70vh; overflow: auto; z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    .eui-popup-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bs-body-bg, #eceff4); color: var(--bs-body-color, #2e3440); border-radius: 8px; padding: 20px; max-width: 80vw; max-height: 70vh; overflow: auto; z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
     .eui-popup-content pre { white-space: pre-wrap; word-wrap: break-word; margin-bottom: 12px; font-size: 0.9em; }
     .eui-popup-close { float: right; }
     .MathJax_Display { text-align: left !important; margin-left: 1em !important; }
-    .eui-param-help { position: absolute; top: 0; right: 0; width: 18px; height: 18px; border-radius: 50%; background: #5bc0de; color: #fff; font-size: 11px; font-weight: bold; text-align: center; line-height: 18px; cursor: pointer; z-index: 10; }
-    .eui-param-help:hover { background: #31b0d5; }
-    #eui-theme-toggle { position: fixed; top: 12px; right: 20px; z-index: 10000; width: 38px; height: 38px; border-radius: 50%; border: 2px solid #ccc; background: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.15); transition: all 0.3s; }
+    .eui-param-help { position: absolute; top: 0; right: 0; width: 18px; height: 18px; border-radius: 50%; background: #88c0d0; color: #fff; font-size: 11px; font-weight: bold; text-align: center; line-height: 18px; cursor: pointer; z-index: 10; }
+    .eui-param-help:hover { background: #5e81ac; }
+    #eui-theme-toggle { position: fixed; top: 12px; right: 20px; z-index: 10000; width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--bs-border-color); background: var(--bs-body-bg); color: var(--bs-body-color); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.15); transition: all 0.3s; }
     #eui-theme-toggle:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.25); }
-    [data-bs-theme='dark'] #eui-theme-toggle { background: #2c3e50; border-color: #555; }
-    [data-bs-theme='dark'] .eui-popup-content { background: #2c3e50; color: #ecf0f1; }
-    [data-bs-theme='dark'] details > summary { color: #ecf0f1 !important; }
-    [data-bs-theme='dark'] .nav-tabs .nav-link.active { color: #ecf0f1 !important; background-color: #2c3e50 !important; border-color: #555 #555 #2c3e50 !important; }
-    [data-bs-theme='dark'] .nav-tabs .nav-link { color: #95a5a6; }
-    [data-bs-theme='dark'] .nav-tabs .nav-link:hover { color: #ecf0f1; border-color: #555; }
+    [data-bs-theme='dark'] #eui-theme-toggle { background: #3b4252; border-color: #434c5e; }
+    [data-bs-theme='dark'] .eui-popup-content { background: #3b4252; color: #d8dee9; }
+    [data-bs-theme='dark'] details > summary { color: #d8dee9 !important; }
+    [data-bs-theme='dark'] .nav-tabs .nav-link.active { color: #d8dee9 !important; background-color: #2e3440 !important; border-color: #434c5e #434c5e #2e3440 !important; }
+    [data-bs-theme='dark'] .nav-tabs .nav-link { color: #81a1c1; }
+    [data-bs-theme='dark'] .nav-tabs .nav-link:hover { color: #d8dee9; border-color: #434c5e; }
     #earth_output { font-family: 'Roboto Condensed', sans-serif; font-size: 0.9em; line-height: 1.5; }
     .eui-matrix-header th { position: sticky; top: 0; z-index: 2; background: var(--bs-body-bg, #fff); }
     .eui-matrix-header th:first-child { position: sticky; left: 0; z-index: 3; }
     .eui-matrix-rowlabel { position: sticky; left: 0; z-index: 1; background: var(--bs-body-bg, #fff); }
     .eui-type-select { appearance: auto; -webkit-appearance: auto; }
-    [data-bs-theme='dark'] .eui-type-select { background: #2c3e50 !important; color: #ecf0f1 !important; border-color: #555 !important; }
+    [data-bs-theme='dark'] .eui-type-select { background: #3b4252 !important; color: #d8dee9 !important; border-color: #434c5e !important; }
     .eui-special-select { appearance: auto; -webkit-appearance: auto; }
-    [data-bs-theme='dark'] .eui-special-select { background: #2c3e50 !important; color: #ecf0f1 !important; border-color: #555 !important; }
+    [data-bs-theme='dark'] .eui-special-select { background: #3b4252 !important; color: #d8dee9 !important; border-color: #434c5e !important; }
     details.eui-section > summary { cursor: pointer; list-style: none; }
     details.eui-section > summary::-webkit-details-marker { display: none; }
     details.eui-section > summary h4 { display: inline; }
     details.eui-section > summary::before { content: '\\25B6'; margin-right: 6px; font-size: 0.75em; transition: transform 0.2s; display: inline-block; }
     details.eui-section[open] > summary::before { transform: rotate(90deg); }
     .radio-inline { margin-right: 16px; }
-    .shiny-input-radiogroup input[type='radio'] { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; border: 3px solid #222; border-radius: 50%; margin-right: 5px; vertical-align: middle; cursor: pointer; position: relative; }
-    .shiny-input-radiogroup input[type='radio']:checked { border-color: #222; }
-    .shiny-input-radiogroup input[type='radio']:checked::after { content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: #222; }
-    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio'] { border-color: #fff; }
-    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked { border-color: #fff; }
-    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked::after { background: #fff; }
-    [data-bs-theme='dark'] .modal .btn-outline-primary { color: #fff; border-color: #fff; }
-    [data-bs-theme='dark'] .modal .btn-outline-primary:hover { background: #fff; color: #222; }
-    [data-bs-theme='dark'] .modal .btn-outline-secondary { color: #ccc; border-color: #ccc; }
-    [data-bs-theme='dark'] .modal .btn-outline-secondary:hover { background: #ccc; color: #222; }
-    [data-bs-theme='dark'] .modal .btn-outline-danger { color: #e74c3c; border-color: #e74c3c; }
-    [data-bs-theme='dark'] .modal .btn-outline-danger:hover { background: #e74c3c; color: #fff; }
+    .shiny-input-radiogroup input[type='radio'] { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; border: 3px solid #2e3440; border-radius: 50%; margin-right: 5px; vertical-align: middle; cursor: pointer; position: relative; }
+    .shiny-input-radiogroup input[type='radio']:checked { border-color: #2e3440; }
+    .shiny-input-radiogroup input[type='radio']:checked::after { content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: #2e3440; }
+    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio'] { border-color: #d8dee9; }
+    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked { border-color: #d8dee9; }
+    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked::after { background: #d8dee9; }
+    [data-bs-theme='dark'] .modal .btn-outline-primary { color: #88c0d0; border-color: #88c0d0; }
+    [data-bs-theme='dark'] .modal .btn-outline-primary:hover { background: #88c0d0; color: #2e3440; }
+    [data-bs-theme='dark'] .modal .btn-outline-secondary { color: #81a1c1; border-color: #81a1c1; }
+    [data-bs-theme='dark'] .modal .btn-outline-secondary:hover { background: #81a1c1; color: #2e3440; }
+    [data-bs-theme='dark'] .modal .btn-outline-danger { color: #bf616a; border-color: #bf616a; }
+    [data-bs-theme='dark'] .modal .btn-outline-danger:hover { background: #bf616a; color: #eceff4; }
   "))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -73,28 +72,28 @@ fluidPage(
   ")),
   tags$button(id = "eui-theme-toggle", onclick = "toggleTheme()", HTML("&#9790;")),
   tags$script(HTML("
+    var euiCurrentMode = 'light';
+
     function toggleTheme() {
-      var html = document.documentElement;
+      euiCurrentMode = (euiCurrentMode === 'dark') ? 'light' : 'dark';
+      Shiny.setInputValue('dark_mode', euiCurrentMode, {priority: 'event'});
       var btn = document.getElementById('eui-theme-toggle');
-      if (html.getAttribute('data-bs-theme') === 'dark') {
-        html.removeAttribute('data-bs-theme');
-        btn.innerHTML = '\\u263E';
-        try { localStorage.setItem('earthUI_theme', 'light'); } catch(e) {}
-      } else {
-        html.setAttribute('data-bs-theme', 'dark');
-        btn.innerHTML = '\\u2600';
-        try { localStorage.setItem('earthUI_theme', 'dark'); } catch(e) {}
-      }
+      if (btn) btn.innerHTML = (euiCurrentMode === 'dark') ? '\\u2600' : '\\u263E';
+      try { localStorage.setItem('earthUI_theme', euiCurrentMode); } catch(e) {}
     }
-    (function() {
+
+    $(document).on('shiny:connected', function() {
       var saved = null;
       try { saved = localStorage.getItem('earthUI_theme'); } catch(e) {}
       if (saved === 'dark') {
-        document.documentElement.setAttribute('data-bs-theme', 'dark');
+        euiCurrentMode = 'dark';
         var btn = document.getElementById('eui-theme-toggle');
         if (btn) btn.innerHTML = '\\u2600';
+        Shiny.setInputValue('dark_mode', 'dark', {priority: 'event'});
+      } else {
+        Shiny.setInputValue('dark_mode', 'light', {priority: 'event'});
       }
-    })();
+    });
   ")),
   tags$script(HTML("
     // --- Checkmark helper ---
@@ -120,11 +119,11 @@ fluidPage(
       var start = Date.now();
       var modal = $(
         '<div id=\"eui-fitting-modal\" style=\"position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10001;' +
-        'background:#1e2a35;color:#ecf0f1;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.5);' +
+        'background:#2e3440;color:#d8dee9;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.5);' +
         'width:520px;max-width:90vw;font-family:monospace;overflow:hidden;\">' +
-          '<div style=\"background:#2c3e50;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;\">' +
+          '<div style=\"background:#3b4252;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;\">' +
             '<span style=\"font-size:0.95em;font-weight:bold;\">Fitting Earth Model</span>' +
-            '<span id=\"eui-timer\" style=\"font-size:0.85em;color:#bdc3c7;margin-right:30px;\">0s</span>' +
+            '<span id=\"eui-timer\" style=\"font-size:0.85em;color:#81a1c1;margin-right:30px;\">0s</span>' +
           '</div>' +
           '<div id=\"eui-trace-log\" style=\"padding:8px 12px;height:300px;overflow-y:auto;font-size:0.78em;line-height:1.5;\"></div>' +
         '</div>'
@@ -135,7 +134,7 @@ fluidPage(
       modal.appendTo('body');
 
       // Add initial message
-      $('#eui-trace-log').append($('<div style=\"color:#3498db;\">').text('Starting model fit...'));
+      $('#eui-trace-log').append($('<div style=\"color:#88c0d0;\">').text('Starting model fit...'));
 
       window.euiTimerInterval = setInterval(function() {
         var s = Math.floor((Date.now() - start) / 1000);
@@ -148,9 +147,9 @@ fluidPage(
     Shiny.addCustomMessageHandler('trace_line', function(msg) {
       var $log = $('#eui-trace-log');
       if ($log.length) {
-        var color = '#0f0';
-        if (msg.text.match(/^\\s*(CV|cross)/i)) color = '#f1c40f';
-        else if (msg.text.match(/error|fail/i)) color = '#e74c3c';
+        var color = '#a3be8c';
+        if (msg.text.match(/^\\s*(CV|cross)/i)) color = '#ebcb8b';
+        else if (msg.text.match(/error|fail/i)) color = '#bf616a';
         var $line = $('<div style=\"color:' + color + ';\">').text(msg.text);
         $log.append($line);
         $log.scrollTop($log[0].scrollHeight);
@@ -163,14 +162,14 @@ fluidPage(
       var hasError = msg.text === 'Error' || $log.find('div').filter(function() {
         return $(this).text().match(/error|fail/i);
       }).length > 0;
-      var color = hasError ? '#e74c3c' : '#2ecc71';
+      var color = hasError ? '#bf616a' : '#a3be8c';
       $log.append($('<div style=\"color:' + color + ';font-weight:bold;margin-top:4px;\">').text(msg.text));
       $log.scrollTop($log[0].scrollHeight);
       if (!hasError) addCheck('run_model');
       // Add close X button — user dismisses manually
       if (!$('#eui-fitting-close').length) {
         var $btn = $('<span id=\"eui-fitting-close\" style=\"position:absolute;top:8px;right:12px;' +
-          'color:#bdc3c7;cursor:pointer;font-size:1.3em;line-height:1;\">&times;</span>');
+          'color:#81a1c1;cursor:pointer;font-size:1.3em;line-height:1;\">&times;</span>');
         $btn.on('click', function() {
           $('#eui-fitting-modal, #eui-fitting-backdrop').fadeOut(300, function(){ $(this).remove(); });
         });
@@ -422,7 +421,7 @@ fluidPage(
                style = "margin-right: 8px; vertical-align: middle;"),
       "earthUI",
       tags$small(" - Interactive Earth Model Builder",
-                 style = "font-size: 0.6em; color: #7f8c8d;")
+                 style = "font-size: 0.6em; color: var(--bs-secondary-color);")
     )
   ),
 
@@ -813,6 +812,20 @@ fluidPage(
                          class = "btn-success",
                          style = "width: 100%;")
           )
+        ),
+
+        # --- Export for mgcvUI (degree <= 2 only) ---
+        conditionalPanel(
+          condition = "output.model_fitted && output.mgcv_export_ok",
+          hr(),
+          tags$details(class = "eui-section",
+            tags$summary(h4("Export for mgcvUI", style = "display:inline;")),
+            tags$p("Save earthUI result as .rds for import into mgcvUI.",
+                   style = "font-size: 0.85em; color: #888;"),
+            actionButton("export_mgcv_btn", "Export for mgcvUI (.rds)",
+                         class = "btn-info",
+                         style = "width: 100%;")
+          )
         )
       )
     ),
@@ -905,6 +918,11 @@ fluidPage(
             ),
             br(),
             plotOutput("actual_vs_predicted_plot", height = "400px")
+          ),
+          tabPanel(
+            "RCA Adjustments",
+            br(),
+            uiOutput("rca_plots_ui")
           ),
           tabPanel(
             "ANOVA",
