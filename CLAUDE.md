@@ -102,6 +102,11 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
   disallowed. Long predictor names truncated with ellipsis in PDF/Word.
 - **Fit log**: Written to the output folder on every fit (success or error)
   as `<filename>_earth_log_<timestamp>.txt`.
+- **mgcvUI auto-export**: On every successful fit with `degree <= 2`, the
+  full result object is auto-saved via `saveRDS()` as
+  `<filename>_earthUI_result_<timestamp>.rds` to the output folder.
+  mgcvUI loads this with `readRDS()`. Degree > 2 is skipped (mgcvUI only
+  supports pairwise interactions). A manual export button also exists.
 - **roxygen2**: All exported functions have roxygen docs. Run `roxygenise()`
   after editing any `@export` or `@param` tags.
 - **NAMESPACE**: Auto-generated. Never edit by hand.
