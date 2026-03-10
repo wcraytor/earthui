@@ -134,7 +134,8 @@ generate_sales_grid <- function(adjusted_file,
                                 comp_rows,
                                 output_file = NULL,
                                 title_prefix = "Intermediate Sales Comparable Grid",
-                                dom_col = NULL) {
+                                dom_col = NULL,
+                                contract_date_col = NULL) {
 
   if (!file.exists(adjusted_file)) {
     stop("Adjusted file not found: ", adjusted_file)
@@ -185,10 +186,10 @@ generate_sales_grid <- function(adjusted_file,
   row_headers     <- 2
   row_address     <- 3
   row_apn         <- 4
-  row_dom_prox    <- 5
-  row_sale_price  <- 6
-  row_regr_hdr    <- 7
-  row_base_value  <- 8
+  row_sale_price  <- 5
+  row_regr_hdr    <- 6
+  row_base_value  <- 7
+  row_date_info   <- 8
   row_vars_start  <- 9
   row_vars_end    <- row_vars_start + n_vars - 1
   row_blank1      <- row_vars_end + 1
@@ -347,65 +348,57 @@ generate_sales_grid <- function(adjusted_file,
              gridExpand = TRUE, stack = TRUE)
     addStyle(wb, s, label_style, rows = row_address, cols = 1, stack = TRUE)
 
-    # === Row 4: APN / MLS# ===
-    writeData(wb, s, "APN | MLS#",
+    # === Row 4: APN | MLS# | DOM | Subj.Prox ===
+    writeData(wb, s, "APN | MLS# | DOM | Subj.Prox",
               startRow = row_apn, startCol = 1)
-    mergeCells(wb, s, cols = 2:5, rows = row_apn)
+    # Subject: APN in cols 2-3, DOM in col 4, Subj.Prox = 0 in col 5
+    mergeCells(wb, s, cols = 2:3, rows = row_apn)
     writeData(wb, s, col_val(df, 1, "parcel_number"),
               startRow = row_apn, startCol = 2)
-    for (ci in seq_len(n_on_sheet)) {
-      r <- sheet_comps[ci]
-      col_start <- 1 + ci * 5
-      mergeCells(wb, s, cols = col_start:(col_start + 1), rows = row_apn)
-      writeData(wb, s, col_val(df, r, "parcel_number"),
-                startRow = row_apn, startCol = col_start)
-      writeData(wb, s, col_val(df, r, "listing_id"),
-                startRow = row_apn, startCol = col_start + 2)
-    }
-    addStyle(wb, s, body_style, rows = row_apn, cols = 1:20,
-             gridExpand = TRUE, stack = TRUE)
-    addStyle(wb, s, label_style, rows = row_apn, cols = 1, stack = TRUE)
-
-    # === DOM | Subj.Prox row ===
-    writeData(wb, s, "DOM | Subj.Prox",
-              startRow = row_dom_prox, startCol = 1)
-    # Subject: show DOM if available
     subj_dom <- if (!is.null(dom_col)) {
       v <- col_val(df, 1, dom_col, default = NA)
       if (!is.na(v)) as.integer(v) else NA_integer_
     } else {
       compute_dom(df, 1)
     }
-    mergeCells(wb, s, cols = 2:5, rows = row_dom_prox)
     if (!is.na(subj_dom)) {
-      writeData(wb, s, paste0(subj_dom, " days"),
-                startRow = row_dom_prox, startCol = 2)
+      writeData(wb, s, subj_dom, startRow = row_apn, startCol = 4)
     }
+    writeData(wb, s, "0.00 mi", startRow = row_apn, startCol = 5)
     # Subject lat/lon for proximity calc
     subj_lat <- if (!is.null(lat_col)) as.numeric(col_val(df, 1, lat_col, NA)) else NA
     subj_lon <- if (!is.null(lon_col)) as.numeric(col_val(df, 1, lon_col, NA)) else NA
     for (ci in seq_len(n_on_sheet)) {
       r <- sheet_comps[ci]
       col_start <- 1 + ci * 5
+      # APN in col_start, MLS# in col_start+1
+      writeData(wb, s, col_val(df, r, "parcel_number"),
+                startRow = row_apn, startCol = col_start)
+      writeData(wb, s, col_val(df, r, "listing_id"),
+                startRow = row_apn, startCol = col_start + 1)
+      # DOM in col_start+2
       comp_dom <- if (!is.null(dom_col)) {
         v <- col_val(df, r, dom_col, default = NA)
         if (!is.na(v)) as.integer(v) else NA_integer_
       } else {
         compute_dom(df, r)
       }
+      if (!is.na(comp_dom)) {
+        writeData(wb, s, comp_dom, startRow = row_apn, startCol = col_start + 2)
+      }
+      # Subj.Prox in col_start+3:col_start+4
       comp_lat <- if (!is.null(lat_col)) as.numeric(col_val(df, r, lat_col, NA)) else NA
       comp_lon <- if (!is.null(lon_col)) as.numeric(col_val(df, r, lon_col, NA)) else NA
       prox <- haversine_miles(subj_lat, subj_lon, comp_lat, comp_lon)
-      dom_str  <- if (!is.na(comp_dom)) paste0(comp_dom, " days") else ""
-      prox_str <- if (!is.na(prox)) sprintf("%.2f mi", prox) else ""
-      label <- paste(c(dom_str, prox_str)[nzchar(c(dom_str, prox_str))],
-                     collapse = " | ")
-      mergeCells(wb, s, cols = col_start:(col_start + 4), rows = row_dom_prox)
-      writeData(wb, s, label, startRow = row_dom_prox, startCol = col_start)
+      mergeCells(wb, s, cols = (col_start + 3):(col_start + 4), rows = row_apn)
+      if (!is.na(prox)) {
+        writeData(wb, s, sprintf("%.2f mi", prox),
+                  startRow = row_apn, startCol = col_start + 3)
+      }
     }
-    addStyle(wb, s, body_style, rows = row_dom_prox, cols = 1:20,
+    addStyle(wb, s, body_style, rows = row_apn, cols = 1:20,
              gridExpand = TRUE, stack = TRUE)
-    addStyle(wb, s, label_style, rows = row_dom_prox, cols = 1, stack = TRUE)
+    addStyle(wb, s, label_style, rows = row_apn, cols = 1, stack = TRUE)
 
     # === Sale Price ===
     writeData(wb, s, "Sale Price",
@@ -472,7 +465,45 @@ generate_sales_grid <- function(adjusted_file,
     addStyle(wb, s, label_style, rows = row_base_value, cols = 1,
              stack = TRUE)
 
-    # === Rows 8+: Model variable rows (factual values + contributions) ===
+    # === Date of Sale | OffMkt | OnMkt row ===
+    writeData(wb, s, "Date of Sale | OffMkt | OnMkt",
+              startRow = row_date_info, startCol = 1)
+    # Subject: contract_date, sale_age, dom
+    cd_col <- contract_date_col
+    if (!is.null(cd_col) && cd_col %in% colnames(df)) {
+      subj_cd <- col_val(df, 1, cd_col, default = "")
+      writeData(wb, s, subj_cd, startRow = row_date_info, startCol = 2)
+    }
+    if ("sale_age" %in% colnames(df)) {
+      writeData(wb, s, col_num(df, 1, "sale_age"),
+                startRow = row_date_info, startCol = 3)
+    }
+    if (!is.null(dom_col) && dom_col %in% colnames(df)) {
+      writeData(wb, s, col_num(df, 1, dom_col),
+                startRow = row_date_info, startCol = 4)
+    }
+    for (ci in seq_len(n_on_sheet)) {
+      r <- sheet_comps[ci]
+      col_start <- 1 + ci * 5
+      if (!is.null(cd_col) && cd_col %in% colnames(df)) {
+        writeData(wb, s, col_val(df, r, cd_col, default = ""),
+                  startRow = row_date_info, startCol = col_start)
+      }
+      if ("sale_age" %in% colnames(df)) {
+        writeData(wb, s, col_num(df, r, "sale_age"),
+                  startRow = row_date_info, startCol = col_start + 1)
+      }
+      if (!is.null(dom_col) && dom_col %in% colnames(df)) {
+        writeData(wb, s, col_num(df, r, dom_col),
+                  startRow = row_date_info, startCol = col_start + 2)
+      }
+    }
+    addStyle(wb, s, body_style, rows = row_date_info, cols = 1:20,
+             gridExpand = TRUE, stack = TRUE)
+    addStyle(wb, s, label_style, rows = row_date_info, cols = 1,
+             stack = TRUE)
+
+    # === Model variable rows (factual values + contributions) ===
     for (vi in seq_len(n_vars)) {
       rw <- row_vars_start + vi - 1
       var_label <- mv$labels[vi]

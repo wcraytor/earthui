@@ -115,6 +115,7 @@ fluidPage(
       removeCheck('export_data');
       removeCheck('export_data_nonadj');
       removeCheck('rca_output_btn');
+      removeCheck('sales_grid_btn');
 
       var start = Date.now();
       var modal = $(
@@ -303,6 +304,7 @@ fluidPage(
                 }
               }
               $('.eui-var-cb').first().trigger('change');
+              if (typeof window.euiUpdateBadges === 'function') window.euiUpdateBadges();
             }
           }
           // Apply interaction matrix

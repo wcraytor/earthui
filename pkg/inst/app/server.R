@@ -883,7 +883,9 @@ function(input, output, session) {
       # Build row cells
       row_cells <- list(
         tags$div(style = "flex: 1; min-width: 100px; font-size: 0.82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
-                 title = col, col),
+                 title = col, col,
+                 tags$span(id = paste0("eui_special_badge_", i),
+                           style = "font-size: 0.7em; color: #0d6efd; font-style: italic; margin-left: 4px;")),
         tags$div(style = "width: 85px; text-align: center;",
                  tags$select(id = paste0("eui_type_", i),
                              class = "eui-type-select",
@@ -1011,6 +1013,7 @@ function(input, output, session) {
 
         // Restore saved state, then sync to Shiny
         restoreState();
+        updateBadges();
         setTimeout(gatherState, 200);
 
         // On any checkbox change, save and sync
@@ -1032,6 +1035,19 @@ function(input, output, session) {
           if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(storageKeyRaw);
         });
 
+        // Update special type badges next to variable names
+        function updateBadges() {
+          if (!appraiser) return;
+          for (var j = 1; j <= n; j++) {
+            var sp = $('#eui_special_' + j).val() || 'no';
+            var $badge = $('#eui_special_badge_' + j);
+            if ($badge.length) {
+              $badge.text(sp !== 'no' ? '[' + sp + ']' : '');
+            }
+          }
+        }
+        window.euiUpdateBadges = updateBadges;
+
         // On special dropdown change: enforce single per special type, save and sync
         $(document).off('change.euispecial').on('change.euispecial', '.eui-special-select', function() {
           var idx = parseInt(this.id.replace('eui_special_', ''));
@@ -1044,6 +1060,7 @@ function(input, output, session) {
               }
             }
           }
+          updateBadges();
           saveState();
           gatherState();
           if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(storageKeyRaw);
@@ -2330,20 +2347,23 @@ function(input, output, session) {
       }
       source(grid_script, local = TRUE)
 
-      # Find dom column from specials
+      # Find special columns from designations
       dom_col_name <- NULL
+      cd_col_name  <- NULL
       sg_specials <- input$col_specials
       if (!is.null(sg_specials)) {
         for (nm in names(sg_specials)) {
-          if (sg_specials[[nm]] == "dom") { dom_col_name <- nm; break }
+          if (sg_specials[[nm]] == "dom") dom_col_name <- nm
+          if (sg_specials[[nm]] == "contract_date") cd_col_name <- nm
         }
       }
 
       generate_sales_grid(
-        adjusted_file = tmp_adj,
-        comp_rows     = comp_rows,
-        output_file   = out_path,
-        dom_col       = dom_col_name
+        adjusted_file     = tmp_adj,
+        comp_rows         = comp_rows,
+        output_file       = out_path,
+        dom_col           = dom_col_name,
+        contract_date_col = cd_col_name
       )
       unlink(tmp_adj)
 
@@ -2351,9 +2371,8 @@ function(input, output, session) {
                               " (", length(comp_rows), " comps, ",
                               ceiling(length(comp_rows) / 3), " sheets)"),
                        type = "message", duration = 10)
-      session$sendCustomMessage("btn_checkmark",
-        list(id = "sales_grid_btn",
-             label = "Generate Sales Grid & Download"))
+      session$sendCustomMessage("download_check",
+        list(id = "sales_grid_btn"))
     }, error = function(e) {
       showNotification(paste("Sales grid error:", e$message),
                        type = "error", duration = 10)
