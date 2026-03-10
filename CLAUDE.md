@@ -26,6 +26,7 @@ pkg/
     app/
       server.R              # Shiny server (async fitting, download handlers)
       ui.R                  # Shiny UI (Bootstrap 5, MathJax, dark mode)
+      sales_grid.R          # Sales Comparison Grid generator (openxlsx)
     quarto/
       earth_report.qmd      # Quarto report template (HTML/PDF/Word)
   tests/testthat/           # testthat tests
@@ -62,7 +63,7 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
   `"general"`, `"appraisal"`, `"market"`. Controls sidebar visibility,
   subject row handling, special column options, and download workflows.
 - **Special columns**: Dropdown per predictor row with options: `no`,
-  `contract_date`, `latitude`, `longitude`, `living_area`, `display_only`.
+  `contract_date`, `listing_date`, `latitude`, `longitude`, `living_area`, `display_only`.
   Only one column per type (except `display_only` allows multiple).
 - **Subject row handling**: In appraisal mode, row 1 is the subject
   property (excluded from fitting, sale price treated as NA). In market
@@ -126,7 +127,7 @@ Appends model columns to `rv$data` and exports as Excel:
 - `calc_residual`: actual − (basis + contributions), verification column
 - Sorted by `residual_sf` descending (appraisal/market modes)
 
-### RCA Adjustments (Step 6, appraisal only)
+### RCA Adjustments (Step 7, appraisal only)
 Modal prompts for subject CQA score (CQA or CQA_SF). Then:
 - Interpolates subject residual from comp CQA/residual pairs
 - Computes `subject_value` = model estimate + interpolated residual
@@ -134,11 +135,30 @@ Modal prompts for subject CQA score (CQA or CQA_SF). Then:
 - `residual_adjustment` = subject residual − comp residual
 - `net_adjustments`, `gross_adjustments`, `adjusted_sale_price`
 
+### Sales Comparison Grid (Step 8, appraisal only)
+Modal-based comp selection with auto-recommendation:
+- Filters weight > 0 rows, computes `gross_adj_pct` (gross_adjustments / sale_price)
+- Recommends comps with `gross_adj_pct < 25%`, sorted by `sale_age` ascending
+- Modal shows recommended (pre-checked) + additional comps (unchecked), max 30
+- Output: `SalesGrid_<timestamp>.xlsx` with 3 comps per sheet (up to 10 sheets)
+- Grid layout per sheet (20 columns): Subject + 3 comps, each with factual
+  values, value contributions, and adjustments
+- Row layout: Title, Headers, Address, APN/MLS#, DOM/Subj.Prox, Sale Price,
+  Regression Features (dynamic model variables), Residual Features
+  (CQA/Residual, Remaining Residual with Excel formulas, View/Design/Quality/
+  Condition/Functional Utility + 6 blank rows), Net/Gross adjustments,
+  Adjusted Sale Price
+- DOM = `contract_date − listing_date` (days on market)
+- Subj.Prox = Haversine distance (miles) from subject to comp using lat/lon
+- Remaining Residual cells use Excel formulas that auto-update as appraiser
+  enters values in the light-yellow input cells
+- Requires `openxlsx` package (in Suggests)
+
 ## Dependencies
 
 - **Imports** (required): earth, ggplot2, readxl, shiny, stats, tools, utils
-- **Suggests** (optional): bslib, callr, DT, jsonlite, knitr, plotly, quarto,
-  rmarkdown, roxygen2, testthat
+- **Suggests** (optional): bslib, callr, DBI, DT, jsonlite, knitr, openxlsx,
+  plotly, quarto, rmarkdown, RSQLite, showtext, sysfonts, testthat, writexl
 
 ## Coding Style
 

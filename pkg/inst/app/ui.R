@@ -799,6 +799,23 @@ fluidPage(
                        style = "width: 100%;")
         ),
 
+        # --- 8. Generate Sales Grid & Download (Appraisal only) ---
+        conditionalPanel(
+          condition = "output.model_fitted && input.purpose === 'appraisal'",
+          hr(),
+          tags$details(class = "eui-section",
+            tags$summary(h4("8. Generate Sales Grid & Download",
+                            style = "display:inline;")),
+            tags$p("Recommends comps with gross adjustment < 25%, ",
+                   "sorted by sale age. You can add or remove comps.",
+                   style = "font-size: 0.85em; color: var(--bs-secondary-color);"),
+            actionButton("sales_grid_btn",
+                         "Generate Sales Grid & Download",
+                         class = "btn-success",
+                         style = "width: 100%;")
+          )
+        ),
+
         # --- Download Report ---
         conditionalPanel(
           condition = "output.model_fitted",
@@ -810,20 +827,6 @@ fluidPage(
                                     "PDF" = "pdf")),
             actionButton("export_report_btn", "Download Report",
                          class = "btn-success",
-                         style = "width: 100%;")
-          )
-        ),
-
-        # --- Export for mgcvUI (degree <= 2 only) ---
-        conditionalPanel(
-          condition = "output.model_fitted && output.mgcv_export_ok",
-          hr(),
-          tags$details(class = "eui-section",
-            tags$summary(h4("Export for mgcvUI", style = "display:inline;")),
-            tags$p("Save earthUI result as .rds for import into mgcvUI.",
-                   style = "font-size: 0.85em; color: #888;"),
-            actionButton("export_mgcv_btn", "Export for mgcvUI (.rds)",
-                         class = "btn-info",
                          style = "width: 100%;")
           )
         )

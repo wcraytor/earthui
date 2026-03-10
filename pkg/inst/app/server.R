@@ -76,7 +76,9 @@ function(input, output, session) {
     wp_weights = NULL,         # per-target response weights (numeric vector or NULL)
     subset_conditions = list(), # condition rows for subset filter builder
     rca_df = NULL,             # RCA export data for histogram plots
-    rca_targets = NULL         # target variable names for RCA plots
+    rca_targets = NULL,        # target variable names for RCA plots
+    sg_recommended = NULL,     # recommended comps for sales grid
+    sg_others = NULL           # other comps for sales grid
   )
 
   # Track user's explicit varmod.method changes
@@ -165,7 +167,7 @@ function(input, output, session) {
   outputOptions(output, "model_fitted", suspendWhenHidden = FALSE)
 
   output$report_heading <- renderUI({
-    n <- if (identical(input$purpose, "appraisal")) "8" else "7"
+    n <- if (identical(input$purpose, "appraisal")) "9" else "7"
     h4(paste0(n, ". Download Report"))
   })
 
@@ -832,7 +834,7 @@ function(input, output, session) {
     appraiser <- input$purpose %in% c("appraisal", "market")
 
     # Special column options
-    special_options <- c("no", "contract_date", "latitude", "longitude", "living_area", "display_only")
+    special_options <- c("no", "contract_date", "listing_date", "latitude", "longitude", "living_area", "display_only")
 
     # Header row
     header_cols <- list(
@@ -2136,34 +2138,213 @@ function(input, output, session) {
     })
   })
 
-  # --- Export for mgcvUI (degree <= 2 only) ---
-  output$mgcv_export_ok <- reactive({
-    !is.null(rv$result) && (rv$result$degree %||% 1L) <= 2L
-  })
-  outputOptions(output, "mgcv_export_ok", suspendWhenHidden = FALSE)
-
-  observeEvent(input$export_mgcv_btn, {
-    req(rv$result)
-    if ((rv$result$degree %||% 1L) > 2L) {
-      showNotification(
-        "Cannot export for mgcvUI: degree > 2. mgcvUI supports pairwise interactions only.",
-        type = "error", duration = 10)
+  # --- 8. Generate Sales Grid & Download ---
+  # Step 1: Button click shows modal with recommended comps
+  observeEvent(input$sales_grid_btn, {
+    req(rv$rca_df)
+    rca <- rv$rca_df
+    n_total <- nrow(rca)
+    if (n_total < 2) {
+      showNotification("Need at least 2 rows (subject + 1 comp).",
+                       type = "error", duration = 8)
       return()
     }
+
+    # Compute gross_adj_pct for all weight > 0 rows (exclude subject row 1)
+    has_gross_pct <- "gross_adjustments" %in% colnames(rca) &&
+                     "sale_price" %in% colnames(rca)
+    wt_col <- if ("weight" %in% colnames(rca)) rca[["weight"]] else rep(1, n_total)
+
+    # Build comp info table (rows 2..n_total with weight > 0)
+    comp_info <- data.frame(
+      row       = 2:n_total,
+      id        = if ("id" %in% colnames(rca)) rca[["id"]][2:n_total] else 2:n_total,
+      address   = if ("street_address" %in% colnames(rca)) {
+                    rca[["street_address"]][2:n_total]
+                  } else rep("", n_total - 1),
+      sale_price = if ("sale_price" %in% colnames(rca)) {
+                     rca[["sale_price"]][2:n_total]
+                   } else rep(NA, n_total - 1),
+      sale_age  = if ("sale_age" %in% colnames(rca)) {
+                    rca[["sale_age"]][2:n_total]
+                  } else rep(NA, n_total - 1),
+      weight    = wt_col[2:n_total],
+      gross_adj = if ("gross_adjustments" %in% colnames(rca)) {
+                    rca[["gross_adjustments"]][2:n_total]
+                  } else rep(0, n_total - 1),
+      stringsAsFactors = FALSE
+    )
+
+    # Compute gross_adj_pct
+    comp_info$gross_adj_pct <- ifelse(
+      !is.na(comp_info$sale_price) & comp_info$sale_price != 0,
+      abs(comp_info$gross_adj / comp_info$sale_price),
+      NA
+    )
+
+    # Filter: weight > 0 only
+    eligible <- comp_info[!is.na(comp_info$weight) & comp_info$weight > 0, ]
+
+    # Sort all eligible by gross_adj_pct ascending
+    eligible <- eligible[order(eligible$gross_adj_pct, na.last = TRUE), ]
+
+    # Recommended: gross_adj_pct < 0.25, then sort by sale_age ascending
+    recommended <- eligible[!is.na(eligible$gross_adj_pct) &
+                            eligible$gross_adj_pct < 0.25, ]
+    recommended <- recommended[order(recommended$sale_age, na.last = TRUE), ]
+
+    # Cap at 30
+    if (nrow(recommended) > 30) recommended <- recommended[1:30, ]
+
+    # Others not recommended (for "add more" section)
+    others <- eligible[is.na(eligible$gross_adj_pct) |
+                       eligible$gross_adj_pct >= 0.25, ]
+    others <- others[order(others$gross_adj_pct, na.last = TRUE), ]
+
+    # Store for the confirm handler
+    rv$sg_recommended <- recommended
+    rv$sg_others <- others
+
+    # Build modal UI
+    rec_checks <- if (nrow(recommended) > 0) {
+      lapply(seq_len(nrow(recommended)), function(i) {
+        r <- recommended[i, ]
+        lbl <- sprintf("Row %d | %s | SP: $%s | Age: %s | Gross: %.1f%%",
+                       r$row,
+                       substr(as.character(r$address), 1, 30),
+                       formatC(r$sale_price, format = "f", digits = 0,
+                               big.mark = ","),
+                       as.character(r$sale_age),
+                       r$gross_adj_pct * 100)
+        tags$div(
+          checkboxInput(paste0("sg_rec_", r$row), lbl, value = TRUE),
+          style = "margin-bottom: 0px;"
+        )
+      })
+    } else {
+      tags$p("No comps with gross adjustment < 25% found.",
+             style = "color: var(--bs-secondary-color);")
+    }
+
+    other_checks <- if (nrow(others) > 0) {
+      lapply(seq_len(min(nrow(others), 50)), function(i) {
+        r <- others[i, ]
+        pct_str <- if (!is.na(r$gross_adj_pct)) {
+          sprintf("%.1f%%", r$gross_adj_pct * 100)
+        } else "N/A"
+        lbl <- sprintf("Row %d | %s | SP: $%s | Age: %s | Gross: %s",
+                       r$row,
+                       substr(as.character(r$address), 1, 30),
+                       formatC(r$sale_price, format = "f", digits = 0,
+                               big.mark = ","),
+                       as.character(r$sale_age),
+                       pct_str)
+        tags$div(
+          checkboxInput(paste0("sg_rec_", r$row), lbl, value = FALSE),
+          style = "margin-bottom: 0px;"
+        )
+      })
+    } else NULL
+
+    showModal(modalDialog(
+      title = "Sales Grid — Select Comparables (max 30)",
+      size = "l",
+      tags$div(
+        style = "max-height: 500px; overflow-y: auto;",
+        tags$h5(paste0("Recommended Comps (gross adj < 25%, ",
+                       "sorted by sale age) — ",
+                       nrow(recommended), " found")),
+        rec_checks,
+        if (!is.null(other_checks)) {
+          tagList(
+            hr(),
+            tags$h5("Additional Comps (gross adj >= 25%)"),
+            other_checks
+          )
+        }
+      ),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("sg_confirm", "Generate Sales Grid",
+                     class = "btn-success")
+      )
+    ))
+  })
+
+  # Step 2: Confirm button in modal — generate the grid
+
+  observeEvent(input$sg_confirm, {
+    req(rv$rca_df)
+    removeModal()
+
+    # Collect checked rows from both recommended and others
+    all_candidate_rows <- c(
+      if (!is.null(rv$sg_recommended) && nrow(rv$sg_recommended) > 0)
+        rv$sg_recommended$row else integer(0),
+      if (!is.null(rv$sg_others) && nrow(rv$sg_others) > 0)
+        rv$sg_others$row[seq_len(min(nrow(rv$sg_others), 50))] else integer(0)
+    )
+    comp_rows <- integer(0)
+    for (r in all_candidate_rows) {
+      cb_val <- input[[paste0("sg_rec_", r)]]
+      if (!is.null(cb_val) && isTRUE(cb_val)) {
+        comp_rows <- c(comp_rows, r)
+      }
+    }
+
+    if (length(comp_rows) == 0) {
+      showNotification("No comps selected.", type = "warning", duration = 8)
+      return()
+    }
+    if (length(comp_rows) > 30) {
+      comp_rows <- comp_rows[1:30]
+      showNotification("Capped at 30 comps.", type = "warning", duration = 5)
+    }
+
+    # Re-sort selected comps by sale_age ascending
+    rca <- rv$rca_df
+    sa <- if ("sale_age" %in% colnames(rca)) {
+      rca[["sale_age"]][comp_rows]
+    } else rep(NA, length(comp_rows))
+    comp_rows <- comp_rows[order(sa, na.last = TRUE)]
+
     folder <- input$output_folder
     if (is.null(folder) || !nzchar(folder)) folder <- path.expand("~/Downloads")
     if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
 
-    base <- tools::file_path_sans_ext(rv$file_name %||% "earth")
-    out_path <- file.path(folder, paste0(base, "_earthUI_result_",
-                          format(Sys.time(), "%Y%m%d_%H%M%S"), ".rds"))
+    out_path <- file.path(folder, paste0("SalesGrid_",
+                          format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx"))
+
+    message("earthUI: Sales grid with ", length(comp_rows),
+            " comps (rows: ", paste(comp_rows, collapse = ","), ")")
+
     tryCatch({
-      saveRDS(rv$result, out_path)
-      showNotification(paste0("earthUI result saved to: ", out_path),
-                       type = "message", duration = 8)
-      message("earthUI: mgcvUI export saved to ", out_path)
+      tmp_adj <- tempfile(fileext = ".xlsx")
+      writexl::write_xlsx(rv$rca_df, tmp_adj)
+
+      grid_script <- system.file("app", "sales_grid.R", package = "earthUI")
+      if (!nzchar(grid_script)) {
+        showNotification("Sales grid script not found in package.",
+                         type = "error", duration = 10)
+        return()
+      }
+      source(grid_script, local = TRUE)
+      generate_sales_grid(
+        adjusted_file = tmp_adj,
+        comp_rows     = comp_rows,
+        output_file   = out_path
+      )
+      unlink(tmp_adj)
+
+      showNotification(paste0("Sales grid saved to: ", out_path,
+                              " (", length(comp_rows), " comps, ",
+                              ceiling(length(comp_rows) / 3), " sheets)"),
+                       type = "message", duration = 10)
+      session$sendCustomMessage("btn_checkmark",
+        list(id = "sales_grid_btn",
+             label = "Generate Sales Grid & Download"))
     }, error = function(e) {
-      showNotification(paste("Export error:", e$message),
+      showNotification(paste("Sales grid error:", e$message),
                        type = "error", duration = 10)
     })
   })
