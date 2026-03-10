@@ -834,7 +834,7 @@ function(input, output, session) {
     appraiser <- input$purpose %in% c("appraisal", "market")
 
     # Special column options
-    special_options <- c("no", "contract_date", "listing_date", "latitude", "longitude", "living_area", "display_only")
+    special_options <- c("no", "contract_date", "listing_date", "dom", "latitude", "longitude", "living_area", "display_only")
 
     # Header row
     header_cols <- list(
@@ -2329,10 +2329,21 @@ function(input, output, session) {
         return()
       }
       source(grid_script, local = TRUE)
+
+      # Find dom column from specials
+      dom_col_name <- NULL
+      sg_specials <- input$col_specials
+      if (!is.null(sg_specials)) {
+        for (nm in names(sg_specials)) {
+          if (sg_specials[[nm]] == "dom") { dom_col_name <- nm; break }
+        }
+      }
+
       generate_sales_grid(
         adjusted_file = tmp_adj,
         comp_rows     = comp_rows,
-        output_file   = out_path
+        output_file   = out_path,
+        dom_col       = dom_col_name
       )
       unlink(tmp_adj)
 

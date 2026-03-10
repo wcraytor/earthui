@@ -133,7 +133,8 @@ col_letter <- function(n) {
 generate_sales_grid <- function(adjusted_file,
                                 comp_rows,
                                 output_file = NULL,
-                                title_prefix = "Intermediate Sales Comparable Grid") {
+                                title_prefix = "Intermediate Sales Comparable Grid",
+                                dom_col = NULL) {
 
   if (!file.exists(adjusted_file)) {
     stop("Adjusted file not found: ", adjusted_file)
@@ -369,7 +370,12 @@ generate_sales_grid <- function(adjusted_file,
     writeData(wb, s, "DOM | Subj.Prox",
               startRow = row_dom_prox, startCol = 1)
     # Subject: show DOM if available
-    subj_dom <- compute_dom(df, 1)
+    subj_dom <- if (!is.null(dom_col)) {
+      v <- col_val(df, 1, dom_col, default = NA)
+      if (!is.na(v)) as.integer(v) else NA_integer_
+    } else {
+      compute_dom(df, 1)
+    }
     mergeCells(wb, s, cols = 2:5, rows = row_dom_prox)
     if (!is.na(subj_dom)) {
       writeData(wb, s, paste0(subj_dom, " days"),
@@ -381,7 +387,12 @@ generate_sales_grid <- function(adjusted_file,
     for (ci in seq_len(n_on_sheet)) {
       r <- sheet_comps[ci]
       col_start <- 1 + ci * 5
-      comp_dom <- compute_dom(df, r)
+      comp_dom <- if (!is.null(dom_col)) {
+        v <- col_val(df, r, dom_col, default = NA)
+        if (!is.na(v)) as.integer(v) else NA_integer_
+      } else {
+        compute_dom(df, r)
+      }
       comp_lat <- if (!is.null(lat_col)) as.numeric(col_val(df, r, lat_col, NA)) else NA
       comp_lon <- if (!is.null(lon_col)) as.numeric(col_val(df, r, lon_col, NA)) else NA
       prox <- haversine_miles(subj_lat, subj_lon, comp_lat, comp_lon)

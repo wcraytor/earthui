@@ -63,7 +63,7 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
   `"general"`, `"appraisal"`, `"market"`. Controls sidebar visibility,
   subject row handling, special column options, and download workflows.
 - **Special columns**: Dropdown per predictor row with options: `no`,
-  `contract_date`, `listing_date`, `latitude`, `longitude`, `living_area`, `display_only`.
+  `contract_date`, `listing_date`, `dom`, `latitude`, `longitude`, `living_area`, `display_only`.
   Only one column per type (except `display_only` allows multiple).
 - **Subject row handling**: In appraisal mode, row 1 is the subject
   property (excluded from fitting, sale price treated as NA). In market
@@ -148,7 +148,8 @@ Modal-based comp selection with auto-recommendation:
   (CQA/Residual, Remaining Residual with Excel formulas, View/Design/Quality/
   Condition/Functional Utility + 6 blank rows), Net/Gross adjustments,
   Adjusted Sale Price
-- DOM = `contract_date − listing_date` (days on market)
+- DOM: uses column designated as `dom` special type; falls back to
+  `contract_date − listing_date` if no `dom` column designated
 - Subj.Prox = Haversine distance (miles) from subject to comp using lat/lon
 - Remaining Residual cells use Excel formulas that auto-update as appraiser
   enters values in the light-yellow input cells
