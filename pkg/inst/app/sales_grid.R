@@ -196,8 +196,7 @@ generate_sales_grid <- function(adjusted_file,
   row_blank1      <- row_vars_end + 1
   row_resid_hdr   <- row_blank1 + 1
   row_cqa         <- row_resid_hdr + 1
-  row_remaining   <- row_cqa + 1          # Remaining Residual (formula row)
-  row_resid_start <- row_remaining + 1    # First residual feature row
+  row_resid_start <- row_cqa + 1          # First residual feature row
   row_resid_end   <- row_resid_start + n_resid_rows - 1
   row_net_adj     <- row_resid_end + 1
   row_net_pct     <- row_net_adj + 1
@@ -576,106 +575,99 @@ generate_sales_grid <- function(adjusted_file,
              stack = TRUE)
 
     # === CQA | Residual row ===
+    # VC and Adj are formulas: original residual - SUM(feature entries)
+    # As appraiser fills in feature breakdowns, these decrease (remaining residual)
     writeData(wb, s, "CQA | Residual",
               startRow = row_cqa, startCol = 1)
     subj_cqa   <- col_num(df, 1, "subject_cqa", digits = 2)
     subj_resid <- col_num(df, 1, "residual")
     writeData(wb, s, subj_cqa, startRow = row_cqa, startCol = 2)
-    writeData(wb, s, subj_resid, startRow = row_cqa, startCol = 5)
+    # Subject cols 3-4: purple, unwriteable
+    addStyle(wb, s, section_hdr_style, rows = row_cqa, cols = 3:4,
+             gridExpand = TRUE, stack = TRUE)
+    # Subject VC formula: original residual - SUM(feature VCs below)
+    subj_vc_col <- col_letter(5)
+    subj_vc_formula <- paste0(subj_resid, "-SUM(",
+                              subj_vc_col, row_resid_start, ":",
+                              subj_vc_col, row_resid_end, ")")
+    writeFormula(wb, s, x = subj_vc_formula,
+                 startRow = row_cqa, startCol = 5)
+    addStyle(wb, s, remaining_style, rows = row_cqa, cols = 5,
+             stack = TRUE)
     addStyle(wb, s, cqa_style, rows = row_cqa, cols = 2, stack = TRUE)
-    addStyle(wb, s, curr_style, rows = row_cqa, cols = 5, stack = TRUE)
     for (ci in seq_len(n_on_sheet)) {
       r <- sheet_comps[ci]
       col_start <- 1 + ci * 5
       comp_cqa   <- col_num(df, r, "cqa", digits = 2)
       comp_resid <- col_num(df, r, "residual")
-      comp_resid_adj <- col_num(df, r, "residual_adjustment")
       writeData(wb, s, comp_cqa,
                 startRow = row_cqa, startCol = col_start)
-      writeData(wb, s, comp_resid,
-                startRow = row_cqa, startCol = col_start + 3)
-      writeData(wb, s, comp_resid_adj,
-                startRow = row_cqa, startCol = col_start + 4)
       addStyle(wb, s, cqa_style, rows = row_cqa,
                cols = col_start, stack = TRUE)
-      addStyle(wb, s, curr_style, rows = row_cqa,
-               cols = c(col_start + 3, col_start + 4), stack = TRUE)
+      # Comp VC formula: comp residual - SUM(comp feature VCs below)
+      vc_col <- col_letter(col_start + 3)
+      comp_vc_formula <- paste0(comp_resid, "-SUM(",
+                                vc_col, row_resid_start, ":",
+                                vc_col, row_resid_end, ")")
+      writeFormula(wb, s, x = comp_vc_formula,
+                   startRow = row_cqa, startCol = col_start + 3)
+      addStyle(wb, s, remaining_style, rows = row_cqa,
+               cols = col_start + 3, stack = TRUE)
+      # Comp Adj formula: subject remaining VC - comp remaining VC
+      comp_adj_formula <- paste0(subj_vc_col, row_cqa, "-",
+                                 vc_col, row_cqa)
+      writeFormula(wb, s, x = comp_adj_formula,
+                   startRow = row_cqa, startCol = col_start + 4)
+      addStyle(wb, s, remaining_style, rows = row_cqa,
+               cols = col_start + 4, stack = TRUE)
     }
     addStyle(wb, s, body_style, rows = row_cqa, cols = 1:20,
              gridExpand = TRUE, stack = TRUE)
     addStyle(wb, s, label_style, rows = row_cqa, cols = 1, stack = TRUE)
-
-    # === Remaining Residual row (formula: residual - SUM of feature entries) ===
-    writeData(wb, s, "Remaining Residual",
-              startRow = row_remaining, startCol = 1)
-
-    # Subject remaining residual formula:
-    #   = E{row_cqa} - SUM(E{row_resid_start}:E{row_resid_end})
-    subj_vc_col <- col_letter(5)  # column E
-    subj_formula <- paste0(subj_vc_col, row_cqa, "-SUM(",
-                           subj_vc_col, row_resid_start, ":",
-                           subj_vc_col, row_resid_end, ")")
-    writeFormula(wb, s, x = subj_formula,
-                 startRow = row_remaining, startCol = 5)
-    addStyle(wb, s, remaining_style, rows = row_remaining, cols = 5,
-             stack = TRUE)
-
-    # Comp remaining residual formulas
-    for (ci in seq_len(n_on_sheet)) {
-      col_start <- 1 + ci * 5
-      # Value contrib column = col_start + 3
-      vc_col <- col_letter(col_start + 3)
-      # Adjustment column = col_start + 4
-      adj_col <- col_letter(col_start + 4)
-
-      # Remaining VC = comp residual - SUM(residual feature VCs)
-      vc_formula <- paste0(vc_col, row_cqa, "-SUM(",
-                           vc_col, row_resid_start, ":",
-                           vc_col, row_resid_end, ")")
-      writeFormula(wb, s, x = vc_formula,
-                   startRow = row_remaining, startCol = col_start + 3)
-      addStyle(wb, s, remaining_style, rows = row_remaining,
-               cols = col_start + 3, stack = TRUE)
-
-      # Remaining adjustment = residual_adj - SUM(residual feature adjs)
-      adj_formula <- paste0(adj_col, row_cqa, "-SUM(",
-                            adj_col, row_resid_start, ":",
-                            adj_col, row_resid_end, ")")
-      writeFormula(wb, s, x = adj_formula,
-                   startRow = row_remaining, startCol = col_start + 4)
-      addStyle(wb, s, remaining_style, rows = row_remaining,
-               cols = col_start + 4, stack = TRUE)
-    }
-    addStyle(wb, s, body_style, rows = row_remaining, cols = 1:20,
+    # Re-apply purple on subject cols 3-4
+    addStyle(wb, s, section_hdr_style, rows = row_cqa, cols = 3:4,
              gridExpand = TRUE, stack = TRUE)
-    addStyle(wb, s, label_style, rows = row_remaining, cols = 1,
-             stack = TRUE)
+    addStyle(wb, s, cqa_style, rows = row_cqa, cols = 2, stack = TRUE)
+    addStyle(wb, s, remaining_style, rows = row_cqa, cols = 5, stack = TRUE)
 
     # === Residual feature rows (named + blank for appraiser entry) ===
     all_resid_labels <- c(resid_named, rep("", n_resid_blank))
+    subj_vc_letter <- col_letter(5)  # column E for subject value contrib
     for (ri in seq_along(all_resid_labels)) {
       rw <- row_resid_start + ri - 1
       if (nzchar(all_resid_labels[ri])) {
         writeData(wb, s, all_resid_labels[ri], startRow = rw, startCol = 1)
       }
-      # Style the value contrib & adjustment cells as editable (light yellow)
+      # Subject value contribution default $0
+      writeData(wb, s, 0, startRow = rw, startCol = 5)
       addStyle(wb, s, resid_input_style, rows = rw, cols = 5,
                stack = TRUE)
       for (ci in seq_len(n_on_sheet)) {
         col_start <- 1 + ci * 5
+        # Comp value contribution default $0
+        writeData(wb, s, 0, startRow = rw, startCol = col_start + 3)
         addStyle(wb, s, resid_input_style, rows = rw,
-                 cols = c(col_start + 3, col_start + 4), stack = TRUE)
+                 cols = col_start + 3, stack = TRUE)
+        # Adjustment formula: subject VC - comp VC
+        comp_vc_letter <- col_letter(col_start + 3)
+        adj_formula <- paste0(subj_vc_letter, rw, "-", comp_vc_letter, rw)
+        writeFormula(wb, s, x = adj_formula,
+                     startRow = rw, startCol = col_start + 4)
+        addStyle(wb, s, resid_input_style, rows = rw,
+                 cols = col_start + 4, stack = TRUE)
       }
       addStyle(wb, s, body_style, rows = rw, cols = 1:20,
                gridExpand = TRUE, stack = TRUE)
       addStyle(wb, s, label_style, rows = rw, cols = 1, stack = TRUE)
-      # Re-apply input style on top (stack)
+      # Re-apply input style on VC cells, formula style on adjustment
       addStyle(wb, s, resid_input_style, rows = rw, cols = 5,
                stack = TRUE)
       for (ci in seq_len(n_on_sheet)) {
         col_start <- 1 + ci * 5
         addStyle(wb, s, resid_input_style, rows = rw,
-                 cols = c(col_start + 3, col_start + 4), stack = TRUE)
+                 cols = col_start + 3, stack = TRUE)
+        addStyle(wb, s, curr_style, rows = rw,
+                 cols = col_start + 4, stack = TRUE)
       }
     }
 
@@ -754,10 +746,20 @@ generate_sales_grid <- function(adjusted_file,
     for (ci in seq_len(n_on_sheet)) {
       r <- sheet_comps[ci]
       col_start <- 1 + ci * 5
-      adj_sp <- col_num(df, r, "adjusted_sale_price")
+      adj_col_l <- col_letter(col_start + 4)
+      sp_col_l  <- col_letter(col_start)
+      # Adjusted Sale Price = Sale Price
+      #   + SUM(model variable adjustments)
+      #   + CQA residual adjustment (remaining)
+      #   + SUM(residual feature adjustments)
+      asp_formula <- paste0(
+        sp_col_l, row_sale_price,
+        "+SUM(", adj_col_l, row_vars_start, ":", adj_col_l, row_vars_end, ")",
+        "+", adj_col_l, row_cqa,
+        "+SUM(", adj_col_l, row_resid_start, ":", adj_col_l, row_resid_end, ")")
       mergeCells(wb, s, cols = col_start:(col_start + 4), rows = row_adj_sp)
-      writeData(wb, s, adj_sp,
-                startRow = row_adj_sp, startCol = col_start)
+      writeFormula(wb, s, x = asp_formula,
+                   startRow = row_adj_sp, startCol = col_start)
       addStyle(wb, s, adj_sp_style, rows = row_adj_sp,
                cols = col_start, stack = TRUE)
     }
