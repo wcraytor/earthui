@@ -17,7 +17,14 @@
 # (Calculate RCA Adjustments & Download).
 #
 # comp_rows: numeric vector of row numbers (2-based, since row 1 is subject).
-#   Up to 12 comps supported (3 per sheet, 4 sheets max).
+#   Up to 30 comps supported (3 per sheet, 10 sheets max).
+#
+# specials: named list mapping special type -> column name, e.g.
+#   list(contract_date = "contract_date", dom = "days_on_market",
+#        latitude = "latitude", longitude = "longitude", area = "area_id",
+#        concessions = "sale_concessions", lot_size = "lot_size",
+#        site_dimensions = "site_dimensions", actual_age = "actual_age",
+#        effective_age = "effective_age", living_area = "living_sqft")
 ###############################################################################
 
 # Ensure openxlsx and readxl are loaded (attached to search path)
@@ -79,7 +86,6 @@ detect_model_vars <- function(df) {
 
 # --- Format variable label for display (abbreviated for grid) ---
 format_label <- function(lbl) {
-  # Common abbreviations for appraisal variables
   abbrevs <- c(
     "living_sqft"       = "Living SF",
     "lot_size"          = "Lot Size",
@@ -98,33 +104,43 @@ format_label <- function(lbl) {
     "longitude"         = "Longitude",
     "age"               = "Age"
   )
-  # Check exact match first
   if (lbl %in% names(abbrevs)) return(abbrevs[[lbl]])
-  # For interaction terms (e.g., "area_id_living_sqft"), abbreviate each part
-  parts <- strsplit(lbl, "_")[[1]]
-  # Try to match known multi-word variable names within the interaction
   result <- lbl
   for (nm in names(abbrevs)) {
     if (grepl(nm, result, fixed = TRUE)) {
       result <- sub(nm, abbrevs[[nm]], result, fixed = TRUE)
     }
   }
-  # Clean up remaining underscores and title-case
   result <- gsub("_", " ", result)
   result <- trimws(result)
-  # Truncate to 28 chars for column width
   if (nchar(result) > 28) result <- paste0(substr(result, 1, 25), "...")
   result
 }
 
 # --- Excel column letter from number ---
 col_letter <- function(n) {
-  # Handles columns A-Z and AA-AZ (up to col 52)
   if (n <= 26) {
     return(LETTERS[n])
   } else {
     return(paste0(LETTERS[(n - 1) %/% 26], LETTERS[((n - 1) %% 26) + 1]))
   }
+}
+
+# --- Helper: get special column name or NULL ---
+sp_col <- function(specials, type) {
+  if (!is.null(specials[[type]])) specials[[type]] else NULL
+}
+
+# --- Helper: sum contributions for a set of model variable names ---
+sum_contribs <- function(df, row, var_names) {
+  total <- 0
+  for (vn in var_names) {
+    cc <- paste0(vn, "_contribution")
+    if (cc %in% colnames(df)) {
+      total <- total + col_num(df, row, cc)
+    }
+  }
+  total
 }
 
 ###############################################################################
@@ -134,8 +150,7 @@ generate_sales_grid <- function(adjusted_file,
                                 comp_rows,
                                 output_file = NULL,
                                 title_prefix = "Intermediate Sales Comparable Grid",
-                                dom_col = NULL,
-                                contract_date_col = NULL,
+                                specials = list(),
                                 progress_fn = NULL) {
 
   if (!file.exists(adjusted_file)) {
@@ -156,7 +171,45 @@ generate_sales_grid <- function(adjusted_file,
 
   # Detect model variables
   mv <- detect_model_vars(df)
-  n_vars <- length(mv$labels)
+
+  # --- Resolve special column names ---
+  dom_col    <- sp_col(specials, "dom")
+  cd_col     <- sp_col(specials, "contract_date")
+  lat_col    <- sp_col(specials, "latitude")
+  lon_col    <- sp_col(specials, "longitude")
+  area_col   <- sp_col(specials, "area")
+  conc_col   <- sp_col(specials, "concessions")
+  lot_col    <- sp_col(specials, "lot_size")
+  sitedim_col <- sp_col(specials, "site_dimensions")
+  actage_col <- sp_col(specials, "actual_age")
+  effage_col <- sp_col(specials, "effective_age")
+  la_col     <- sp_col(specials, "living_area")
+
+  # --- Determine which grouped rows are present ---
+  # Location group: longitude, latitude, area (any present in model)
+  loc_vars <- c(lon_col, lat_col, area_col)
+  loc_vars <- loc_vars[!is.null(loc_vars)]
+  loc_model_vars <- intersect(loc_vars, mv$labels)
+  has_loc_row <- length(loc_model_vars) > 0
+
+  # Site group: lot_size, site_dimensions
+  site_vars <- c(lot_col, sitedim_col)
+  site_vars <- site_vars[!is.null(site_vars)]
+  site_model_vars <- intersect(site_vars, mv$labels)
+  has_site_row <- length(site_model_vars) > 0
+
+  # Age group: actual_age, effective_age
+  age_vars <- c(actage_col, effage_col)
+  age_vars <- age_vars[!is.null(age_vars)]
+  age_model_vars <- intersect(age_vars, mv$labels)
+  has_age_row <- length(age_model_vars) > 0
+
+  # Variables consumed by grouped rows (exclude from model variable loop)
+  grouped_vars <- c(loc_model_vars, site_model_vars, age_model_vars)
+
+  # Filter model vars to exclude grouped ones
+  mv_filtered_idx <- which(!mv$labels %in% grouped_vars)
+  n_vars <- length(mv_filtered_idx)
 
   # Default output file
   if (is.null(output_file)) {
@@ -174,15 +227,7 @@ generate_sales_grid <- function(adjusted_file,
   n_resid_blank <- 6
   n_resid_rows  <- n_resid_named + n_resid_blank  # 11 total
 
-  # --- Detect lat/lon columns for proximity ---
-  lat_col <- NULL; lon_col <- NULL
-  for (cn in colnames(df)) {
-    cl <- tolower(cn)
-    if (is.null(lat_col) && cl %in% c("latitude", "lat")) lat_col <- cn
-    if (is.null(lon_col) && cl %in% c("longitude", "lon", "lng")) lon_col <- cn
-  }
-
-  # --- Layout constants (dynamic based on model variables) ---
+  # --- Layout constants (dynamic based on model variables + grouped rows) ---
   row_title       <- 1
   row_headers     <- 2
   row_address     <- 3
@@ -191,12 +236,19 @@ generate_sales_grid <- function(adjusted_file,
   row_regr_hdr    <- 6
   row_base_value  <- 7
   row_date_info   <- 8
-  row_vars_start  <- 9
+
+  # Grouped rows (conditionally inserted)
+  next_row <- 9
+  row_loc <- if (has_loc_row) { r <- next_row; next_row <- next_row + 1; r } else NULL
+  row_site <- if (has_site_row) { r <- next_row; next_row <- next_row + 1; r } else NULL
+  row_age <- if (has_age_row) { r <- next_row; next_row <- next_row + 1; r } else NULL
+
+  row_vars_start  <- next_row
   row_vars_end    <- row_vars_start + n_vars - 1
   row_blank1      <- row_vars_end + 1
   row_resid_hdr   <- row_blank1 + 1
   row_cqa         <- row_resid_hdr + 1
-  row_resid_start <- row_cqa + 1          # First residual feature row
+  row_resid_start <- row_cqa + 1
   row_resid_end   <- row_resid_start + n_resid_rows - 1
   row_net_adj     <- row_resid_end + 1
   row_net_pct     <- row_net_adj + 1
@@ -204,11 +256,9 @@ generate_sales_grid <- function(adjusted_file,
   row_adj_sp      <- row_gross_pct + 1
   row_copyright   <- row_adj_sp + 1
 
-  # Column layout per comp block (5 cols each):
-  # Subject:  cols 1-5  (label, fv1, fv2, fv3, vc)
-  # Comp 1:   cols 6-10 (fv1, fv2, fv3, vc, adj)
-  # Comp 2:   cols 11-15
-  # Comp 3:   cols 16-20
+  # Collect all grouped row numbers for Adjusted Sale Price formula
+  grouped_adj_rows <- c(row_loc, row_site, row_age)
+  grouped_adj_rows <- grouped_adj_rows[!is.null(grouped_adj_rows)]
 
   # --- Styles ---
   title_style <- createStyle(
@@ -278,6 +328,12 @@ generate_sales_grid <- function(adjusted_file,
     numFmt = "$#,##0", halign = "right", valign = "center",
     border = "TopBottomLeftRight", borderColour = "#002060",
     borderStyle = "thin", fgFill = "#FFFFDD"
+  )
+  # Light blue for grouped rows
+  grouped_style <- createStyle(
+    numFmt = "$#,##0", halign = "right", valign = "center",
+    border = "TopBottomLeftRight", borderColour = "#002060",
+    borderStyle = "thin", fgFill = "#DAEEF3"
   )
 
   # --- Create workbook ---
@@ -351,11 +407,10 @@ generate_sales_grid <- function(adjusted_file,
     # === Row 4: APN | MLS# | DOM | Subj.Prox ===
     writeData(wb, s, "APN | MLS# | DOM | Subj.Prox",
               startRow = row_apn, startCol = 1)
-    # Subject: APN in cols 2-3, DOM in col 4, Subj.Prox = 0 in col 5
     mergeCells(wb, s, cols = 2:3, rows = row_apn)
     writeData(wb, s, col_val(df, 1, "parcel_number"),
               startRow = row_apn, startCol = 2)
-    subj_dom <- if (!is.null(dom_col)) {
+    subj_dom <- if (!is.null(dom_col) && dom_col %in% colnames(df)) {
       v <- col_val(df, 1, dom_col, default = NA)
       if (!is.na(v)) as.integer(v) else NA_integer_
     } else {
@@ -365,19 +420,16 @@ generate_sales_grid <- function(adjusted_file,
       writeData(wb, s, subj_dom, startRow = row_apn, startCol = 4)
     }
     writeData(wb, s, "0.00 mi", startRow = row_apn, startCol = 5)
-    # Subject lat/lon for proximity calc
-    subj_lat <- if (!is.null(lat_col)) as.numeric(col_val(df, 1, lat_col, NA)) else NA
-    subj_lon <- if (!is.null(lon_col)) as.numeric(col_val(df, 1, lon_col, NA)) else NA
+    subj_lat <- if (!is.null(lat_col) && lat_col %in% colnames(df)) as.numeric(col_val(df, 1, lat_col, NA)) else NA
+    subj_lon <- if (!is.null(lon_col) && lon_col %in% colnames(df)) as.numeric(col_val(df, 1, lon_col, NA)) else NA
     for (ci in seq_len(n_on_sheet)) {
       r <- sheet_comps[ci]
       col_start <- 1 + ci * 5
-      # APN in col_start, MLS# in col_start+1
       writeData(wb, s, col_val(df, r, "parcel_number"),
                 startRow = row_apn, startCol = col_start)
       writeData(wb, s, col_val(df, r, "listing_id"),
                 startRow = row_apn, startCol = col_start + 1)
-      # DOM in col_start+2
-      comp_dom <- if (!is.null(dom_col)) {
+      comp_dom <- if (!is.null(dom_col) && dom_col %in% colnames(df)) {
         v <- col_val(df, r, dom_col, default = NA)
         if (!is.na(v)) as.integer(v) else NA_integer_
       } else {
@@ -386,9 +438,8 @@ generate_sales_grid <- function(adjusted_file,
       if (!is.na(comp_dom)) {
         writeData(wb, s, comp_dom, startRow = row_apn, startCol = col_start + 2)
       }
-      # Subj.Prox in col_start+3:col_start+4
-      comp_lat <- if (!is.null(lat_col)) as.numeric(col_val(df, r, lat_col, NA)) else NA
-      comp_lon <- if (!is.null(lon_col)) as.numeric(col_val(df, r, lon_col, NA)) else NA
+      comp_lat <- if (!is.null(lat_col) && lat_col %in% colnames(df)) as.numeric(col_val(df, r, lat_col, NA)) else NA
+      comp_lon <- if (!is.null(lon_col) && lon_col %in% colnames(df)) as.numeric(col_val(df, r, lon_col, NA)) else NA
       prox <- haversine_miles(subj_lat, subj_lon, comp_lat, comp_lon)
       mergeCells(wb, s, cols = (col_start + 3):(col_start + 4), rows = row_apn)
       if (!is.na(prox)) {
@@ -400,27 +451,53 @@ generate_sales_grid <- function(adjusted_file,
              gridExpand = TRUE, stack = TRUE)
     addStyle(wb, s, label_style, rows = row_apn, cols = 1, stack = TRUE)
 
-    # === Sale Price ===
-    writeData(wb, s, "Sale Price",
+    # === Row 5: Sales Price | Concess. | Net SP ===
+    writeData(wb, s, "Sales Price | Concess. | Net SP",
               startRow = row_sale_price, startCol = 1)
-    mergeCells(wb, s, cols = 2:5, rows = row_sale_price)
+    # Subject: N/A for sale price
     writeData(wb, s, "N/A", startRow = row_sale_price, startCol = 2)
+    # Subject concessions (col 3) and net SP (col 4-5)
+    if (!is.null(conc_col) && conc_col %in% colnames(df)) {
+      subj_conc <- col_num(df, 1, conc_col)
+      writeData(wb, s, subj_conc, startRow = row_sale_price, startCol = 3)
+      addStyle(wb, s, curr_style, rows = row_sale_price, cols = 3, stack = TRUE)
+    }
+    # Subject Net SP = N/A (no sale price for subject)
+    mergeCells(wb, s, cols = 4:5, rows = row_sale_price)
+    writeData(wb, s, "N/A", startRow = row_sale_price, startCol = 4)
+
     for (ci in seq_len(n_on_sheet)) {
       r <- sheet_comps[ci]
       col_start <- 1 + ci * 5
-      mergeCells(wb, s, cols = col_start:(col_start + 4),
-                 rows = row_sale_price)
       sp <- col_num(df, r, "sale_price")
       writeData(wb, s, sp, startRow = row_sale_price, startCol = col_start)
       addStyle(wb, s, curr_style, rows = row_sale_price,
                cols = col_start, stack = TRUE)
+      # Concessions (col_start+1)
+      comp_conc <- 0
+      if (!is.null(conc_col) && conc_col %in% colnames(df)) {
+        comp_conc <- col_num(df, r, conc_col)
+      }
+      writeData(wb, s, comp_conc, startRow = row_sale_price,
+                startCol = col_start + 1)
+      addStyle(wb, s, curr_style, rows = row_sale_price,
+               cols = col_start + 1, stack = TRUE)
+      # Net SP formula: Sale Price - Concessions (col_start+2, merged with +3 and +4)
+      sp_l  <- col_letter(col_start)
+      conc_l <- col_letter(col_start + 1)
+      net_sp_formula <- paste0(sp_l, row_sale_price, "-", conc_l, row_sale_price)
+      mergeCells(wb, s, cols = (col_start + 2):(col_start + 4), rows = row_sale_price)
+      writeFormula(wb, s, x = net_sp_formula,
+                   startRow = row_sale_price, startCol = col_start + 2)
+      addStyle(wb, s, curr_style, rows = row_sale_price,
+               cols = col_start + 2, stack = TRUE)
     }
     addStyle(wb, s, body_style, rows = row_sale_price, cols = 1:20,
              gridExpand = TRUE, stack = TRUE)
     addStyle(wb, s, label_style, rows = row_sale_price, cols = 1,
              stack = TRUE)
 
-    # === Row 6: Regression Features header ===
+    # === Regression Features header ===
     writeData(wb, s, "Regression Features",
               startRow = row_regr_hdr, startCol = 1)
     mergeCells(wb, s, cols = 2:3, rows = row_regr_hdr)
@@ -443,7 +520,7 @@ generate_sales_grid <- function(adjusted_file,
     addStyle(wb, s, label_style, rows = row_regr_hdr, cols = 1,
              stack = TRUE)
 
-    # === Row 7: Base Value (intercept) ===
+    # === Base Value (intercept) ===
     writeData(wb, s, "BASE VALUE",
               startRow = row_base_value, startCol = 1)
     subj_basis <- col_num(df, 1, "basis")
@@ -468,8 +545,6 @@ generate_sales_grid <- function(adjusted_file,
     # === Date of Sale | OffMkt | OnMkt row ===
     writeData(wb, s, "Date of Sale | OffMkt | OnMkt",
               startRow = row_date_info, startCol = 1)
-    # Subject: contract_date, sale_age, dom
-    cd_col <- contract_date_col
     if (!is.null(cd_col) && cd_col %in% colnames(df)) {
       subj_cd <- col_val(df, 1, cd_col, default = "")
       writeData(wb, s, subj_cd, startRow = row_date_info, startCol = 2)
@@ -503,9 +578,98 @@ generate_sales_grid <- function(adjusted_file,
     addStyle(wb, s, label_style, rows = row_date_info, cols = 1,
              stack = TRUE)
 
-    # === Model variable rows (factual values + contributions) ===
-    for (vi in seq_len(n_vars)) {
-      rw <- row_vars_start + vi - 1
+    # ================================================================
+    # === GROUPED ROWS (Location, Site, Age) ===
+    # Each shows factual values for its constituent variables,
+    # a combined VC (sum of constituent contributions), and
+    # for comps an adjustment = subject combined VC - comp combined VC.
+    # ================================================================
+
+    # Helper to write a grouped row
+    write_grouped_row <- function(rw, label, var_cols, model_vars_in_group) {
+      writeData(wb, s, label, startRow = rw, startCol = 1)
+
+      # Subject factual values: up to 3 values in cols 2,3,4
+      for (fi in seq_along(var_cols)) {
+        vc <- var_cols[fi]
+        if (!is.null(vc) && vc %in% colnames(df)) {
+          writeData(wb, s, col_val(df, 1, vc),
+                    startRow = rw, startCol = 1 + fi)
+        }
+      }
+      # Fill remaining factual cols if fewer than 3 vars
+      if (length(var_cols) < 3) {
+        for (fi in (length(var_cols) + 1):3) {
+          # leave blank
+        }
+      }
+
+      # Subject combined VC
+      subj_combined_vc <- sum_contribs(df, 1, model_vars_in_group)
+      writeData(wb, s, round(subj_combined_vc),
+                startRow = rw, startCol = 5)
+      addStyle(wb, s, grouped_style, rows = rw, cols = 5, stack = TRUE)
+
+      for (ci in seq_len(n_on_sheet)) {
+        r <- sheet_comps[ci]
+        col_start <- 1 + ci * 5
+        # Comp factual values
+        for (fi in seq_along(var_cols)) {
+          vc <- var_cols[fi]
+          if (!is.null(vc) && vc %in% colnames(df)) {
+            writeData(wb, s, col_val(df, r, vc),
+                      startRow = rw, startCol = col_start + fi - 1)
+          }
+        }
+        # Comp combined VC
+        comp_combined_vc <- sum_contribs(df, r, model_vars_in_group)
+        writeData(wb, s, round(comp_combined_vc),
+                  startRow = rw, startCol = col_start + 3)
+        addStyle(wb, s, grouped_style, rows = rw,
+                 cols = col_start + 3, stack = TRUE)
+        # Adjustment = subject combined VC - comp combined VC
+        adj <- round(subj_combined_vc - comp_combined_vc)
+        writeData(wb, s, adj,
+                  startRow = rw, startCol = col_start + 4)
+        addStyle(wb, s, curr_style, rows = rw,
+                 cols = col_start + 4, stack = TRUE)
+      }
+      addStyle(wb, s, body_style, rows = rw, cols = 1:20,
+               gridExpand = TRUE, stack = TRUE)
+      addStyle(wb, s, label_style, rows = rw, cols = 1, stack = TRUE)
+      # Re-apply grouped style on VC cells
+      addStyle(wb, s, grouped_style, rows = rw, cols = 5, stack = TRUE)
+      for (ci in seq_len(n_on_sheet)) {
+        col_start <- 1 + ci * 5
+        addStyle(wb, s, grouped_style, rows = rw,
+                 cols = col_start + 3, stack = TRUE)
+        addStyle(wb, s, curr_style, rows = rw,
+                 cols = col_start + 4, stack = TRUE)
+      }
+    }
+
+    # Location row: Loc: Long | Lat | Area
+    if (has_loc_row) {
+      write_grouped_row(row_loc, "Loc: Long | Lat | Area",
+                        c(lon_col, lat_col, area_col), loc_model_vars)
+    }
+
+    # Site row: Site Size | Dimensions
+    if (has_site_row) {
+      write_grouped_row(row_site, "Site Size | Dimensions",
+                        c(lot_col, sitedim_col), site_model_vars)
+    }
+
+    # Age row: Actual Age | Effective Age
+    if (has_age_row) {
+      write_grouped_row(row_age, "Actual Age | Effective Age",
+                        c(actage_col, effage_col), age_model_vars)
+    }
+
+    # === Model variable rows (excluding grouped vars) ===
+    for (vi_idx in seq_along(mv_filtered_idx)) {
+      vi <- mv_filtered_idx[vi_idx]
+      rw <- row_vars_start + vi_idx - 1
       var_label <- mv$labels[vi]
       contrib_c <- mv$contrib[vi]
       adjust_c  <- mv$adjustment[vi]
@@ -575,8 +739,6 @@ generate_sales_grid <- function(adjusted_file,
              stack = TRUE)
 
     # === CQA | Residual row ===
-    # VC and Adj are formulas: original residual - SUM(feature entries)
-    # As appraiser fills in feature breakdowns, these decrease (remaining residual)
     writeData(wb, s, "CQA | Residual",
               startRow = row_cqa, startCol = 1)
     subj_cqa   <- col_num(df, 1, "subject_cqa", digits = 2)
@@ -604,7 +766,6 @@ generate_sales_grid <- function(adjusted_file,
                 startRow = row_cqa, startCol = col_start)
       addStyle(wb, s, cqa_style, rows = row_cqa,
                cols = col_start, stack = TRUE)
-      # Comp VC formula: comp residual - SUM(comp feature VCs below)
       vc_col <- col_letter(col_start + 3)
       comp_vc_formula <- paste0(comp_resid, "-SUM(",
                                 vc_col, row_resid_start, ":",
@@ -613,7 +774,6 @@ generate_sales_grid <- function(adjusted_file,
                    startRow = row_cqa, startCol = col_start + 3)
       addStyle(wb, s, remaining_style, rows = row_cqa,
                cols = col_start + 3, stack = TRUE)
-      # Comp Adj formula: subject remaining VC - comp remaining VC
       comp_adj_formula <- paste0(subj_vc_col, row_cqa, "-",
                                  vc_col, row_cqa)
       writeFormula(wb, s, x = comp_adj_formula,
@@ -624,7 +784,6 @@ generate_sales_grid <- function(adjusted_file,
     addStyle(wb, s, body_style, rows = row_cqa, cols = 1:20,
              gridExpand = TRUE, stack = TRUE)
     addStyle(wb, s, label_style, rows = row_cqa, cols = 1, stack = TRUE)
-    # Re-apply purple on subject cols 3-4
     addStyle(wb, s, section_hdr_style, rows = row_cqa, cols = 3:4,
              gridExpand = TRUE, stack = TRUE)
     addStyle(wb, s, cqa_style, rows = row_cqa, cols = 2, stack = TRUE)
@@ -632,23 +791,20 @@ generate_sales_grid <- function(adjusted_file,
 
     # === Residual feature rows (named + blank for appraiser entry) ===
     all_resid_labels <- c(resid_named, rep("", n_resid_blank))
-    subj_vc_letter <- col_letter(5)  # column E for subject value contrib
+    subj_vc_letter <- col_letter(5)
     for (ri in seq_along(all_resid_labels)) {
       rw <- row_resid_start + ri - 1
       if (nzchar(all_resid_labels[ri])) {
         writeData(wb, s, all_resid_labels[ri], startRow = rw, startCol = 1)
       }
-      # Subject value contribution default $0
       writeData(wb, s, 0, startRow = rw, startCol = 5)
       addStyle(wb, s, resid_input_style, rows = rw, cols = 5,
                stack = TRUE)
       for (ci in seq_len(n_on_sheet)) {
         col_start <- 1 + ci * 5
-        # Comp value contribution default $0
         writeData(wb, s, 0, startRow = rw, startCol = col_start + 3)
         addStyle(wb, s, resid_input_style, rows = rw,
                  cols = col_start + 3, stack = TRUE)
-        # Adjustment formula: subject VC - comp VC
         comp_vc_letter <- col_letter(col_start + 3)
         adj_formula <- paste0(subj_vc_letter, rw, "-", comp_vc_letter, rw)
         writeFormula(wb, s, x = adj_formula,
@@ -659,7 +815,6 @@ generate_sales_grid <- function(adjusted_file,
       addStyle(wb, s, body_style, rows = rw, cols = 1:20,
                gridExpand = TRUE, stack = TRUE)
       addStyle(wb, s, label_style, rows = rw, cols = 1, stack = TRUE)
-      # Re-apply input style on VC cells, formula style on adjustment
       addStyle(wb, s, resid_input_style, rows = rw, cols = 5,
                stack = TRUE)
       for (ci in seq_len(n_on_sheet)) {
@@ -674,9 +829,8 @@ generate_sales_grid <- function(adjusted_file,
     # === Net Adjustment ===
     writeData(wb, s, "Total VC / Net Adjustment",
               startRow = row_net_adj, startCol = 1)
-    # Subject total VC = basis + sum of var contribs + sum of residual contribs
     subj_total_vc <- subj_basis
-    for (vi in seq_len(n_vars)) {
+    for (vi in seq_len(length(mv$labels))) {
       subj_total_vc <- subj_total_vc + col_num(df, 1, mv$contrib[vi])
     }
     writeData(wb, s, round(subj_total_vc), startRow = row_net_adj, startCol = 5)
@@ -734,6 +888,8 @@ generate_sales_grid <- function(adjusted_file,
              stack = TRUE)
 
     # === Adjusted Sale Price ===
+    # Formula: Net SP + grouped row adjustments + model var adjustments
+    #          + CQA residual adjustment + residual feature adjustments
     writeData(wb, s, "Adjusted Sale Price",
               startRow = row_adj_sp, startCol = 1)
     subj_val <- col_num(df, 1, "subject_value")
@@ -747,18 +903,31 @@ generate_sales_grid <- function(adjusted_file,
       r <- sheet_comps[ci]
       col_start <- 1 + ci * 5
       adj_col_l <- col_letter(col_start + 4)
-      sp_col_l  <- col_letter(col_start)
-      # Adjusted Sale Price = Sale Price
+      # Net SP cell: col_start+2 on the sale_price row
+      net_sp_col_l <- col_letter(col_start + 2)
+      # Adjusted Sale Price = Net SP
+      #   + grouped row adjustments (individual cells)
       #   + SUM(model variable adjustments)
-      #   + CQA residual adjustment (remaining)
+      #   + CQA residual adjustment
       #   + SUM(residual feature adjustments)
-      asp_formula <- paste0(
-        sp_col_l, row_sale_price,
-        "+SUM(", adj_col_l, row_vars_start, ":", adj_col_l, row_vars_end, ")",
-        "+", adj_col_l, row_cqa,
+      asp_parts <- paste0(net_sp_col_l, row_sale_price)
+      # Add each grouped row adjustment
+      for (gr in grouped_adj_rows) {
+        asp_parts <- paste0(asp_parts, "+", adj_col_l, gr)
+      }
+      # Add model variable adjustments
+      if (n_vars > 0) {
+        asp_parts <- paste0(asp_parts,
+          "+SUM(", adj_col_l, row_vars_start, ":", adj_col_l, row_vars_end, ")")
+      }
+      # CQA residual adjustment
+      asp_parts <- paste0(asp_parts, "+", adj_col_l, row_cqa)
+      # Residual feature adjustments
+      asp_parts <- paste0(asp_parts,
         "+SUM(", adj_col_l, row_resid_start, ":", adj_col_l, row_resid_end, ")")
+
       mergeCells(wb, s, cols = col_start:(col_start + 4), rows = row_adj_sp)
-      writeFormula(wb, s, x = asp_formula,
+      writeFormula(wb, s, x = asp_parts,
                    startRow = row_adj_sp, startCol = col_start)
       addStyle(wb, s, adj_sp_style, rows = row_adj_sp,
                cols = col_start, stack = TRUE)
@@ -802,6 +971,7 @@ if (!interactive() && identical(sys.nframe(), 0L)) {
   cat('  generate_sales_grid(\n')
   cat('    adjusted_file = "Output/Appraisal_1_adjusted_20260309_013940.xlsx",\n')
   cat('    comp_rows     = c(2, 3, 4),\n')
-  cat('    output_file   = "Output/SalesComparison.xlsx"\n')
+  cat('    output_file   = "Output/SalesComparison.xlsx",\n')
+  cat('    specials      = list(latitude = "latitude", longitude = "longitude")\n')
   cat('  )\n')
 }

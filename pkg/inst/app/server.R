@@ -834,7 +834,11 @@ function(input, output, session) {
     appraiser <- input$purpose %in% c("appraisal", "market")
 
     # Special column options
-    special_options <- c("no", "contract_date", "listing_date", "dom", "latitude", "longitude", "living_area", "display_only")
+    special_options <- c("no", "actual_age", "area", "concessions",
+                         "contract_date", "display_only", "dom",
+                         "effective_age", "latitude", "listing_date",
+                         "living_area", "longitude", "lot_size",
+                         "site_dimensions")
 
     # Header row
     header_cols <- list(
@@ -2318,12 +2322,12 @@ function(input, output, session) {
       showNotification("Capped at 30 comps.", type = "warning", duration = 5)
     }
 
-    # Re-sort selected comps by sale_age ascending
+    # Sort selected comps by gross_adj_pct ascending
     rca <- rv$rca_df
-    sa <- if ("sale_age" %in% colnames(rca)) {
-      rca[["sale_age"]][comp_rows]
-    } else rep(NA, length(comp_rows))
-    comp_rows <- comp_rows[order(sa, na.last = TRUE)]
+    sp <- if ("sale_price" %in% colnames(rca)) rca[["sale_price"]][comp_rows] else rep(NA, length(comp_rows))
+    gross <- if ("gross_adjustments" %in% colnames(rca)) rca[["gross_adjustments"]][comp_rows] else rep(0, length(comp_rows))
+    gap <- ifelse(!is.na(sp) & sp != 0, abs(gross / sp), NA)
+    comp_rows <- comp_rows[order(gap, na.last = TRUE)]
 
     folder <- input$output_folder
     if (is.null(folder) || !nzchar(folder)) folder <- path.expand("~/Downloads")
@@ -2347,14 +2351,13 @@ function(input, output, session) {
       }
       source(grid_script, local = TRUE)
 
-      # Find special columns from designations
-      dom_col_name <- NULL
-      cd_col_name  <- NULL
-      sg_specials <- input$col_specials
-      if (!is.null(sg_specials)) {
-        for (nm in names(sg_specials)) {
-          if (sg_specials[[nm]] == "dom") dom_col_name <- nm
-          if (sg_specials[[nm]] == "contract_date") cd_col_name <- nm
+      # Build specials named list from designations
+      sg_specials_map <- list()
+      sg_input <- input$col_specials
+      if (!is.null(sg_input)) {
+        for (nm in names(sg_input)) {
+          sp_type <- sg_input[[nm]]
+          if (sp_type != "no") sg_specials_map[[sp_type]] <- nm
         }
       }
 
@@ -2368,8 +2371,7 @@ function(input, output, session) {
           adjusted_file     = tmp_adj,
           comp_rows         = comp_rows,
           output_file       = out_path,
-          dom_col           = dom_col_name,
-          contract_date_col = cd_col_name,
+          specials          = sg_specials_map,
           progress_fn       = function(sheet, total_sheets, comps_done, total_comps) {
             setProgress(
               value = comps_done / total_comps,

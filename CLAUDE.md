@@ -63,7 +63,9 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
   `"general"`, `"appraisal"`, `"market"`. Controls sidebar visibility,
   subject row handling, special column options, and download workflows.
 - **Special columns**: Dropdown per predictor row with options: `no`,
-  `contract_date`, `listing_date`, `dom`, `latitude`, `longitude`, `living_area`, `display_only`.
+  `contract_date`, `listing_date`, `dom`, `latitude`, `longitude`, `area`,
+  `living_area`, `lot_size`, `site_dimensions`, `actual_age`, `effective_age`,
+  `concessions`, `display_only`.
   Only one column per type (except `display_only` allows multiple).
 - **Subject row handling**: In appraisal mode, row 1 is the subject
   property (excluded from fitting, sale price treated as NA). In market
@@ -143,16 +145,22 @@ Modal-based comp selection with auto-recommendation:
 - Output: `SalesGrid_<timestamp>.xlsx` with 3 comps per sheet (up to 10 sheets)
 - Grid layout per sheet (20 columns): Subject + 3 comps, each with factual
   values, value contributions, and adjustments
-- Row layout: Title, Headers, Address, APN/MLS#, DOM/Subj.Prox, Sale Price,
-  Regression Features (dynamic model variables), Residual Features
-  (CQA/Residual, Remaining Residual with Excel formulas, View/Design/Quality/
-  Condition/Functional Utility + 6 blank rows), Net/Gross adjustments,
-  Adjusted Sale Price
+- `specials` named list maps special type → column name (replaces individual params)
+- **Sale Price row**: "Sales Price | Concess. | Net SP" — Sale Price, Concessions
+  (`concessions` special type), Net SP formula (= Sale Price − Concessions)
+- **Grouped rows** (conditional, appear after Date of Sale row):
+  - "Loc: Long | Lat | Area" — uses `longitude`, `latitude`, `area` specials;
+    combined VC = sum of constituent variable contributions; adjustment = subj − comp
+  - "Site Size | Dimensions" — uses `lot_size`, `site_dimensions` specials
+  - "Actual Age | Effective Age" — uses `actual_age`, `effective_age` specials
+  - Grouped row variables are excluded from the model variable loop
+- **Adjusted Sale Price formula**: Net SP + grouped row adjustments + model var
+  adjustments + CQA residual + residual feature adjustments
 - DOM: uses column designated as `dom` special type; falls back to
   `contract_date − listing_date` if no `dom` column designated
 - Subj.Prox = Haversine distance (miles) from subject to comp using lat/lon
-- Remaining Residual cells use Excel formulas that auto-update as appraiser
-  enters values in the light-yellow input cells
+- CQA|Residual VC = remaining residual formula (auto-decreases as appraiser
+  fills in residual feature breakdowns)
 - Requires `openxlsx` package (in Suggests)
 
 ## Dependencies

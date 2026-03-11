@@ -63,18 +63,14 @@ format_summary <- function(earth_result) {
     })
   )))
 
-  # Cross-validated R-squared
+  # Cross-validated R-squared — use earth's pre-computed cv.rsq field
   cv_rsq <- NA_real_
-  if (earth_result$cv_enabled && !is.null(model$cv.rsq.tab)) {
-    tab <- model$cv.rsq.tab
-    last_row <- tab[nrow(tab), , drop = TRUE]
+  if (earth_result$cv_enabled && !is.null(model$cv.rsq)) {
     if (multi) {
-      cv_rsq <- as.numeric(last_row[targets])
+      cv_rsq <- as.numeric(model$cv.rsq[targets])
       names(cv_rsq) <- targets
-    } else if ("mean" %in% names(last_row)) {
-      cv_rsq <- as.numeric(last_row["mean"])
-    } else if (length(last_row) > 0L) {
-      cv_rsq <- as.numeric(last_row[length(last_row)])
+    } else {
+      cv_rsq <- as.numeric(model$cv.rsq[1L])
     }
   }
 
