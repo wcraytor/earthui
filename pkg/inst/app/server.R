@@ -2358,13 +2358,26 @@ function(input, output, session) {
         }
       }
 
-      generate_sales_grid(
-        adjusted_file     = tmp_adj,
-        comp_rows         = comp_rows,
-        output_file       = out_path,
-        dom_col           = dom_col_name,
-        contract_date_col = cd_col_name
-      )
+      n_comp <- length(comp_rows)
+      n_sheet <- ceiling(n_comp / 3)
+      withProgress(
+        message = "Generating Sales Grid",
+        detail = sprintf("0 of %d comps processed", n_comp),
+        value = 0, {
+        generate_sales_grid(
+          adjusted_file     = tmp_adj,
+          comp_rows         = comp_rows,
+          output_file       = out_path,
+          dom_col           = dom_col_name,
+          contract_date_col = cd_col_name,
+          progress_fn       = function(sheet, total_sheets, comps_done, total_comps) {
+            setProgress(
+              value = comps_done / total_comps,
+              detail = sprintf("Sheet %d of %d — %d of %d comps processed",
+                               sheet, total_sheets, comps_done, total_comps))
+          }
+        )
+      })
       unlink(tmp_adj)
 
       showNotification(paste0("Sales grid saved to: ", out_path,

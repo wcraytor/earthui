@@ -135,7 +135,8 @@ generate_sales_grid <- function(adjusted_file,
                                 output_file = NULL,
                                 title_prefix = "Intermediate Sales Comparable Grid",
                                 dom_col = NULL,
-                                contract_date_col = NULL) {
+                                contract_date_col = NULL,
+                                progress_fn = NULL) {
 
   if (!file.exists(adjusted_file)) {
     stop("Adjusted file not found: ", adjusted_file)
@@ -774,6 +775,12 @@ generate_sales_grid <- function(adjusted_file,
               startRow = row_copyright, startCol = 1)
     addStyle(wb, s, copyright_style, rows = row_copyright, cols = 1:20,
              gridExpand = TRUE, stack = TRUE)
+
+    # Report progress
+    if (is.function(progress_fn)) {
+      progress_fn(sheet = s, total_sheets = n_sheets,
+                  comps_done = min(s * 3, n_comps), total_comps = n_comps)
+    }
 
   } # end sheet loop
 
