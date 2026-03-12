@@ -1,5 +1,5 @@
-earthui.Rcheck/
-earthui_*.tar.gz
+*.Rcheck/
+earthUI_*.tar.gz
 *.Rhistory
 *.RData
 *.Rproj.user

@@ -1,0 +1,405 @@
+---
+title: "earthUI User Guide"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{earthUI User Guide}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+
+`earthUI` is a graphical user interface for the R `earth` package, which
+implements Multivariate Adaptive Regression Splines (MARS). It runs as a
+local Shiny application --- no login, no server, no accounts. You launch it
+from R, import a dataset (CSV or Excel), configure your model, and fit it
+interactively.
+
+### Three Purpose Modes
+
+When you launch earthUI, a **Purpose** radio button at the top of the sidebar
+lets you choose one of three modes:
+
+- **General** --- Earth regression for any dataset. The default mode.
+- **For Appraisal** --- Tailored for real estate appraisal with subject
+  property handling, special column designations, RCA adjustments, and Sales
+  Comparison Grid generation.
+- **Market Area Analysis** --- For analyzing groups of properties with optional
+  subject row exclusion.
+
+### Getting Started
+
+```{r eval=FALSE}
+library(earthUI)
+launch()
+```
+
+This opens the Shiny app at `http://localhost:7878`.
+
+## MLS Input Data Requirements
+
+For real estate workflows, your input data typically comes from an MLS export.
+earthUI accepts CSV and Excel files. On import, column names are automatically
+converted to `snake_case`, e.g. "Area ID" gets converted to "area_id".
+
+### Required Columns for Appraisal Mode
+
+The full appraisal workflow (RCA + Sales Grid) benefits from these columns:
+
+| Column | Special Type | Purpose |
+|:-------|:-------------|:--------|
+| Sale Price (or equivalent wording) | (target) | Response variable |
+| Contract Date | `contract_date` | Computes `sale_age` from effective date |
+| Listing Date | `listing_date` | Fallback DOM = contract date - listing date |
+| Days on Market | `dom` | Displayed in Sales Grid |
+| Concessions | `concessions` | Net SP = Sale Price - Concessions |
+| Living Area (SF) | `living_area` | Per-SF residuals (`residual_sf`, `cqa_sf`) |
+| Lot Size | `lot_size` | Grouped in "Site Size" row |
+| Site Dimensions | `site_dimensions` | Grouped with lot size |
+| Latitude | `latitude` | Rounded to 3 dp; proximity calc; Location group |
+| Longitude | `longitude` | Rounded to 3 dp; proximity calc; Location group |
+| Area ID | `area` | Grouped in "Location" row |
+| Actual Age | `actual_age` | Grouped in "Age" row |
+| Effective Age | `effective_age` | Grouped with actual age |
+| Address | `display_only` | Shown in grid; excluded from model |
+
+Spreadsheet column names can be in a foreign language, the "special" names are 
+in English so that the R program can give them special treatment.  Otherwise, 
+the given column names show up in the regression models, graphs and, if doing
+appraisals, the Intermediate Sales Grid.
+
+Not all columns are required. earthUI adapts --- if a column is missing, the
+corresponding feature is simply omitted.  However, that being said, for real 
+estate pricing models certain columns are highly recommended to achieve acceptable
+fit:
+
+1.  "Sale Age,"  which is the number of days between the contract sale date and
+the effective date of the appraisal or analysis.  If multi-year sales history is 
+being used, especially for periods over 5 years, sale_age often plays a central 
+role in estimating the sale price. In fact it is often so important that
+without it, earthUI fails to provide any model at all.
+
+2.  "Living Area" which also goes by names such as "Living Sqft,"  "GLA" (gross
+living area) and so on.  This is also another leading determinant of sale price.
+
+3.  "Total Bath Count" is the total number of full, quarter, half and 3/4
+bathrooms. For example, two full baths and one half-bath would be a value of 2.5.
+
+4.  "Garage Bays" or "Garage Area" --- the number of garage spaces or the
+garage square footage.
+
+5.  "Lot Size" --- the land area of the property, typically in square feet or
+acres.
+
+6.  "Longitude," "Latitude," and if available "Area ID." Adjustments for these
+will be combined under a single Location adjustment in the Sales Grid.
+
+### Data Quality
+
+- **Missing values**: Rows with NAs in predictors or target are removed before
+  fitting.
+- **Date columns**: Should be in a format R can parse (e.g., `2025-06-15`).
+- **Numeric columns**: Sale price, living area, etc. must be numeric (no
+  dollar signs or commas).
+
+### Subject Row Placement
+
+In **Appraisal** mode, row 1 must be the subject property. In **Market**
+mode, placing the subject in row 1 is optional (use the "Skip first row"
+checkbox). In **General** mode, all rows are treated equally.
+
+## The Sidebar Workflow
+
+The sidebar is organized into numbered sections:
+
+1. **Import Data** --- CSV or Excel file upload
+2. **Project Output Folder** --- where downloads are saved
+3. **Variable Configuration** --- target, predictors, data types, special columns
+4. **Earth Call Parameters** --- degree, penalty, pruning, CV, subset filters
+5. **Fit Earth Model** --- green button to run the model
+6. **Download Output** --- Excel file with predictions and diagnostics
+7. **Calculate RCA Adjustments** (appraisal only)
+8. **Generate Sales Grid** (appraisal only)
+9. **Download Report** --- HTML, Word, or PDF via Quarto
+
+## Variable Selection
+
+### The Predictor Table
+
+Each column is listed with:
+
+- **Type** --- data type dropdown (numeric, integer, character, factor, Date, etc.)
+- **Inc?** --- include as predictor
+- **Special** --- special column designation (appraisal/market only)
+- **Factor** --- treat as categorical
+- **Linear** --- force linear entry (no hinges)
+- **NAs** --- missing value count
+
+### Special Column Types
+
+In appraisal and market modes, each predictor can be assigned a special type:
+
+**Date & Time:**
+
+- `contract_date` --- triggers `sale_age` computation
+- `listing_date` --- fallback for DOM calculation
+- `dom` --- Days on Market column
+
+**Monetary:**
+
+- `concessions` --- used in Net SP formula (Sale Price - Concessions)
+
+**Size & Location:**
+
+- `latitude` / `longitude` --- rounded to 3 dp; proximity and Location group
+- `area` --- grouped with lat/lon in Location row
+- `living_area` --- enables per-SF residuals
+- `lot_size` / `site_dimensions` --- grouped in Site Size row
+
+**Age:**
+
+- `actual_age` / `effective_age` --- grouped in Age row
+
+**Display:**
+
+- `display_only` --- in exports but excluded from model (multiple allowed)
+
+Only one column per special type (except `display_only`). A blue badge shows
+the assigned type next to each variable name.
+
+## Downloading Data (Step 6)
+
+After fitting, download an Excel file with predictions and diagnostics.
+This output is used in Step 7 (RCA) to assign a CQA (Condition/Quality/Appeal)
+rating to the subject property.  The output is sorted by `residual_sf` and
+`cqa_sf` to help you assess where the subject falls in the ranking.  If the model is good quality, then
+the properties should be ranked from lowest appealing to most appealing based
+on residual features that did not go into the regression.  The middle value
+should be approximately $0, the lower half negative values and the upper half
+positive values.  You should find the worst quality homes, or "fixers" near the
+bottom of the ranking and the nicest homes at the top.  There will usually be
+exceptions for anomalies such as foreclosures, short sales, probate (inheritance
+related) sales, and quick sales needed for job change or other reasons.  
+Investigation of anomalies usually turns up a pertinent reason for the price
+anomaly.
+
+### Output Columns
+
+| Column | Description |
+|:-------|:------------|
+| `est_<target>` | Model prediction (e.g., `est_sale_price`) |
+| `residual` | Actual - predicted |
+| `cqa` | Comparative Quality Analysis score (0-10 scale) |
+| `residual_sf` | Residual / living area (if designated) |
+| `cqa_sf` | CQA calculated from ranking via residual_sf |
+| `<var>_contribution` | Per-g-function contribution |
+| `basis` | Intercept value contribution (same for all properties) |
+| `calc_residual` | Verification column |
+
+### Column Ordering & Formatting
+
+The ranking columns are placed leftmost: `residual_sf`, `cqa_sf`, `residual`,
+`cqa`. Excel formatting:
+
+- `residual_sf` --- currency, 2 decimal places
+- `cqa_sf` --- numeric, 2 decimal places
+- `residual` --- currency, 0 decimal places
+- `cqa` --- numeric, 2 decimal places
+
+### CQA Scores
+
+CQA ranks each row's residual against all others on a 0--10 scale:
+
+- **High CQA (~9-10)**: sold for much more than predicted
+- **Low CQA (~0-1)**: sold for much less than predicted
+- **CQA ~5**: near the median
+
+In appraisal/market modes, rows are sorted by `residual_sf` descending.
+
+## RCA Calculations (Step 7, Appraisal Only)
+
+### The RCA Dialog
+
+- Choose **CQA** or **CQA per SF** score type. If you choose "CQA per SF", then 
+based on the CQA score you assign the subject, its residual score will be its 
+living_area times the residual_sf that matches the given CQA_SF score.
+- Enter the subject's CQA score (0.00--9.99, default 5.00)
+- Click **Generate** to compute adjustments
+
+### How It Works
+
+1. Comparables' CQA scores and residuals are sorted
+2. Linear interpolation maps your CQA value to a residual
+3. Subject value = model prediction + interpolated residual
+
+### Output Columns
+
+| Column | Description |
+|:-------|:------------|
+| `subject_value` | Model prediction + interpolated residual |
+| `<var>_adjustment` | Subject contribution - comp contribution |
+| `residual_adjustment` | Subject residual - comp residual |
+| `net_adjustments` | Sum of all adjustments |
+| `gross_adjustments` | Sum of absolute adjustments |
+| `adjusted_sale_price` | Comp sale price + net adjustments |
+
+## Sales Comparison Grid (Step 8, Appraisal Only)
+
+### Overview
+
+The Sales Grid is a multi-sheet Excel workbook with the subject and selected
+comparables in a structured format. Excel formulas compute adjustments and
+adjusted sale prices. Output: `SalesGrid_<timestamp>.xlsx`.
+
+### Comp Selection
+
+A modal dialog shows:
+
+- **Recommended comps** (pre-checked): gross adjustment < 25% of sale price,
+  sorted by gross adjustment % ascending
+- **Additional comps** (unchecked): larger adjustments
+- Maximum 30 comps / 10 sheets (3 comps per sheet)
+
+
+### Grid Layout
+
+Each sheet has 20 columns: subject + 3 comps (5 columns each). Rows from top
+to bottom:
+
+1. **Title** and **Headers**
+2. **Address**
+3. **APN | MLS# | DOM | Subj.Prox** --- parcel, listing ID, days on market,
+   Haversine distance (miles)
+4. **Sales Price | Concess. | Net SP** --- sale price, concessions, Net SP
+   formula
+5. **Regression Features** header
+6. **BASE VALUE** --- model intercept
+7. **Date of Sale | OffMkt | OnMkt** --- contract date, sale age, DOM
+8. **Grouped rows** (conditional):
+   - "Loc: Long | Lat | Area" --- combined VC from location variables
+   - "Site Size | Dimensions" --- combined VC from site variables
+   - "Actual Age | Effective Age" --- combined VC from age variables
+9. **Model variable rows** --- one per predictor (excluding grouped vars)
+10. **CQA|Residual** --- CQA score + remaining residual formula
+11. **Residual feature rows** --- named + blank rows for appraiser entry
+12. **Total VC / Net Adjustment**
+13. **Net/Gross Adjustment %**
+14. **Adjusted Sale Price** --- formula row
+
+### Adjusted Sale Price Formula
+
+- **Subject**: SUM of all Value Contribution cells from BASE VALUE through
+  the last residual feature row
+- **Comps**: Net SP + SUM of all Adjustment cells above Total VC row
+
+### Sheet Protection
+
+Sheets are protected. Only the **residual feature VC input cells** (light
+yellow background) under CQA|Residual are unlocked for appraiser entry.
+All formulas, data values, and labels are locked.
+
+### Working with the Grid
+
+1. Open in Excel
+2. Review regression-derived adjustments (locked)
+3. Allocate the residual in the yellow cells (Location, View, Condition,
+   Quality, etc.)
+4. Watch the Remaining Residual decrease and Adjusted Sale Price update
+5. Goal: allocate until Remaining Residual is near zero
+
+## Downloading Reports (Step 9)
+
+Three formats via Quarto:
+
+- **HTML** --- self-contained with interactive tables
+- **Word** --- `.docx` for editing and distribution
+- **PDF** --- typeset with LuaLaTeX
+
+Reports include: dataset description, model specification, allowed
+interactions, summary metrics, model equation, coefficients, variable
+importance, g-function plots, correlation matrix, diagnostics, ANOVA, and
+raw earth output.
+
+## Demo Dataset: Appraisal_1.csv
+
+earthUI includes a demo MLS dataset for exploring the appraisal workflow.
+Load it with:
+
+```{r eval=FALSE}
+demo_file <- system.file("extdata", "Appraisal_1.csv", package = "earthUI")
+df <- import_data(demo_file)
+```
+
+Or import it directly through the Shiny app file upload.
+
+### Description
+
+The file contains 1,502 residential sales (plus 1 subject property in row 1)
+from a simulated MLS export. The data represents single-family home sales
+in a multi-area market with a range of property sizes, ages, and locations. 
+
+This is not real data, but is based on a realistic neighborhood in Northern 
+California.  All identification information has been altered or removed.
+
+### Columns
+
+| Column | Type | Special Type | Description |
+|:-------|:-----|:-------------|:------------|
+| `weight` | numeric | --- | Observation weight (0 = exclude from fitting) |
+| `id` | numeric | `display_only` | Internal record ID |
+| `property_id` | numeric | `display_only` | MLS property identifier |
+| `listing_id` | character | `display_only` | MLS listing number |
+| `parcel_number` | character | `display_only` | County assessor parcel number (APN) |
+| `street_address` | character | `display_only` | Property address |
+| `city_name` | character | `display_only` | City |
+| `postal_code` | character | `display_only` | ZIP code |
+| `county_name` | character | `display_only` | County |
+| `contract_date` | Date | `contract_date` | Sale contract date (computes `sale_age`) |
+| `sale_age` | numeric | --- | Days from contract date to effective date (pre-computed) |
+| `coe_date` | Date | `display_only` | Close of escrow date |
+| `listing_status` | character | `display_only` | Listing status (e.g., "Sold") |
+| `sale_price` | numeric | (target) | Sale price --- response variable |
+| `rent` | numeric | --- | Monthly rent (for multi-target models) |
+| `list_price` | numeric | `display_only` | Listing price |
+| `original_list_price` | numeric | `display_only` | Original listing price |
+| `living_sqft` | numeric | `living_area` | Gross living area in square feet |
+| `beds_total` | integer | --- | Number of bedrooms |
+| `baths_total` | numeric | --- | Total bath count (e.g., 2.5 = 2 full + 1 half) |
+| `lot_size` | numeric | `lot_size` | Lot size in square feet |
+| `area_id` | integer | `area` | MLS area identifier |
+| `area_text` | character | `display_only` | Area name |
+| `age` | numeric | `actual_age` | Property age in years |
+| `year_built` | integer | `display_only` | Year of construction |
+| `latitude` | numeric | `latitude` | Latitude (rounded to 3 dp for model) |
+| `longitude` | numeric | `longitude` | Longitude (rounded to 3 dp for model) |
+| `latitude6` | numeric | `display_only` | Full-precision latitude |
+| `longitude6` | numeric | `display_only` | Full-precision longitude |
+| `garage_spaces` | integer | --- | Number of garage bays |
+| `fp_count` | integer | --- | Number of fireplaces |
+| `no_of_stories` | numeric | --- | Number of stories |
+| `style` | character | --- | Architectural style |
+| `view` | character | --- | View type (e.g., "Neighborhood", "Hills") |
+| `days_on_market` | integer | `dom` | Days on market |
+| `listing_date` | Date | `listing_date` | Listing date |
+| `sale_concessions` | numeric | `concessions` | Seller concessions |
+
+### Suggested Quick Start
+
+1. Launch earthUI: `earthUI::launch()`
+2. Import `Appraisal_1.csv` via the file upload
+3. Set Purpose to **For Appraisal**
+4. Select `sale_price` as the target
+5. Assign special types as shown in the table above
+6. Include predictors: `sale_age`, `living_sqft`, `baths_total`, `lot_size`,
+   `area_id` (as factor), `age`, `latitude`, `longitude`, `garage_spaces`
+7. Set degree to 1, click **Fit Earth Model**
+8. Download intermediate output (Step 6), review the CQA ranking
+9. Compute RCA adjustments (Step 7) with a CQA score of ~5.00
+10. Generate the Sales Comparison Grid (Step 8)

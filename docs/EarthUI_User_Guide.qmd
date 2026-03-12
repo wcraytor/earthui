@@ -197,6 +197,13 @@ format:
     \item Report Formats
     \item Report Contents
   \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{Demo Dataset: Appraisal\_1.csv}}
+  \begin{itemize}
+    \item Description
+    \item Columns
+    \item Suggested Quick Start
+  \end{itemize}
 \end{enumerate}
 \end{small}
 
@@ -322,7 +329,21 @@ Address & \texttt{display\_only} & Displayed in Address row of Sales Grid; exclu
 \end{tabularx}
 \end{center}
 
-Not all columns are required. earthUI adapts --- if a column is missing, the corresponding feature is simply omitted. For example, if no `concessions` column is designated, the Net SP row in the Sales Grid shows Sale Price without a concessions deduction.
+Spreadsheet column names can be in a foreign language --- the "special" names are in English so that the R program can give them special treatment. Otherwise, the given column names show up in the regression models, graphs, and (if doing appraisals) the Intermediate Sales Grid.
+
+Not all columns are required. earthUI adapts --- if a column is missing, the corresponding feature is simply omitted. For example, if no `concessions` column is designated, the Net SP row in the Sales Grid shows Sale Price without a concessions deduction. However, for real estate pricing models certain columns are highly recommended to achieve acceptable fit:
+
+1. **Sale Age** --- the number of days between the contract sale date and the effective date of the appraisal or analysis. If multi-year sales history is being used, especially for periods over 5 years, `sale_age` often plays a central role in estimating the sale price. In fact it is often so important that without it, earthUI fails to provide any model at all.
+
+2. **Living Area** --- also goes by names such as "Living Sqft," "GLA" (gross living area) and so on. This is another leading determinant of sale price.
+
+3. **Total Bath Count** --- the total number of full, quarter, half, and 3/4 bathrooms. For example, two full baths and one half-bath would be a value of 2.5.
+
+4. **Garage Bays** or **Garage Area** --- the number of garage spaces or the garage square footage.
+
+5. **Lot Size** --- the land area of the property, typically in square feet or acres.
+
+6. **Longitude, Latitude,** and if available **Area ID**. Adjustments for these will be combined under a single Location adjustment in the Sales Grid.
 
 ## Special Column Naming Conventions
 
@@ -770,7 +791,9 @@ Every fit (success or failure) writes a log file to your output folder:
 
 \bigskip
 
-After fitting a model, Section 6 of the sidebar lets you download an Excel file containing your original data plus model predictions and diagnostics. The button label adapts to the purpose mode:
+After fitting, download an Excel file with predictions and diagnostics. This output is used in Step 7 (RCA) to assign a CQA (Condition/Quality/Appeal) rating to the subject property. The output is sorted by `residual_sf` and `cqa_sf` to help you assess where the subject falls in the ranking. If the model is good quality, then the properties should be ranked from lowest appealing to most appealing based on residual features that did not go into the regression. The middle value should be approximately \$0, the lower half negative values and the upper half positive values. You should find the worst quality homes, or "fixers" near the bottom of the ranking and the nicest homes at the top. There will usually be exceptions for anomalies such as foreclosures, short sales, probate (inheritance related) sales, and quick sales needed for job change or other reasons. Investigation of anomalies usually turns up a pertinent reason for the price anomaly.
+
+The button label adapts to the purpose mode:
 
 - General/Market: **Download Output (Excel)**
 - Appraisal: **Download Intermediate Output (Excel)**
@@ -783,13 +806,13 @@ For each target variable, the following columns are appended:
 
 | Column | Description |
 |:-------|:------------|
-| `est_<target>` | Model prediction (1 decimal place) |
+| `est_<target>` | Model prediction, e.g.\ `est_sale_price` (1 decimal place) |
 | `residual` | Actual minus predicted (1 dp) |
 | `cqa` | Comparative Quality Analysis score (2 dp, range 0--10) |
 | `residual_sf` | Residual divided by living area (if designated, 1 dp) |
-| `cqa_sf` | CQA on per-square-foot residuals (if designated, 2 dp) |
+| `cqa_sf` | CQA calculated from ranking via residual\_sf (2 dp) |
 | `<variable>_contribution` | Per-g-function contribution value (1 dp, one column per g-function) |
-| `basis` | Intercept contribution (constant for all rows, 1 dp) |
+| `basis` | Intercept value contribution, same for all properties (1 dp) |
 | `calc_residual` | Actual minus (basis + all contributions) --- verification column (1 dp) |
 
 For multi-target models, a `_<i>` suffix is added to distinguish columns for each target.
@@ -847,7 +870,7 @@ The **Calculate RCA Adjustments \& Download** button appears in sidebar section 
 
 Clicking the button opens a small modal dialog with:
 
-- **Score type** --- radio buttons to choose **CQA** or **CQA per SF** (the SF option is available only when a `living_area` column is designated)
+- **Score type** --- radio buttons to choose **CQA** or **CQA per SF** (the SF option is available only when a `living_area` column is designated). If you choose "CQA per SF," then based on the CQA score you assign the subject, its residual score will be its living area times the residual\_sf that matches the given CQA\_SF score.
 - **CQA value** --- numeric input for the subject's CQA score (0.00--9.99, default 5.00). This score represents where you believe the subject falls in the quality distribution of the comparables.
 - **Generate** button --- computes the RCA output and downloads it as Excel
 
@@ -1061,4 +1084,137 @@ For multi-response models, sections 4--8 and 10 are repeated for each target var
 
 \begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
 \small\textit{\textbf{Tip:} Reports require the \texttt{quarto} R package. For PDF output, a LaTeX distribution (e.g., TinyTeX) must also be installed.}
+\end{tcolorbox}
+
+\newpage
+
+<!-- CHAPTER 13 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 13}}\\[2pt]
+{\Huge\textbf{Demo Dataset: Appraisal\_1.csv}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+earthUI includes a demo MLS dataset for exploring the appraisal workflow. Load it programmatically with:
+
+```r
+demo_file <- system.file("extdata", "Appraisal_1.csv", package = "earthUI")
+df <- import_data(demo_file)
+```
+
+Or import it directly through the Shiny app file upload.
+
+## Description
+
+The file contains 1,502 residential sales (plus 1 subject property in row 1) from a simulated MLS export. The data represents single-family home sales in a multi-area market with a range of property sizes, ages, and locations.
+
+This is not real data, but is based on a realistic neighborhood in Northern California. All identification information has been altered or removed.
+
+## Columns
+
+\begin{center}
+\arrayrulecolor{earthaccent}
+{\footnotesize
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}p{1.4cm}|>{\raggedright\arraybackslash}p{2.2cm}|X|}
+\hline
+\rowcolor{earthtableheader}\color{white}\textbf{Column} & \color{white}\textbf{Type} & \color{white}\textbf{Special Type} & \color{white}\textbf{Description} \\
+\hline
+weight & numeric & --- & Observation weight (0 = exclude from fitting) \\
+\hline
+id & numeric & display\_only & Internal record ID \\
+\hline
+property\_id & numeric & display\_only & MLS property identifier \\
+\hline
+listing\_id & character & display\_only & MLS listing number \\
+\hline
+parcel\_number & character & display\_only & County assessor parcel number (APN) \\
+\hline
+street\_address & character & display\_only & Property address \\
+\hline
+city\_name & character & display\_only & City \\
+\hline
+postal\_code & character & display\_only & ZIP code \\
+\hline
+county\_name & character & display\_only & County \\
+\hline
+contract\_date & Date & contract\_date & Sale contract date (computes sale\_age) \\
+\hline
+sale\_age & numeric & --- & Days from contract date to effective date (pre-computed) \\
+\hline
+coe\_date & Date & display\_only & Close of escrow date \\
+\hline
+listing\_status & character & display\_only & Listing status (e.g., "Sold") \\
+\hline
+sale\_price & numeric & (target) & Sale price --- response variable \\
+\hline
+rent & numeric & --- & Monthly rent (for multi-target models) \\
+\hline
+list\_price & numeric & display\_only & Listing price \\
+\hline
+original\_list\_price & numeric & display\_only & Original listing price \\
+\hline
+living\_sqft & numeric & living\_area & Gross living area in square feet \\
+\hline
+beds\_total & integer & --- & Number of bedrooms \\
+\hline
+baths\_total & numeric & --- & Total bath count (e.g., 2.5 = 2 full + 1 half) \\
+\hline
+lot\_size & numeric & lot\_size & Lot size in square feet \\
+\hline
+area\_id & integer & area & MLS area identifier \\
+\hline
+area\_text & character & display\_only & Area name \\
+\hline
+age & numeric & actual\_age & Property age in years \\
+\hline
+year\_built & integer & display\_only & Year of construction \\
+\hline
+latitude & numeric & latitude & Latitude (rounded to 3 dp for model) \\
+\hline
+longitude & numeric & longitude & Longitude (rounded to 3 dp for model) \\
+\hline
+latitude6 & numeric & display\_only & Full-precision latitude \\
+\hline
+longitude6 & numeric & display\_only & Full-precision longitude \\
+\hline
+garage\_spaces & integer & --- & Number of garage bays \\
+\hline
+fp\_count & integer & --- & Number of fireplaces \\
+\hline
+no\_of\_stories & numeric & --- & Number of stories \\
+\hline
+style & character & --- & Architectural style \\
+\hline
+view & character & --- & View type (e.g., "Neighborhood", "Hills") \\
+\hline
+days\_on\_market & integer & dom & Days on market \\
+\hline
+listing\_date & Date & listing\_date & Listing date \\
+\hline
+sale\_concessions & numeric & concessions & Seller concessions \\
+\hline
+\end{tabularx}
+}
+\end{center}
+
+## Suggested Quick Start
+
+\begin{enumerate}
+\item Launch earthUI: \texttt{earthUI::launch()}
+\item Import \texttt{Appraisal\_1.csv} via the file upload
+\item Set Purpose to \textbf{For Appraisal}
+\item Select \texttt{sale\_price} as the target
+\item Assign special types as shown in the table above
+\item Include predictors: \texttt{sale\_age}, \texttt{living\_sqft}, \texttt{baths\_total}, \texttt{lot\_size}, \texttt{area\_id} (as factor), \texttt{age}, \texttt{latitude}, \texttt{longitude}, \texttt{garage\_spaces}
+\item Set degree to 1, click \textbf{Fit Earth Model}
+\item Download intermediate output (Step 6), review the CQA ranking
+\item Compute RCA adjustments (Step 7) with a CQA score of $\sim$5.00
+\item Generate the Sales Comparison Grid (Step 8)
+\end{enumerate}
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} The demo dataset is a good way to explore all of earthUI's features before importing your own MLS data. The suggested predictors above typically produce a model with R\textsuperscript{2} above 0.85.}
 \end{tcolorbox}
