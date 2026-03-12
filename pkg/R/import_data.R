@@ -15,12 +15,10 @@
 #'
 #' @export
 #' @examples
-#' # Create a temporary CSV for demonstration
-#' tmp <- tempfile(fileext = ".csv")
-#' write.csv(mtcars, tmp, row.names = FALSE)
-#' df <- import_data(tmp)
+#' # Load the included demo appraisal dataset
+#' demo_file <- system.file("extdata", "Appraisal_1.csv", package = "earthUI")
+#' df <- import_data(demo_file)
 #' head(df)
-#' unlink(tmp)
 import_data <- function(filepath, sheet = 1, ...) {
   if (!is.character(filepath) || length(filepath) != 1L) {
     stop("`filepath` must be a single character string.", call. = FALSE)

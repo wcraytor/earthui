@@ -89,10 +89,14 @@
 #'
 #' @export
 #' @examples
-#' df <- mtcars
-#' result <- fit_earth(df, target = "mpg",
-#'                     predictors = c("cyl", "disp", "hp", "wt"))
+#' \donttest{
+#' # Using the included demo appraisal dataset
+#' demo_file <- system.file("extdata", "Appraisal_1.csv", package = "earthUI")
+#' df <- import_data(demo_file)
+#' result <- fit_earth(df, target = "sale_price",
+#'                     predictors = c("living_sqft", "lot_size", "age"))
 #' format_summary(result)
+#' }
 fit_earth <- function(df, target, predictors, categoricals = NULL,
                       linpreds = NULL, type_map = NULL,
                       degree = 1L, allowed_func = NULL,

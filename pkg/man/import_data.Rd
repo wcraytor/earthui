@@ -25,10 +25,8 @@ Reads a CSV (.csv) or 'Excel' (.xlsx, .xls) file and returns a data frame.
 Column names are converted to snake_case and duplicates are made unique.
 }
 \examples{
-# Create a temporary CSV for demonstration
-tmp <- tempfile(fileext = ".csv")
-write.csv(mtcars, tmp, row.names = FALSE)
-df <- import_data(tmp)
+# Load the included demo appraisal dataset
+demo_file <- system.file("extdata", "Appraisal_1.csv", package = "earthUI")
+df <- import_data(demo_file)
 head(df)
-unlink(tmp)
 }

@@ -181,8 +181,12 @@ Wrapper around \code{\link[earth:earth]{earth::earth()}} with parameter validati
 cross-validation when interaction terms are enabled.
 }
 \examples{
-df <- mtcars
-result <- fit_earth(df, target = "mpg",
-                    predictors = c("cyl", "disp", "hp", "wt"))
+\donttest{
+# Using the included demo appraisal dataset
+demo_file <- system.file("extdata", "Appraisal_1.csv", package = "earthUI")
+df <- import_data(demo_file)
+result <- fit_earth(df, target = "sale_price",
+                    predictors = c("living_sqft", "lot_size", "age"))
 format_summary(result)
+}
 }

@@ -70,7 +70,7 @@ format:
 \hline
 \rowcolor{earthaccent}\textbf{Version} & \textbf{Audience} & \textbf{Last Updated} \\
 \hline
-1.0 & All Users & 2026 \\
+1.1 & All Users & 2026 \\
 \hline
 \end{tabular}
 \end{center}
@@ -103,6 +103,15 @@ format:
     \item Getting Started
   \end{itemize}
 
+\item \textbf{\textcolor{earthgreen}{MLS Input Data Requirements}}
+  \begin{itemize}
+    \item File Format \& Structure
+    \item Required Columns for Appraisal Mode
+    \item Special Column Naming Conventions
+    \item Data Quality \& Completeness
+    \item Subject Row Placement
+  \end{itemize}
+
 \item \textbf{\textcolor{earthgreen}{General Purpose Mode}}
   \begin{itemize}
     \item Overview
@@ -132,6 +141,7 @@ format:
     \item The Predictor Table
     \item Data Type Detection \& Overrides
     \item Factor and Linear Flags
+    \item Special Column Types Reference
     \item Multiple Targets
   \end{itemize}
 
@@ -156,6 +166,7 @@ format:
 \item \textbf{\textcolor{earthgreen}{Downloading Data}}
   \begin{itemize}
     \item Output Columns
+    \item Column Ordering \& Excel Formatting
     \item CQA Scores
     \item Sorting \& Subject Row
   \end{itemize}
@@ -165,6 +176,20 @@ format:
     \item Opening the RCA Dialog
     \item CQA Score Interpolation
     \item Output Columns
+  \end{itemize}
+
+\item \textbf{\textcolor{earthgreen}{Sales Comparison Grid}}
+  \begin{itemize}
+    \item Overview \& Purpose
+    \item Comp Selection Modal
+    \item Grid Layout
+    \item Sale Price, Concessions \& Net SP
+    \item Grouped Rows (Location, Site, Age)
+    \item Model Variable Rows
+    \item CQA|Residual \& Residual Feature Rows
+    \item Adjusted Sale Price Formula
+    \item Sheet Protection \& Editable Cells
+    \item Working with the Grid in Excel
   \end{itemize}
 
 \item \textbf{\textcolor{earthgreen}{Downloading Reports}}
@@ -198,7 +223,7 @@ The application provides a complete workflow: data import, variable configuratio
 When you launch earthUI, a **Purpose** radio button at the top of the sidebar lets you choose one of three modes:
 
 - **General** --- Earth regression for any type of population or dataset. This is the default mode. It provides the full MARS modeling workflow without any domain-specific additions.
-- **For Appraisal** --- Earth regression tailored for real estate appraisal. Adds features specific to single-property valuation, including subject property handling and Reconciliation by Comparable Adjustment (RCA) computations.
+- **For Appraisal** --- Earth regression tailored for real estate appraisal. Adds features specific to single-property valuation, including subject property handling, special column designations, Reconciliation by Comparable Adjustment (RCA), and Sales Comparison Grid generation.
 - **Market Area Analysis** --- Earth regression tailored for market area studies. Adds features for analyzing groups of properties in a defined market, with an optional "Skip first row" checkbox for subject property exclusion.
 
 In all three modes, the core modeling engine is identical --- you are always fitting an Earth (MARS) model. The purpose setting controls which additional tools and interface elements are available.
@@ -207,10 +232,11 @@ In all three modes, the core modeling engine is identical --- you are always fit
 
 When either **For Appraisal** or **Market Area Analysis** is selected, earthUI activates several features designed for real estate analysis:
 
-- **Special column designations** --- Each predictor can be tagged with a special role: `contract_date`, `latitude`, `longitude`, `living_area`, or `display_only`. These designations control how the column is handled during fitting and output.
+- **Special column designations** --- Each predictor can be tagged with a special role such as `contract_date`, `dom`, `concessions`, `latitude`, `longitude`, `living_area`, `lot_size`, `actual_age`, `effective_age`, `area`, `site_dimensions`, or `display_only`. These designations control how the column is handled during fitting, output, and Sales Grid generation. See Chapter 6 for the complete reference.
 - **Rounding of latitude and longitude** --- Columns designated as latitude or longitude are automatically rounded to 3 decimal places to prevent overfitting.
 - **Sale Age column** --- When a column is designated as `contract_date` and an Effective Date is provided, earthUI computes a `sale_age` column (days between sale date and effective date) and substitutes it as a predictor.
 - **RCA computations (appraisal only)** --- In appraisal mode, after fitting the model earthUI can compute Reconciliation by Comparable Adjustment (RCA) output, which produces per-comparable adjustments, net/gross adjustment summaries, and an adjusted sale price for the subject property.
+- **Sales Comparison Grid (appraisal only)** --- Generates a multi-sheet Excel workbook with formulas for comparable adjustments, residual feature breakdowns, and adjusted sale prices. See Chapter 11.
 
 \begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
 \small\textit{\textbf{Tip:} The General purpose mode works for any dataset --- financial, scientific, engineering, or real estate. The appraisal and market modes simply add convenience features for real estate professionals.}
@@ -227,7 +253,7 @@ To use earthUI:
 5. **Configure variables** --- choose your target(s) and predictors, set data types, and assign any special column roles.
 6. **Set Earth parameters** --- degree, nprune, subset filters, and other `earth()` arguments.
 7. **Fit the model** --- click "Fit Earth Model" and review the results in the main panel.
-8. **Export** --- download predictions as Excel, generate reports, or (in appraisal mode) compute RCA adjustments.
+8. **Export** --- download predictions as Excel, generate reports, or (in appraisal mode) compute RCA adjustments and Sales Comparison Grids.
 
 Settings are automatically persisted in your browser's local storage and restored when you reload the same input file.
 
@@ -236,6 +262,98 @@ Settings are automatically persisted in your browser's local storage and restore
 <!-- CHAPTER 2 -->
 \begin{flushleft}
 {\color{earthaccent}\small\textbf{CHAPTER 2}}\\[2pt]
+{\Huge\textbf{MLS Input Data Requirements}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+For real estate appraisal and market analysis workflows, your input data typically comes from a Multiple Listing Service (MLS) export. This chapter describes the expected file structure and the columns that earthUI can use.
+
+## File Format \& Structure
+
+earthUI accepts **CSV** and **Excel** (`.xlsx`, `.xls`) files. On import, column names are automatically converted to `snake_case` --- for example, "Living SqFt" becomes `living_sqft`, "Contract Date" becomes `contract_date`, and "Sale Price" becomes `sale_price`. This normalization ensures consistent column references throughout the workflow.
+
+Your data file should be a flat table with one row per property and one column per attribute. The first row of the file must contain column headers.
+
+## Required Columns for Appraisal Mode
+
+While earthUI works with any set of columns, the full appraisal workflow (RCA adjustments + Sales Comparison Grid) benefits from having the following columns in your MLS export:
+
+\begin{center}
+\arrayrulecolor{earthaccent}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}p{2.5cm}|X|}
+\hline
+\rowcolor{earthtableheader}\color{white}\textbf{Column} & \color{white}\textbf{Special Type} & \color{white}\textbf{Purpose} \\
+\hline
+Sale Price & (target) & Response variable for the model \\
+\hline
+Contract Date & \texttt{contract\_date} & Used to compute \texttt{sale\_age} (days from effective date) \\
+\hline
+Listing Date & \texttt{listing\_date} & Used with contract date to compute DOM if no DOM column exists \\
+\hline
+Days on Market & \texttt{dom} & Days on market; displayed in Sales Grid \\
+\hline
+Concessions & \texttt{concessions} & Sale concessions; Net SP = Sale Price $-$ Concessions in Sales Grid \\
+\hline
+Living Area (SF) & \texttt{living\_area} & Enables per-SF residuals (\texttt{residual\_sf}, \texttt{cqa\_sf}) \\
+\hline
+Lot Size & \texttt{lot\_size} & Grouped in "Site Size | Dimensions" row in Sales Grid \\
+\hline
+Site Dimensions & \texttt{site\_dimensions} & Grouped with lot size in Sales Grid \\
+\hline
+Latitude & \texttt{latitude} & Rounded to 3 dp; used for proximity calculation and Location group \\
+\hline
+Longitude & \texttt{longitude} & Rounded to 3 dp; used for proximity calculation and Location group \\
+\hline
+Area ID & \texttt{area} & Grouped in "Loc: Long | Lat | Area" row in Sales Grid \\
+\hline
+Actual Age & \texttt{actual\_age} & Grouped in "Actual Age | Effective Age" row in Sales Grid \\
+\hline
+Effective Age & \texttt{effective\_age} & Grouped with actual age in Sales Grid \\
+\hline
+Parcel Number & (none) & Displayed in APN row of Sales Grid \\
+\hline
+Listing ID & (none) & Displayed in APN row of Sales Grid \\
+\hline
+Address & \texttt{display\_only} & Displayed in Address row of Sales Grid; excluded from model \\
+\hline
+\end{tabularx}
+\end{center}
+
+Not all columns are required. earthUI adapts --- if a column is missing, the corresponding feature is simply omitted. For example, if no `concessions` column is designated, the Net SP row in the Sales Grid shows Sale Price without a concessions deduction.
+
+## Special Column Naming Conventions
+
+earthUI identifies columns by their **special type designation**, not by their column name. You can name your columns anything you like in the MLS export --- what matters is that you assign the correct special type in the Variable Configuration table (Chapter 6).
+
+For example, your MLS might export living area as "GLA", "Living SqFt", "liv\_area", or "gross\_living\_area". After import (where it becomes snake\_case), you simply designate it as `living_area` in the Special dropdown. earthUI will then use it for per-SF residual calculations and Sales Grid grouping regardless of its original name.
+
+## Data Quality \& Completeness
+
+- **Missing values (NA)**: Rows with NA values in any predictor or target column are automatically removed before fitting. The `na.action` is always set to `na.fail` internally, with NA removal handled before the call to `earth()`.
+- **Date columns**: Dates should be in a format R can parse (e.g., `2025-06-15`, `06/15/2025`, `June 15, 2025`). earthUI auto-detects date columns when at least 80\% of values parse successfully.
+- **Numeric columns**: Sale price, living area, lot size, concessions, and similar fields must be numeric. If your MLS exports prices with dollar signs or commas (e.g., "\$350,000"), you may need to clean these before import.
+- **Factor columns**: Categorical variables like area ID, style, or condition should contain a manageable number of unique values. earthUI auto-detects factors but you can override the detection.
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} Review the NA column in the predictor table after import. Columns with more than 30\% missing values are flagged in red. Consider excluding high-NA columns or cleaning the data before import.}
+\end{tcolorbox}
+
+## Subject Row Placement
+
+In **Appraisal** mode, **row 1 must be the subject property**. All remaining rows are comparable sales. The subject's sale price can be left blank (NA) or set to any value --- earthUI treats it as NA during fitting regardless.
+
+In **Market Area Analysis** mode, placing the subject in row 1 is optional. If present, check "Skip first row (subject property)" to exclude it from fitting.
+
+In **General** mode, there is no special row handling --- all rows are treated equally.
+
+\newpage
+
+<!-- CHAPTER 3 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 3}}\\[2pt]
 {\Huge\textbf{General Purpose Mode}}
 \end{flushleft}
 
@@ -257,15 +375,15 @@ The sidebar is organized into numbered, collapsible sections that guide you from
 
 **2. Project Output Folder** --- A text field specifying where downloads and fit logs are saved (defaults to `~/Downloads`).
 
-**3. Variable Configuration** --- Target variable selector (supports multiple targets), predictor table with checkboxes for Include, Factor, and Linear. See Chapter 5 for full details.
+**3. Variable Configuration** --- Target variable selector (supports multiple targets), predictor table with checkboxes for Include, Factor, and Linear. See Chapter 6 for full details.
 
-**4. Earth Call Parameters** --- All arguments to the `earth()` function: degree, penalty, nk, pruning method, cross-validation, and more. See Chapter 6 for the complete parameter reference.
+**4. Earth Call Parameters** --- All arguments to the `earth()` function: degree, penalty, nk, pruning method, cross-validation, and more. See Chapter 7 for the complete parameter reference.
 
-**5. Fit Earth Model** --- A single green button that runs the model asynchronously. See Chapter 7 for fitting details.
+**5. Fit Earth Model** --- A single green button that runs the model asynchronously. See Chapter 8 for fitting details.
 
-**6. Download Output** --- Exports predictions, residuals, CQA scores, and per-g-function contributions as an Excel file. See Chapter 8.
+**6. Download Output** --- Exports predictions, residuals, CQA scores, and per-g-function contributions as an Excel file. See Chapter 9.
 
-**7. Download Report** --- Generates a formatted report (HTML, Word, or PDF) saved to the output folder. See Chapter 10.
+**7. Download Report** --- Generates a formatted report (HTML, Word, or PDF) saved to the output folder. See Chapter 12.
 
 ## Main Panel Tabs
 
@@ -308,9 +426,9 @@ Click the moon/sun icon in the upper-right corner to toggle between light and da
 
 \newpage
 
-<!-- CHAPTER 3 -->
+<!-- CHAPTER 4 -->
 \begin{flushleft}
-{\color{earthaccent}\small\textbf{CHAPTER 3}}\\[2pt]
+{\color{earthaccent}\small\textbf{CHAPTER 4}}\\[2pt]
 {\Huge\textbf{Appraisal Mode}}
 \end{flushleft}
 
@@ -318,11 +436,11 @@ Click the moon/sun icon in the upper-right corner to toggle between light and da
 
 \bigskip
 
-When you select **For Appraisal** as the Purpose, earthUI configures itself for single-property valuation. All features described in Chapter 2 remain available; this chapter covers only the appraisal-specific additions.
+When you select **For Appraisal** as the Purpose, earthUI configures itself for single-property valuation. All features described in Chapter 3 remain available; this chapter covers only the appraisal-specific additions.
 
 ## Subject Row Handling
 
-In appraisal mode, **row 1 of your dataset is the subject property** and all remaining rows are comparable sales. Your input file must be organized accordingly. The subject's sale price can be left blank or set to any value --- earthUI automatically treats it as NA during fitting.
+In appraisal mode, **row 1 of your dataset is the subject property** and all remaining rows are comparable sales. Your input file must be organized accordingly (see Chapter 2). The subject's sale price can be left blank or set to any value --- earthUI automatically treats it as NA during fitting.
 
 After importing, the Data tab splits into two sections: **Subject Property** (row 1) and **Comparable Sales** (rows 2+). Row 1 is always excluded from model fitting --- the notification "Skipping row 1 (subject). Fitting on N rows." confirms this. After fitting, the model still generates predictions for the subject row, shown as `est_<target>` in the output.
 
@@ -332,23 +450,54 @@ In appraisal and market modes, an **Effective Date** field appears in the Variab
 
 The first time you click Fit after designating a contract date, earthUI creates the `sale_age` column and notifies you to click Fit again to include it.
 
-
-
-
 ## Special Column Designations
 
-In appraisal and market modes, a **Special** dropdown appears for each predictor in the Variable Configuration table. Options:
+In appraisal and market modes, a **Special** dropdown appears for each predictor in the Variable Configuration table. The complete list of special types and their effects:
 
-- `contract_date` --- triggers automatic `sale_age` computation
-- `latitude` / `longitude` --- values rounded to 3 decimal places to prevent overfitting
-- `living_area` --- enables per-square-foot residual calculations (`residual_sf`, `cqa_sf`) in the download output
-- `display_only` --- column is included in exports but excluded from model fitting (multiple columns can have this designation)
+\begin{center}
+\arrayrulecolor{earthaccent}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|X|}
+\hline
+\rowcolor{earthtableheader}\color{white}\textbf{Special Type} & \color{white}\textbf{Effect} \\
+\hline
+\texttt{no} & Default --- no special handling \\
+\hline
+\texttt{contract\_date} & Triggers automatic \texttt{sale\_age} computation from the Effective Date \\
+\hline
+\texttt{listing\_date} & Used with contract date to compute DOM when no \texttt{dom} column exists \\
+\hline
+\texttt{dom} & Identifies the Days on Market column; displayed in Sales Grid \\
+\hline
+\texttt{concessions} & Identifies sale concessions; used in Net SP formula (Sale Price $-$ Concessions) in Sales Grid \\
+\hline
+\texttt{latitude} & Values rounded to 3 dp; used for Haversine proximity and Location group in Sales Grid \\
+\hline
+\texttt{longitude} & Values rounded to 3 dp; used for Haversine proximity and Location group in Sales Grid \\
+\hline
+\texttt{area} & Grouped in "Loc: Long | Lat | Area" row in Sales Grid \\
+\hline
+\texttt{living\_area} & Enables per-SF residuals (\texttt{residual\_sf}, \texttt{cqa\_sf}) in download output \\
+\hline
+\texttt{lot\_size} & Grouped in "Site Size | Dimensions" row in Sales Grid \\
+\hline
+\texttt{site\_dimensions} & Grouped with lot size in Sales Grid \\
+\hline
+\texttt{actual\_age} & Grouped in "Actual Age | Effective Age" row in Sales Grid \\
+\hline
+\texttt{effective\_age} & Grouped with actual age in Sales Grid \\
+\hline
+\texttt{display\_only} & Column included in exports but excluded from model fitting (multiple allowed) \\
+\hline
+\end{tabularx}
+\end{center}
 
-Only one column per special type is allowed (except `display_only`). Assigning a special to a second column automatically clears it from the first.
+Only one column per special type is allowed (except `display_only`). Assigning a special to a second column automatically clears it from the first. A small blue badge appears next to the variable name showing its assigned special type.
 
 ## RCA Adjustments Overview
 
-The **Calculate RCA Adjustments \& Download** button (sidebar section 7, visible only in appraisal mode after fitting) computes market-derived adjustments for each comparable relative to the subject. The full RCA workflow is described in Chapter 9.
+The **Calculate RCA Adjustments \& Download** button (sidebar section 7, visible only in appraisal mode after fitting) computes market-derived adjustments for each comparable relative to the subject. The full RCA workflow is described in Chapter 10.
+
+After computing RCA adjustments, the **Generate Sales Grid \& Download** button (sidebar section 8) becomes available. The Sales Grid workflow is described in Chapter 11.
 
 \begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
 \small\textit{\textbf{Tip:} The CQA score you assign to the subject controls how much of the residual distribution is attributed to the subject. A score of 5.00 places the subject at the median of the comparables.}
@@ -356,9 +505,9 @@ The **Calculate RCA Adjustments \& Download** button (sidebar section 7, visible
 
 \newpage
 
-<!-- CHAPTER 4 -->
+<!-- CHAPTER 5 -->
 \begin{flushleft}
-{\color{earthaccent}\small\textbf{CHAPTER 4}}\\[2pt]
+{\color{earthaccent}\small\textbf{CHAPTER 5}}\\[2pt]
 {\Huge\textbf{Market Area Analysis Mode}}
 \end{flushleft}
 
@@ -371,8 +520,8 @@ When you select **Market Area Analysis** as the Purpose, earthUI provides the sa
 ## Differences from Appraisal Mode
 
 - **Skip first row is optional** --- a checkbox labeled "Skip first row (subject property)" appears below the Purpose selector. When checked, row 1 is excluded from fitting (like appraisal mode). When unchecked, all rows are included.
-- **No RCA section** --- the "Calculate RCA Adjustments \& Download" step is not available. Market mode focuses on model fitting and output, not per-comparable adjustments.
-- **Sidebar numbering** --- without the RCA step, the Download Report section is numbered 7 instead of 8.
+- **No RCA or Sales Grid sections** --- the "Calculate RCA Adjustments \& Download" and "Generate Sales Grid \& Download" steps are not available. Market mode focuses on model fitting and output, not per-comparable adjustments.
+- **Sidebar numbering** --- without the RCA and Sales Grid steps, the Download Report section is numbered 7 instead of 9.
 
 ## When to Use Market Mode
 
@@ -389,9 +538,9 @@ Market Area Analysis mode is appropriate when you are:
 
 \newpage
 
-<!-- CHAPTER 5 -->
+<!-- CHAPTER 6 -->
 \begin{flushleft}
-{\color{earthaccent}\small\textbf{CHAPTER 5}}\\[2pt]
+{\color{earthaccent}\small\textbf{CHAPTER 6}}\\[2pt]
 {\Huge\textbf{Variable Selection}}
 \end{flushleft}
 
@@ -413,10 +562,10 @@ Below the target selector, a table lists every remaining column with the followi
 
 | Column | Description |
 |:-------|:------------|
-| **Variable** | Column name (full name shown in tooltip if truncated) |
+| **Variable** | Column name (full name shown in tooltip if truncated). In appraisal/market modes, a blue badge shows the assigned special type. |
 | **Type** | Data type dropdown: `numeric`, `integer`, `character`, `logical`, `factor`, `Date`, `POSIXct` |
 | **Inc?** | Checkbox --- include this column as a predictor in the model |
-| **Special** | Dropdown (appraisal/market only): `no`, `contract_date`, `latitude`, `longitude`, `living_area`, `display_only` |
+| **Special** | Dropdown (appraisal/market only) --- see Special Column Types Reference below |
 | **Factor** | Checkbox --- treat this column as a categorical variable |
 | **Linear** | Checkbox --- force linear entry only (no hinge functions) |
 | **NAs** | Count of missing values. Shown in red when more than 30\% of values are missing |
@@ -434,6 +583,38 @@ You can override any detection by changing the **Type** dropdown. When you chang
 - **Factor** --- When checked, the column is treated as a categorical variable. This is appropriate for columns like `style`, `area_id`, or `grade` that represent discrete groups rather than continuous measurements. Factor columns enter the model as indicator (dummy) variables.
 - **Linear** --- When checked, the column is forced to enter the model linearly --- no hinge (piecewise-linear) functions are created for it. This is useful when you know a variable has a strictly linear relationship with the target.
 
+## Special Column Types Reference
+
+In appraisal and market modes, the **Special** dropdown provides the following options. Each type can be assigned to at most one column (except `display_only`, which allows multiple):
+
+**Date \& Time Types:**
+
+- `contract_date` --- Triggers automatic `sale_age` computation. The original date column is replaced by an integer column measuring days between the sale date and the Effective Date.
+- `listing_date` --- Used as a fallback for computing Days on Market (DOM = contract date $-$ listing date) when no explicit `dom` column is designated.
+- `dom` --- Identifies the Days on Market column. Displayed in the Sales Grid's APN row and Date of Sale row.
+
+**Monetary Types:**
+
+- `concessions` --- Identifies sale concessions (seller credits, buyer incentives, etc.). Used in the Sales Grid to compute Net Sale Price: Net SP = Sale Price $-$ Concessions.
+
+**Size \& Location Types:**
+
+- `latitude` --- Values are automatically rounded to 3 decimal places to prevent overfitting. Used for Haversine proximity calculations (distance from subject to each comp) and grouped in the Location row of the Sales Grid.
+- `longitude` --- Same rounding treatment as latitude. Used for proximity and the Location group.
+- `area` --- Typically a neighborhood or area identifier. Grouped with latitude and longitude in the "Loc: Long | Lat | Area" row of the Sales Grid.
+- `living_area` --- Enables per-square-foot residual calculations (`residual_sf` and `cqa_sf`) in the download output.
+- `lot_size` --- Grouped in the "Site Size | Dimensions" row of the Sales Grid.
+- `site_dimensions` --- Grouped with lot size in the Sales Grid (e.g., "75x120").
+
+**Age Types:**
+
+- `actual_age` --- Grouped in the "Actual Age | Effective Age" row of the Sales Grid.
+- `effective_age` --- Grouped with actual age in the Sales Grid.
+
+**Display Types:**
+
+- `display_only` --- The column is included in Excel exports but excluded from model fitting entirely. Use this for address fields, MLS numbers, parcel IDs, or other reference data that should not be a predictor. Multiple columns can have this designation.
+
 ## Multiple Targets
 
 Selecting more than one target variable fits a multi-response Earth model. When multiple targets are selected:
@@ -449,9 +630,9 @@ Selecting more than one target variable fits a multi-response Earth model. When 
 
 \newpage
 
-<!-- CHAPTER 6 -->
+<!-- CHAPTER 7 -->
 \begin{flushleft}
-{\color{earthaccent}\small\textbf{CHAPTER 6}}\\[2pt]
+{\color{earthaccent}\small\textbf{CHAPTER 7}}\\[2pt]
 {\Huge\textbf{Parameter Selection}}
 \end{flushleft}
 
@@ -537,9 +718,9 @@ Click **Save current as default** to store the current parameter configuration a
 
 \newpage
 
-<!-- CHAPTER 7 -->
+<!-- CHAPTER 8 -->
 \begin{flushleft}
-{\color{earthaccent}\small\textbf{CHAPTER 7}}\\[2pt]
+{\color{earthaccent}\small\textbf{CHAPTER 8}}\\[2pt]
 {\Huge\textbf{Fitting the Earth Model}}
 \end{flushleft}
 
@@ -549,7 +730,7 @@ Click **Save current as default** to store the current parameter configuration a
 
 ## The Fit Button
 
-Section 5 of the sidebar contains a single green button: **Fit Earth Model**. Before fitting, earthUI validates your configuration --- a target must be selected and at least one predictor must be included. In appraisal/market modes, latitude and longitude columns are rounded, and sale age is computed from the effective date and contract date (if designated).
+Section 5 of the sidebar contains a single green button: **Fit Earth Model**. This button is always visible (not inside a collapsible section). Before fitting, earthUI validates your configuration --- a target must be selected and at least one predictor must be included. In appraisal/market modes, latitude and longitude columns are rounded, and sale age is computed from the effective date and contract date (if designated).
 
 ## Fitting Modal \& Trace Output
 
@@ -579,9 +760,9 @@ Every fit (success or failure) writes a log file to your output folder:
 
 \newpage
 
-<!-- CHAPTER 8 -->
+<!-- CHAPTER 9 -->
 \begin{flushleft}
-{\color{earthaccent}\small\textbf{CHAPTER 8}}\\[2pt]
+{\color{earthaccent}\small\textbf{CHAPTER 9}}\\[2pt]
 {\Huge\textbf{Downloading Data}}
 \end{flushleft}
 
@@ -613,6 +794,19 @@ For each target variable, the following columns are appended:
 
 For multi-target models, a `_<i>` suffix is added to distinguish columns for each target.
 
+## Column Ordering \& Excel Formatting
+
+The ranking columns are placed at the **leftmost position** in the output file, in this order: `residual_sf`, `cqa_sf`, `residual`, `cqa`. This makes it easy to scan the sorted list and evaluate where the subject falls in the CQA distribution.
+
+These columns have Excel number formatting applied:
+
+| Column | Format | Example |
+|:-------|:-------|:--------|
+| `residual_sf` | Currency, 2 decimal places | \$12.34 |
+| `cqa_sf` | Numeric, 2 decimal places | 7.25 |
+| `residual` | Currency, 0 decimal places | \$15,200 |
+| `cqa` | Numeric, 2 decimal places | 6.80 |
+
 ## CQA Scores
 
 The CQA (Comparative Quality Analysis) score ranks each row's residual against all other residuals. For a given row, the CQA is the percentage of rows with a smaller signed residual, multiplied by 10. This produces a 0--10 scale where:
@@ -627,6 +821,8 @@ When a `living_area` column is designated, `cqa_sf` provides the same ranking ba
 
 In appraisal and market modes, comparable rows are sorted by `residual_sf` descending (or `residual` if no living area is designated). The subject row (row 1) remains in position 1 and is not sorted. In general mode, rows are exported in their original order.
 
+This sorting, combined with the leftmost ranking columns, allows the appraiser to quickly scan the comparables from most over-predicted to most under-predicted, and assess where the subject's assigned CQA score falls in that distribution.
+
 Factor levels in the prediction data are aligned with the training data before calling `predict()`. Rows with unseen factor levels will produce NA predictions.
 
 \begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
@@ -635,9 +831,9 @@ Factor levels in the prediction data are aligned with the training data before c
 
 \newpage
 
-<!-- CHAPTER 9 -->
+<!-- CHAPTER 10 -->
 \begin{flushleft}
-{\color{earthaccent}\small\textbf{CHAPTER 9}}\\[2pt]
+{\color{earthaccent}\small\textbf{CHAPTER 10}}\\[2pt]
 {\Huge\textbf{RCA Calculations \& Downloading}}
 \end{flushleft}
 
@@ -686,9 +882,145 @@ The adjustment columns tell you, for each comparable, how much the model attribu
 
 \newpage
 
-<!-- CHAPTER 10 -->
+<!-- CHAPTER 11 -->
 \begin{flushleft}
-{\color{earthaccent}\small\textbf{CHAPTER 10}}\\[2pt]
+{\color{earthaccent}\small\textbf{CHAPTER 11}}\\[2pt]
+{\Huge\textbf{Sales Comparison Grid}}
+\end{flushleft}
+
+\noindent\textcolor{earthaccent}{\rule{\textwidth}{2pt}}
+
+\bigskip
+
+## Overview \& Purpose
+
+The **Sales Comparison Grid** is an Excel workbook generated in appraisal mode (sidebar section 8) after computing RCA adjustments. It presents the subject property alongside selected comparables in a structured grid format, with Excel formulas that automatically compute adjustments and an adjusted sale price for each comparable.
+
+The grid is designed for the appraiser's workfile --- it combines the regression-derived adjustments from the Earth model with editable cells where the appraiser can allocate the CQA residual to specific property features. The output filename is `SalesGrid_<YYYYMMDD_HHMMSS>.xlsx`.
+
+## Comp Selection Modal
+
+Clicking "Generate Sales Grid \& Download" opens a modal dialog where you select which comparables to include:
+
+- **Recommended comps** are pre-checked. These are comparables with a gross adjustment percentage below 25\% of sale price, sorted by gross adjustment percentage ascending (smallest adjustments first).
+- **Additional comps** are listed below, unchecked by default. These have larger gross adjustments but are still available for selection.
+- A maximum of **30 comps** can be selected, producing up to **10 sheets** (3 comps per sheet).
+
+After confirming your selection, the selected comps are sorted by gross adjustment percentage ascending, so the most similar comparables appear on Sheet 1.
+
+## Grid Layout
+
+Each sheet has a 20-column layout accommodating the subject property plus 3 comparables. The columns for each entity are:
+
+\begin{center}
+\arrayrulecolor{earthaccent}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2cm}|X|}
+\hline
+\rowcolor{earthtableheader}\color{white}\textbf{Entity} & \color{white}\textbf{Columns (5 per entity)} \\
+\hline
+Subject & Label, Factual Value 1, Factual Value 2, Factual Value 3, Value Contribution (VC) \\
+\hline
+Each Comp & Factual Value 1, Factual Value 2, Factual Value 3, Value Contribution (VC), Adjustment \\
+\hline
+\end{tabularx}
+\end{center}
+
+The rows from top to bottom are:
+
+1. **Title** --- sheet name (e.g., "Intermediate Sales Comparable Grid --- Sheet 1 of 3")
+2. **Headers** --- "Subject" and comp column headers with address
+3. **Address** --- full property address
+4. **APN | MLS\# | DOM | Subj.Prox** --- parcel number, listing ID, days on market, and Haversine distance (miles) from subject
+5. **Sales Price | Concess. | Net SP** --- sale price, concessions, and Net Sale Price formula
+6. **Regression Features** header row
+7. **BASE VALUE** --- the model intercept
+8. **Date of Sale | OffMkt | OnMkt** --- contract date, sale age, and DOM
+9. **Grouped rows** (conditional) --- Location, Site Size, and/or Age groups
+10. **Model variable rows** --- one row per predictor (excluding grouped variables)
+11. **Blank separator row**
+12. **Residual Features** header row
+13. **CQA|Residual** --- CQA score + remaining residual formula
+14. **Residual feature rows** --- named + blank rows for appraiser entry
+15. **Total VC / Net Adjustment**
+16. **Net Adjustment \%**
+17. **Gross Adjustment \%**
+18. **Adjusted Sale Price** --- formula row
+19. **Copyright** footer
+
+## Sale Price, Concessions \& Net SP
+
+Row 5 shows three values for each comparable:
+
+- **Sale Price** --- the comparable's sale price from the data
+- **Concessions** --- the value from the column designated as `concessions` (0 if not designated)
+- **Net SP** --- an Excel formula: Sale Price $-$ Concessions
+
+The subject column shows "N/A" for sale price (since it is unknown) and any concessions value if available.
+
+## Grouped Rows (Location, Site, Age)
+
+When certain special types are designated and those variables appear in the model, earthUI creates grouped rows that combine related variables:
+
+**Loc: Long | Lat | Area** --- Appears when any of `longitude`, `latitude`, or `area` are in the model. Shows factual values for each constituent variable, a combined Value Contribution (sum of the individual VCs), and for comps, an adjustment (subject combined VC $-$ comp combined VC). Styled with light blue background on VC cells.
+
+**Site Size | Dimensions** --- Appears when `lot_size` or `site_dimensions` are in the model. Same structure as the Location group.
+
+**Actual Age | Effective Age** --- Appears when `actual_age` or `effective_age` are in the model. Same structure.
+
+Variables consumed by grouped rows are **excluded from the individual model variable rows** below, preventing double-counting in the adjustment totals.
+
+## Model Variable Rows
+
+Below the grouped rows (or directly below BASE VALUE if no grouped rows), one row per remaining model predictor shows:
+
+- **Factual values** for subject and each comp (the actual data values)
+- **Value Contribution (VC)** --- the g-function's contribution to the predicted value for that row
+- **Adjustment** (comps only) --- subject VC minus comp VC
+
+## CQA|Residual \& Residual Feature Rows
+
+The **CQA|Residual** row shows each property's CQA score and contains a formula for the **remaining residual** --- the portion of the residual not yet allocated to specific features. The formula is:
+
+$$\text{Remaining Residual} = \text{Total Residual} - \sum(\text{Residual Feature VCs below})$$
+
+Below this are **residual feature rows** --- 5 named rows (Location, View/Appeal, Condition, Quality, Other) plus 6 blank rows. These are input cells where the appraiser enters value contributions for features not captured by the model. As the appraiser fills in values, the Remaining Residual formula automatically decreases.
+
+For each comp, the adjustment column contains a formula: subject feature VC $-$ comp feature VC.
+
+## Adjusted Sale Price Formula
+
+The **Adjusted Sale Price** row contains Excel formulas:
+
+- **Subject**: Sum of all Value Contribution cells from BASE VALUE through the last residual feature row. This represents the model's total prediction for the subject plus any appraiser-allocated residual features.
+- **Comps**: Net SP + sum of all Adjustment cells from the first grouped or variable row through the last residual feature row. This gives the comparable's sale price after all regression-derived and appraiser-entered adjustments.
+
+## Sheet Protection \& Editable Cells
+
+Each sheet is **protected** to prevent accidental modification of formulas and data. The protection locks:
+
+- All formula cells (Net SP, remaining residual, adjustments, adjusted sale price, etc.)
+- All data cells (addresses, sale prices, factual values, value contributions from the model)
+- Labels and headers
+
+The only **unlocked** (editable) cells are the residual feature Value Contribution inputs --- the cells under the CQA|Residual row where the appraiser enters breakdowns. These are styled with a light yellow background to indicate they are editable.
+
+## Working with the Grid in Excel
+
+1. **Open the file** in Excel or a compatible spreadsheet application.
+2. **Review the regression adjustments** --- the model-derived adjustments are pre-populated and locked.
+3. **Allocate the residual** --- in the residual feature rows (yellow cells), enter your assessment of how much of the remaining residual is attributable to each feature (Location, View, Condition, Quality, etc.). The Remaining Residual formula will decrease as you allocate.
+4. **Check the Adjusted Sale Price** --- this formula automatically updates as you enter residual feature values.
+5. **Multiple sheets** --- if you selected more than 3 comps, navigate between sheets. Each sheet has the same subject in the left column with 3 different comps.
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} The goal is to allocate the CQA residual across the feature rows until the Remaining Residual is close to zero. This demonstrates that you can account for the difference between each comparable's regression estimate and its actual sale price.}
+\end{tcolorbox}
+
+\newpage
+
+<!-- CHAPTER 12 -->
+\begin{flushleft}
+{\color{earthaccent}\small\textbf{CHAPTER 12}}\\[2pt]
 {\Huge\textbf{Downloading Reports}}
 \end{flushleft}
 
@@ -696,7 +1028,7 @@ The adjustment columns tell you, for each comparable, how much the model attribu
 
 \bigskip
 
-After fitting a model, the Download Report section (sidebar section 7 or 8, depending on the purpose mode) lets you generate a comprehensive formatted report.
+After fitting a model, the Download Report section (sidebar section 7, 8, or 9 depending on the purpose mode) lets you generate a comprehensive formatted report.
 
 ## Report Formats
 

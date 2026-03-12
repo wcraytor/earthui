@@ -888,46 +888,40 @@ generate_sales_grid <- function(adjusted_file,
              stack = TRUE)
 
     # === Adjusted Sale Price ===
-    # Formula: Net SP + grouped row adjustments + model var adjustments
-    #          + CQA residual adjustment + residual feature adjustments
+    # Subject: sum of all Value Contributions (col 5) above Total VC row
+    # Comps: Net SP + sum of all Adjustments (col_start+4) above Total VC row
     writeData(wb, s, "Adjusted Sale Price",
               startRow = row_adj_sp, startCol = 1)
-    subj_val <- col_num(df, 1, "subject_value")
-    if (subj_val != 0) {
-      mergeCells(wb, s, cols = 2:5, rows = row_adj_sp)
-      writeData(wb, s, subj_val, startRow = row_adj_sp, startCol = 2)
-      addStyle(wb, s, adj_sp_style, rows = row_adj_sp, cols = 2,
-               stack = TRUE)
-    }
+
+    # Subject formula: SUM of VC column (col 5) from base_value through resid_end
+    # (non-VC rows like date_info, blank, resid_hdr have empty/0 cells — safe to sum)
+    subj_vc_l <- col_letter(5)
+    # Determine first adjustment row (first grouped row, or vars_start, or cqa)
+    first_adj_row <- if (has_loc_row) row_loc
+                     else if (has_site_row) row_site
+                     else if (has_age_row) row_age
+                     else if (n_vars > 0) row_vars_start
+                     else row_cqa
+    subj_asp_formula <- paste0("SUM(", subj_vc_l, row_base_value, ":",
+                               subj_vc_l, row_resid_end, ")")
+    mergeCells(wb, s, cols = 2:5, rows = row_adj_sp)
+    writeFormula(wb, s, x = subj_asp_formula,
+                 startRow = row_adj_sp, startCol = 2)
+    addStyle(wb, s, adj_sp_style, rows = row_adj_sp, cols = 2,
+             stack = TRUE)
+
+    # Comp formulas: Net SP + SUM of adjustments above Total VC row
     for (ci in seq_len(n_on_sheet)) {
       r <- sheet_comps[ci]
       col_start <- 1 + ci * 5
       adj_col_l <- col_letter(col_start + 4)
-      # Net SP cell: col_start+2 on the sale_price row
       net_sp_col_l <- col_letter(col_start + 2)
-      # Adjusted Sale Price = Net SP
-      #   + grouped row adjustments (individual cells)
-      #   + SUM(model variable adjustments)
-      #   + CQA residual adjustment
-      #   + SUM(residual feature adjustments)
-      asp_parts <- paste0(net_sp_col_l, row_sale_price)
-      # Add each grouped row adjustment
-      for (gr in grouped_adj_rows) {
-        asp_parts <- paste0(asp_parts, "+", adj_col_l, gr)
-      }
-      # Add model variable adjustments
-      if (n_vars > 0) {
-        asp_parts <- paste0(asp_parts,
-          "+SUM(", adj_col_l, row_vars_start, ":", adj_col_l, row_vars_end, ")")
-      }
-      # CQA residual adjustment
-      asp_parts <- paste0(asp_parts, "+", adj_col_l, row_cqa)
-      # Residual feature adjustments
-      asp_parts <- paste0(asp_parts,
-        "+SUM(", adj_col_l, row_resid_start, ":", adj_col_l, row_resid_end, ")")
-
+      # Net SP + SUM(adjustments from first_adj_row through resid_end)
+      asp_formula <- paste0(net_sp_col_l, row_sale_price,
+                            "+SUM(", adj_col_l, first_adj_row, ":",
+                            adj_col_l, row_resid_end, ")")
       mergeCells(wb, s, cols = col_start:(col_start + 4), rows = row_adj_sp)
-      writeFormula(wb, s, x = asp_parts,
+      writeFormula(wb, s, x = asp_formula,
                    startRow = row_adj_sp, startCol = col_start)
       addStyle(wb, s, adj_sp_style, rows = row_adj_sp,
                cols = col_start, stack = TRUE)
@@ -946,6 +940,25 @@ generate_sales_grid <- function(adjusted_file,
               startRow = row_copyright, startCol = 1)
     addStyle(wb, s, copyright_style, rows = row_copyright, cols = 1:20,
              gridExpand = TRUE, stack = TRUE)
+
+    # === Sheet protection ===
+    # Default: all cells locked. Unlock the residual feature VC input cells
+    # (rows row_resid_start:row_resid_end) so appraiser can edit them.
+    unlocked <- createStyle(locked = FALSE)
+    resid_rows <- row_resid_start:row_resid_end
+    # Unlock subject VC column (col 5)
+    addStyle(wb, s, unlocked, rows = resid_rows, cols = 5,
+             gridExpand = TRUE, stack = TRUE)
+    # Unlock comp VC columns (col_start + 3); adjustment col (+4) is a formula, stays locked
+    for (ci in seq_len(n_on_sheet)) {
+      col_start <- 1 + ci * 5
+      addStyle(wb, s, unlocked, rows = resid_rows, cols = col_start + 3,
+               gridExpand = TRUE, stack = TRUE)
+    }
+    protectWorksheet(wb, s, protect = TRUE,
+                     lockFormattingCells = FALSE, lockFormattingColumns = FALSE,
+                     lockInsertingColumns = TRUE, lockInsertingRows = TRUE,
+                     lockDeletingColumns = TRUE, lockDeletingRows = TRUE)
 
     # Report progress
     if (is.function(progress_fn)) {

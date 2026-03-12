@@ -2574,7 +2574,36 @@ function(input, output, session) {
         }
       }
 
-      writexl::write_xlsx(export_df, file)
+      # Move ranking columns to the left: residual_sf, cqa_sf, residual, cqa
+      rank_cols <- c("residual_sf", "cqa_sf", "residual", "cqa")
+      rank_cols <- rank_cols[rank_cols %in% names(export_df)]
+      if (length(rank_cols) > 0L) {
+        other_cols <- setdiff(names(export_df), rank_cols)
+        export_df <- export_df[, c(rank_cols, other_cols), drop = FALSE]
+      }
+
+      # Write with openxlsx for cell formatting
+      wb <- openxlsx::createWorkbook()
+      openxlsx::addWorksheet(wb, "Data")
+      openxlsx::writeData(wb, "Data", export_df)
+      # Apply number formats to specific columns
+      col_names <- names(export_df)
+      fmt_map <- list(
+        residual_sf = "$#,##0.00",
+        cqa_sf      = "0.00",
+        residual    = "$#,##0",
+        cqa         = "0.00"
+      )
+      for (cn in names(fmt_map)) {
+        ci <- match(cn, col_names)
+        if (!is.na(ci)) {
+          openxlsx::addStyle(wb, "Data",
+            style = openxlsx::createStyle(numFmt = fmt_map[[cn]]),
+            rows = 2:(nrow(export_df) + 1L), cols = ci,
+            gridExpand = TRUE, stack = TRUE)
+        }
+      }
+      openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
       session$sendCustomMessage("download_check", list(id = btn_id))
     }, error = function(e) {
       msg <- paste("Download error:", conditionMessage(e))
