@@ -4,7 +4,12 @@
 \alias{render_report}
 \title{Render an earth model report}
 \usage{
-render_report(earth_result, output_format = "html", output_file = NULL)
+render_report(
+  earth_result,
+  output_format = "html",
+  output_file = NULL,
+  paper_size = "letter"
+)
 }
 \arguments{
 \item{earth_result}{An object of class \code{"earthUI_result"} as returned by
@@ -15,6 +20,9 @@ render_report(earth_result, output_format = "html", output_file = NULL)
 
 \item{output_file}{Character. Path for the output file. If \code{NULL}, a
 temporary file is created.}
+
+\item{paper_size}{Character. Paper size for PDF output: \code{"letter"} (US) or
+\code{"a4"} (European). Default is \code{"letter"}. Ignored for HTML/Word.}
 }
 \value{
 The path to the rendered output file (invisibly).

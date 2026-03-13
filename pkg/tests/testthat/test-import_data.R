@@ -50,3 +50,18 @@ test_that("import_data reads Excel files", {
   expect_gt(nrow(df), 0L)
   expect_gt(ncol(df), 0L)
 })
+
+test_that("import_data reads European CSV (semicolon sep, comma decimal)", {
+  tmp <- tempfile(fileext = ".csv")
+  on.exit(unlink(tmp))
+  # Write EU-style CSV: semicolon separator, comma decimal
+  writeLines(c("price;area;city",
+               "200000,50;1500,75;Berlin",
+               "350000,00;2000,00;Munich"), tmp)
+  df <- import_data(tmp, sep = ";", dec = ",")
+  expect_s3_class(df, "data.frame")
+  expect_equal(nrow(df), 2L)
+  expect_equal(df$price[1], 200000.50)
+  expect_equal(df$area[1], 1500.75)
+  expect_equal(df$city[1], "Berlin")
+})

@@ -1,3 +1,23 @@
+# earthUI 0.1.3
+
+## Locale & Regional Settings
+
+* Country-based locale system with 31 country presets controlling CSV
+  separator, decimal mark, thousands separator, date format ordering, and
+  paper size.
+* Country dropdown with individual override dropdowns for Paper, CSV sep,
+  Decimal, and Date format.
+* Global locale defaults saved via "Save as my default" (SQLite persistence),
+  independent of per-file settings.
+* Number formatting on plot axes and slope labels adapts to locale (e.g.,
+  German uses period thousands, Finnish uses space, Swiss uses apostrophe).
+* CSV import uses locale-aware separator and decimal mark.
+* PDF reports respect locale paper size (Letter or A4).
+* Date parsing tries locale-preferred format order first (MDY for US, DMY
+  for Europe, YMD for Sweden/Japan).
+* Currency symbols removed from all outputs --- earthUI is now
+  currency-agnostic.
+
 # earthUI 0.1.2
 
 ## Sales Comparison Grid (Appraisal Mode)
@@ -89,7 +109,7 @@
 * Correlation matrix heatmap.
 * Diagnostic plots: residuals vs fitted, Q-Q, actual vs predicted.
 * Adaptive axis formatting — 3 decimal places for lat/long-scale data,
-  commas for large values, dollar signs for target.
+  commas for large values.
 * Slope labels scaled to axis range (`/0.001` for small-range, `/unit` for
   large-range variables).
 

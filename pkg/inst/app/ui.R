@@ -238,7 +238,8 @@ fluidPage(
           if (msg.settings) {
             var s = msg.settings;
             // Selectize inputs
-            ['target','degree','pmethod','glm_family','trace','varmod_method'].forEach(function(id) {
+            ['target','locale_country','locale_paper','locale_csv_sep','locale_dec','locale_date',
+             'degree','pmethod','glm_family','trace','varmod_method'].forEach(function(id) {
               if (s[id] !== undefined) {
                 var el = document.getElementById(id);
                 if (el && el.selectize) {
@@ -345,6 +346,8 @@ fluidPage(
       // Selectize inputs (includes new params 1-4)
       var selects = {
         weights_col: 'null',
+        locale_country: 'us', locale_paper: 'letter',
+        locale_csv_sep: ',', locale_dec: '.', locale_date: 'mdy',
         degree: '1', pmethod: 'backward', glm_family: 'none',
         trace: '0', varmod_method: 'lm'
       };
@@ -451,6 +454,28 @@ fluidPage(
 
       # --- Data Import ---
       h4("1. Import Data"),
+      fluidRow(
+        column(6, selectInput("locale_country", "Country",
+                   choices = earthUI:::locale_country_choices_(),
+                   selected = "us", width = "100%")),
+        column(6, selectInput("locale_paper", "Paper",
+                   choices = c("Letter" = "letter", "A4" = "a4"),
+                   selected = "letter", width = "100%"))
+      ),
+      fluidRow(
+        column(4, selectInput("locale_csv_sep", "CSV sep",
+                   choices = c("," = ",", ";" = ";"),
+                   selected = ",", width = "100%")),
+        column(4, selectInput("locale_dec", "Decimal",
+                   choices = c("." = ".", "," = ","),
+                   selected = ".", width = "100%")),
+        column(4, selectInput("locale_date", "Date",
+                   choices = c("MM/DD/YY" = "mdy", "DD/MM/YY" = "dmy",
+                               "YY-MM-DD" = "ymd"),
+                   selected = "mdy", width = "100%"))
+      ),
+      actionLink("locale_save_default", "Save as my default",
+                 style = "font-size: 0.85em; color: #5e81ac;"),
       fileInput("file_input", "Choose CSV or Excel file",
                 accept = c(".csv", ".xlsx", ".xls")),
       uiOutput("sheet_selector"),

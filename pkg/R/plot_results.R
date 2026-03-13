@@ -13,35 +13,36 @@ auto_digits_ <- function(x) {
 # For lat/long-scale variables (range < 1) the unit becomes 0.001.
 format_slope_labels_ <- function(slopes, x_breaks) {
   d <- auto_digits_(x_breaks)
+  bm <- locale_big_mark_()
+  dm <- locale_dec_mark_()
   unit_size <- 10^(-d)          # 1, 0.1, 0.01, or 0.001
   scaled <- slopes * unit_size
   unit_label <- if (d == 0L) "/unit" else paste0("/", format(unit_size, scientific = FALSE))
   paste0(
-    ifelse(scaled >= 0, "+$", "-$"),
-    formatC(abs(scaled), format = "f", digits = 2, big.mark = ","),
+    ifelse(scaled >= 0, "+", "-"),
+    formatC(abs(scaled), format = "f", digits = 2, big.mark = bm, decimal.mark = dm),
     unit_label
   )
 }
 
-# Internal: format axis labels as $1,234 (dollar with commas)
+# Internal: format axis labels as 1,234 (with locale-aware separators)
 # Adapts decimal places to value range (e.g. lat/long gets 3 dp)
-# Negative values: -$200,000 (sign before dollar sign)
 dollar_format_ <- function(x) {
   d <- auto_digits_(x)
+  bm <- locale_big_mark_()
+  dm <- locale_dec_mark_()
   ifelse(is.na(x), "",
-         ifelse(x < 0,
-                paste0("-$", formatC(abs(x), format = "f",
-                                     digits = d, big.mark = ",")),
-                paste0("$", formatC(x, format = "f",
-                                    digits = d, big.mark = ","))))
+         formatC(x, format = "f", digits = d, big.mark = bm, decimal.mark = dm))
 }
 
-# Internal: format axis labels with commas (no dollar sign)
+# Internal: format axis labels with locale-aware separators
 # Adapts decimal places to value range (e.g. lat/long gets 3 dp)
 comma_format_ <- function(x) {
   d <- auto_digits_(x)
+  bm <- locale_big_mark_()
+  dm <- locale_dec_mark_()
   ifelse(is.na(x), "",
-         formatC(x, format = "f", digits = d, big.mark = ","))
+         formatC(x, format = "f", digits = d, big.mark = bm, decimal.mark = dm))
 }
 
 # Internal: return font family with fallback for environments without showtext

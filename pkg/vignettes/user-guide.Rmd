@@ -43,11 +43,52 @@ launch()
 
 This opens the Shiny app at `http://localhost:7878`.
 
+## Locale & Regional Settings
+
+earthUI supports international number, date, and CSV formatting conventions
+through a country-based locale system. The **Country** dropdown in Section 1
+of the sidebar (below the file upload) selects a preset for 31 supported
+countries. Each preset configures:
+
+- **CSV separator** --- comma (`,`) for US/UK/Japan or semicolon (`;`) for
+  most of Europe, where the comma is used as a decimal mark.
+- **Decimal mark** --- period (`.`) or comma (`,`).
+- **Thousands separator** --- comma (US/UK/Japan), period (Germany/Italy/Spain),
+  space (Finland/France/Poland/Baltics/Ukraine/Russia), or apostrophe
+  (Switzerland).
+- **Date format** --- MM/DD/YYYY (US), DD/MM/YYYY (most of Europe), or
+  YYYY-MM-DD (Sweden/Lithuania/Japan/Canada).
+- **Paper size** --- Letter (US/Canada/Mexico) or A4 (everywhere else).
+
+### Override Dropdowns
+
+Below the country selector, four override dropdowns let you change individual
+settings without switching countries:
+
+- **Paper** --- Letter or A4 (affects PDF report page size)
+- **CSV sep** --- comma or semicolon (used when importing CSV files)
+- **Decimal** --- period or comma (used in number display on plots and axes)
+- **Date** --- MDY, DMY, or YMD (controls the order in which date formats
+  are tried when parsing date columns)
+
+When you change the country, all overrides reset to that country's defaults.
+Changing an override only affects that one setting.
+
+### Saving Defaults
+
+Click **Save as my default** to store your locale preferences globally. These
+defaults apply to all future sessions regardless of which data file you load.
+Per-file settings (target, predictors, parameters) are saved separately in
+the browser's local storage, but locale defaults persist across all files via
+an SQLite database.
+
 ## MLS Input Data Requirements
 
 For real estate workflows, your input data typically comes from an MLS export.
 earthUI accepts CSV and Excel files. On import, column names are automatically
-converted to `snake_case`, e.g. "Area ID" gets converted to "area_id".
+converted to `snake_case`, e.g. "Area ID" gets converted to "area_id". The CSV
+separator and decimal mark used during import are determined by the locale
+settings (see "Locale & Regional Settings" above).
 
 ### Required Columns for Appraisal Mode
 
@@ -182,7 +223,7 @@ rating to the subject property.  The output is sorted by `residual_sf` and
 `cqa_sf` to help you assess where the subject falls in the ranking.  If the model is good quality, then
 the properties should be ranked from lowest appealing to most appealing based
 on residual features that did not go into the regression.  The middle value
-should be approximately $0, the lower half negative values and the upper half
+should be approximately 0, the lower half negative values and the upper half
 positive values.  You should find the worst quality homes, or "fixers" near the
 bottom of the ranking and the nicest homes at the top.  There will usually be
 exceptions for anomalies such as foreclosures, short sales, probate (inheritance
@@ -208,9 +249,9 @@ anomaly.
 The ranking columns are placed leftmost: `residual_sf`, `cqa_sf`, `residual`,
 `cqa`. Excel formatting:
 
-- `residual_sf` --- currency, 2 decimal places
+- `residual_sf` --- numeric, 2 decimal places
 - `cqa_sf` --- numeric, 2 decimal places
-- `residual` --- currency, 0 decimal places
+- `residual` --- numeric, 0 decimal places
 - `cqa` --- numeric, 2 decimal places
 
 ### CQA Scores
@@ -222,6 +263,21 @@ CQA ranks each row's residual against all others on a 0--10 scale:
 - **CQA ~5**: near the median
 
 In appraisal/market modes, rows are sorted by `residual_sf` descending.
+
+## mgcvUI Auto-Export
+
+On every successful fit with `degree <= 2`, earthUI automatically saves the
+full result object as an `.rds` file to the Project Output Folder. The filename
+follows the pattern `<datafile>_earthUI_result_<YYYYMMDD_HHMMSS>.rds`.
+
+This file can be loaded by [mgcvUI](https://github.com/wcraytor/mgcvUI) (a
+companion Shiny app for GAM modeling) using `readRDS()`. mgcvUI uses the
+earth model's knot locations and basis functions as starting points for GAM
+smooth terms, enabling a seamless transition from MARS to GAM modeling.
+
+Models with `degree > 2` are skipped because mgcvUI only supports pairwise
+interactions. A manual **Export for mgcvUI** button is also available in the
+sidebar for on-demand export.
 
 ## RCA Calculations (Step 7, Appraisal Only)
 
@@ -320,7 +376,7 @@ Three formats via Quarto:
 
 - **HTML** --- self-contained with interactive tables
 - **Word** --- `.docx` for editing and distribution
-- **PDF** --- typeset with LuaLaTeX
+- **PDF** --- typeset with LuaLaTeX (paper size follows locale: Letter or A4)
 
 Reports include: dataset description, model specification, allowed
 interactions, summary metrics, model equation, coefficients, variable

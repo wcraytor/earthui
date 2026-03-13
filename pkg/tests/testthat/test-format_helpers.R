@@ -55,8 +55,8 @@ test_that("auto_digits_ boundary: range exactly 100", {
 test_that("format_slope_labels_ uses /unit for large-range breaks", {
   labels <- earthUI:::format_slope_labels_(c(100, -50), c(200000, 500000))
   expect_true(all(grepl("/unit$", labels)))
-  expect_match(labels[1], "^\\+\\$")
-  expect_match(labels[2], "^-\\$")
+  expect_match(labels[1], "^\\+")
+  expect_match(labels[2], "^-")
 })
 
 test_that("format_slope_labels_ uses /0.001 for lat/long-range breaks", {
@@ -71,15 +71,15 @@ test_that("format_slope_labels_ uses /0.01 for small-range breaks", {
 
 # -- dollar_format_ ------------------------------------------------------------
 
-test_that("dollar_format_ formats positive values with $", {
+test_that("dollar_format_ formats positive values with locale separators", {
   result <- earthUI:::dollar_format_(c(200000, 350000))
-  expect_match(result[1], "^\\$200,000$")
-  expect_match(result[2], "^\\$350,000$")
+  expect_match(result[1], "^200,000$")
+  expect_match(result[2], "^350,000$")
 })
 
-test_that("dollar_format_ formats negative values with -$", {
+test_that("dollar_format_ formats negative values", {
   result <- earthUI:::dollar_format_(c(-100000, 200000))
-  expect_match(result[1], "^-\\$100,000$")
+  expect_match(result[1], "^-100,000$")
 })
 
 test_that("dollar_format_ returns empty string for NA", {
@@ -90,7 +90,7 @@ test_that("dollar_format_ returns empty string for NA", {
 test_that("dollar_format_ adapts decimal places to range", {
   # Small range (lat/long): 3 decimal places
   result <- earthUI:::dollar_format_(c(-122.400, -122.385))
-  expect_match(result[1], "\\$122\\.400$")
+  expect_match(result[1], "122\\.400$")
 })
 
 # -- comma_format_ -------------------------------------------------------------
@@ -109,6 +109,81 @@ test_that("comma_format_ returns empty string for NA", {
 test_that("comma_format_ adapts decimal places to range", {
   result <- earthUI:::comma_format_(c(1.1, 5.5))
   expect_match(result[1], "1\\.10$")  # 2 dp for range < 10
+})
+
+# -- locale formatting ---------------------------------------------------------
+
+test_that("German locale uses period as big mark and comma as decimal", {
+  earthUI:::set_locale_("de")
+  on.exit(earthUI:::set_locale_("us"))
+  result <- earthUI:::dollar_format_(c(200000, 350000))
+  expect_match(result[1], "^200\\.000$")
+  expect_match(result[2], "^350\\.000$")
+})
+
+test_that("Finnish locale uses space as big mark", {
+  earthUI:::set_locale_("fi")
+  on.exit(earthUI:::set_locale_("us"))
+  result <- earthUI:::dollar_format_(c(200000, 350000))
+  expect_match(result[1], "^200 000$")
+})
+
+test_that("German locale comma_format_ uses correct separators", {
+  earthUI:::set_locale_("de")
+  on.exit(earthUI:::set_locale_("us"))
+  result <- earthUI:::comma_format_(c(1.1, 5.5))
+  expect_match(result[1], "1,10$")
+})
+
+test_that("locale helpers return correct values for US", {
+  earthUI:::set_locale_("us")
+  expect_equal(earthUI:::locale_csv_sep_(), ",")
+  expect_equal(earthUI:::locale_csv_dec_(), ".")
+  expect_equal(earthUI:::locale_big_mark_(), ",")
+  expect_equal(earthUI:::locale_paper_(), "letter")
+})
+
+test_that("locale helpers return correct values for Germany", {
+  earthUI:::set_locale_("de")
+  on.exit(earthUI:::set_locale_("us"))
+  expect_equal(earthUI:::locale_csv_sep_(), ";")
+  expect_equal(earthUI:::locale_csv_dec_(), ",")
+  expect_equal(earthUI:::locale_big_mark_(), ".")
+  expect_equal(earthUI:::locale_paper_(), "a4")
+})
+
+test_that("locale helpers return correct values for Finland", {
+  earthUI:::set_locale_("fi")
+  on.exit(earthUI:::set_locale_("us"))
+  expect_equal(earthUI:::locale_csv_sep_(), ";")
+  expect_equal(earthUI:::locale_csv_dec_(), ",")
+  expect_equal(earthUI:::locale_big_mark_(), " ")
+  expect_equal(earthUI:::locale_paper_(), "a4")
+})
+
+test_that("locale date formats prioritize locale-preferred order", {
+  earthUI:::set_locale_("de")
+  on.exit(earthUI:::set_locale_("us"))
+  fmts <- earthUI:::locale_date_formats_()
+  expect_equal(fmts[1], "%d/%m/%Y")  # DD/MM first for dmy
+
+  earthUI:::set_locale_("us")
+  fmts <- earthUI:::locale_date_formats_()
+  expect_equal(fmts[1], "%m/%d/%Y")  # MM/DD first for mdy
+
+  earthUI:::set_locale_("se")
+  fmts <- earthUI:::locale_date_formats_()
+  expect_equal(fmts[1], "%Y-%m-%d")  # ISO first for ymd
+})
+
+test_that("set_locale_ accepts overrides", {
+  earthUI:::set_locale_("us", csv_sep = ";", paper = "a4")
+  on.exit(earthUI:::set_locale_("us"))
+  expect_equal(earthUI:::locale_csv_sep_(), ";")
+  expect_equal(earthUI:::locale_paper_(), "a4")
+  # Non-overridden values use US defaults
+  expect_equal(earthUI:::locale_csv_dec_(), ".")
+  expect_equal(earthUI:::locale_big_mark_(), ",")
 })
 
 # -- format_number_ ------------------------------------------------------------

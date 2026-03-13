@@ -7,6 +7,10 @@
 #'   `.csv`, `.xlsx`, `.xls`.
 #' @param sheet Character or integer. For Excel files, the sheet to read.
 #'   Defaults to the first sheet. Ignored for CSV files.
+#' @param sep Character. Field separator for CSV files. Default `","`.
+#'   Use `";"` for European-style CSVs.
+#' @param dec Character. Decimal separator for CSV files. Default `"."`.
+#'   Use `","` for European-style CSVs.
 #' @param ... Additional arguments passed to [utils::read.csv()] or
 #'   [readxl::read_excel()].
 #'
@@ -19,7 +23,7 @@
 #' demo_file <- system.file("extdata", "Appraisal_1.csv", package = "earthUI")
 #' df <- import_data(demo_file)
 #' head(df)
-import_data <- function(filepath, sheet = 1, ...) {
+import_data <- function(filepath, sheet = 1, sep = ",", dec = ".", ...) {
   if (!is.character(filepath) || length(filepath) != 1L) {
     stop("`filepath` must be a single character string.", call. = FALSE)
   }
@@ -31,7 +35,7 @@ import_data <- function(filepath, sheet = 1, ...) {
 
   df <- switch(ext,
     csv = utils::read.csv(filepath, stringsAsFactors = FALSE,
-                          check.names = FALSE, ...),
+                          check.names = FALSE, sep = sep, dec = dec, ...),
     xlsx = ,
     xls = readxl::read_excel(filepath, sheet = sheet, ...),
     stop("Unsupported file format: .", ext,

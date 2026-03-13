@@ -119,6 +119,7 @@ format:
     \item Main Panel Tabs
     \item Settings Persistence
     \item Dark Mode
+    \item Locale \& Regional Settings
   \end{itemize}
 
 \item \textbf{\textcolor{earthgreen}{Appraisal Mode}}
@@ -169,6 +170,7 @@ format:
     \item Column Ordering \& Excel Formatting
     \item CQA Scores
     \item Sorting \& Subject Row
+    \item mgcvUI Auto-Export
   \end{itemize}
 
 \item \textbf{\textcolor{earthgreen}{RCA Calculations \& Downloading}}
@@ -280,7 +282,7 @@ For real estate appraisal and market analysis workflows, your input data typical
 
 ## File Format \& Structure
 
-earthUI accepts **CSV** and **Excel** (`.xlsx`, `.xls`) files. On import, column names are automatically converted to `snake_case` --- for example, "Living SqFt" becomes `living_sqft`, "Contract Date" becomes `contract_date`, and "Sale Price" becomes `sale_price`. This normalization ensures consistent column references throughout the workflow.
+earthUI accepts **CSV** and **Excel** (`.xlsx`, `.xls`) files. On import, column names are automatically converted to `snake_case` --- for example, "Living SqFt" becomes `living_sqft`, "Contract Date" becomes `contract_date`, and "Sale Price" becomes `sale_price`. This normalization ensures consistent column references throughout the workflow. The CSV separator and decimal mark used during import are determined by the locale settings (see Chapter 3, "Locale \& Regional Settings").
 
 Your data file should be a flat table with one row per property and one column per attribute. The first row of the file must contain column headers.
 
@@ -355,7 +357,7 @@ For example, your MLS might export living area as "GLA", "Living SqFt", "liv\_ar
 
 - **Missing values (NA)**: Rows with NA values in any predictor or target column are automatically removed before fitting. The `na.action` is always set to `na.fail` internally, with NA removal handled before the call to `earth()`.
 - **Date columns**: Dates should be in a format R can parse (e.g., `2025-06-15`, `06/15/2025`, `June 15, 2025`). earthUI auto-detects date columns when at least 80\% of values parse successfully.
-- **Numeric columns**: Sale price, living area, lot size, concessions, and similar fields must be numeric. If your MLS exports prices with dollar signs or commas (e.g., "\$350,000"), you may need to clean these before import.
+- **Numeric columns**: Sale price, living area, lot size, concessions, and similar fields must be numeric. If your MLS exports prices with currency symbols or thousands separators (e.g., "\$350,000" or "350.000,00"), you may need to clean these before import.
 - **Factor columns**: Categorical variables like area ID, style, or condition should contain a manageable number of unique values. earthUI auto-detects factors but you can override the detection.
 
 \begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
@@ -444,6 +446,68 @@ earthUI automatically saves your configuration to the browser's local storage, k
 ## Dark Mode
 
 Click the moon/sun icon in the upper-right corner to toggle between light and dark themes. The theme preference is saved in local storage and persists across sessions.
+
+## Locale \& Regional Settings
+
+earthUI supports international number, date, and CSV formatting conventions through a country-based locale system. The **Country** dropdown in Section 1 of the sidebar (below the file upload) selects a preset for 31 supported countries. Each preset configures:
+
+- **CSV separator** --- comma (`,`) for US/UK/Japan or semicolon (`;`) for most of Europe, where the comma is used as a decimal mark.
+- **Decimal mark** --- period (`.`) or comma (`,`).
+- **Thousands separator** --- comma (US/UK/Japan), period (Germany/Italy/Spain), space (Finland/France/Poland/Baltics/Ukraine/Russia), or apostrophe (Switzerland).
+- **Date format** --- MM/DD/YYYY (US), DD/MM/YYYY (most of Europe), or YYYY-MM-DD (Sweden/Lithuania/Japan/Canada).
+- **Paper size** --- Letter (US/Canada/Mexico) or A4 (everywhere else).
+
+### Supported Countries
+
+\begin{center}
+\arrayrulecolor{earthaccent}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.2cm}|c|c|c|c|c|}
+\hline
+\rowcolor{earthtableheader}\color{white}\textbf{Country} & \color{white}\textbf{CSV Sep} & \color{white}\textbf{Decimal} & \color{white}\textbf{Thousands} & \color{white}\textbf{Date} & \color{white}\textbf{Paper} \\
+\hline
+US, Canada (csv) & , & . & , & MDY/YMD & Letter \\
+\hline
+UK, Ireland, AU, NZ & , & . & , & DMY & A4 \\
+\hline
+Germany, Austria, Belgium, Netherlands, Italy, Spain, Portugal, Denmark, Brazil & ; & , & . & DMY & A4 \\
+\hline
+France, Poland, Czech Rep., Norway, Latvia, Estonia & ; & , & (space) & DMY & A4 \\
+\hline
+Finland, Sweden & ; & , & (space) & DMY/YMD & A4 \\
+\hline
+Switzerland & ; & , & ' & DMY & A4 \\
+\hline
+Ukraine, Russia & ; & , & (space) & DMY & A4 \\
+\hline
+Turkey & ; & , & . & DMY & A4 \\
+\hline
+Japan, South Korea & , & . & , & YMD & A4 \\
+\hline
+Mexico & , & . & , & DMY & Letter \\
+\hline
+Lithuania & ; & , & (space) & YMD & A4 \\
+\hline
+\end{tabularx}
+\end{center}
+
+### Override Dropdowns
+
+Below the country selector, four override dropdowns let you change individual settings without switching countries:
+
+- **Paper** --- Letter or A4 (affects PDF report page size)
+- **CSV sep** --- comma or semicolon (used when importing CSV files)
+- **Decimal** --- period or comma (used in number display on plots and axes)
+- **Date** --- MDY, DMY, or YMD (controls the order in which date formats are tried when parsing date columns)
+
+When you change the country, all overrides reset to that country's defaults. Changing an override only affects that one setting.
+
+### Saving Defaults
+
+Click **Save as my default** to store your locale preferences globally. These defaults apply to all future sessions regardless of which data file you load. Per-file settings (target, predictors, parameters) are saved separately in the browser's local storage, but locale defaults persist across all files via an SQLite database. This two-level approach is designed for organizations like audit firms that work with data from multiple countries --- set your most common country as the default, then override per-file when needed.
+
+\begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
+\small\textit{\textbf{Tip:} Number formatting on plot axes and slope labels automatically adapts to your locale. German locale uses periods for thousands (200.000), Finnish uses spaces (200 000), Swiss uses apostrophes (200'000). No currency symbols are displayed --- earthUI is currency-agnostic.}
+\end{tcolorbox}
 
 \newpage
 
@@ -791,7 +855,7 @@ Every fit (success or failure) writes a log file to your output folder:
 
 \bigskip
 
-After fitting, download an Excel file with predictions and diagnostics. This output is used in Step 7 (RCA) to assign a CQA (Condition/Quality/Appeal) rating to the subject property. The output is sorted by `residual_sf` and `cqa_sf` to help you assess where the subject falls in the ranking. If the model is good quality, then the properties should be ranked from lowest appealing to most appealing based on residual features that did not go into the regression. The middle value should be approximately \$0, the lower half negative values and the upper half positive values. You should find the worst quality homes, or "fixers" near the bottom of the ranking and the nicest homes at the top. There will usually be exceptions for anomalies such as foreclosures, short sales, probate (inheritance related) sales, and quick sales needed for job change or other reasons. Investigation of anomalies usually turns up a pertinent reason for the price anomaly.
+After fitting, download an Excel file with predictions and diagnostics. This output is used in Step 7 (RCA) to assign a CQA (Condition/Quality/Appeal) rating to the subject property. The output is sorted by `residual_sf` and `cqa_sf` to help you assess where the subject falls in the ranking. If the model is good quality, then the properties should be ranked from lowest appealing to most appealing based on residual features that did not go into the regression. The middle value should be approximately 0, the lower half negative values and the upper half positive values. You should find the worst quality homes, or "fixers" near the bottom of the ranking and the nicest homes at the top. There will usually be exceptions for anomalies such as foreclosures, short sales, probate (inheritance related) sales, and quick sales needed for job change or other reasons. Investigation of anomalies usually turns up a pertinent reason for the price anomaly.
 
 The button label adapts to the purpose mode:
 
@@ -825,9 +889,9 @@ These columns have Excel number formatting applied:
 
 | Column | Format | Example |
 |:-------|:-------|:--------|
-| `residual_sf` | Currency, 2 decimal places | \$12.34 |
+| `residual_sf` | Numeric, 2 decimal places | 12.34 |
 | `cqa_sf` | Numeric, 2 decimal places | 7.25 |
-| `residual` | Currency, 0 decimal places | \$15,200 |
+| `residual` | Numeric, 0 decimal places | 15,200 |
 | `cqa` | Numeric, 2 decimal places | 6.80 |
 
 ## CQA Scores
@@ -851,6 +915,14 @@ Factor levels in the prediction data are aligned with the training data before c
 \begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
 \small\textit{\textbf{Tip:} The \texttt{calc\_residual} column should always equal \texttt{residual} (within rounding). If they differ significantly, it indicates a computation issue worth investigating.}
 \end{tcolorbox}
+
+## mgcvUI Auto-Export
+
+On every successful fit with `degree` $\leq$ 2, earthUI automatically saves the full result object as an `.rds` file to the Project Output Folder. The filename follows the pattern `<datafile>_earthUI_result_<YYYYMMDD_HHMMSS>.rds`.
+
+This file can be loaded by mgcvUI (a companion Shiny app for GAM modeling) using `readRDS()`. mgcvUI uses the earth model's knot locations and basis functions as starting points for GAM smooth terms, enabling a seamless transition from MARS to GAM modeling.
+
+Models with `degree` > 2 are skipped because mgcvUI only supports pairwise interactions. A manual **Export for mgcvUI** button is also available in the sidebar for on-demand export.
 
 \newpage
 
@@ -1059,7 +1131,7 @@ Three formats are available via the format dropdown:
 
 - **HTML** --- a self-contained `.html` file with interactive tables, embedded images, and a table of contents. Uses the Flatly Bootstrap theme and Roboto Condensed font.
 - **Word** --- a `.docx` file suitable for editing and distribution. Includes a table of contents and uses a custom reference template for consistent styling.
-- **PDF** --- typeset with LuaLaTeX for professional-quality output. Includes landscape pages for large interaction matrices and uses Roboto Condensed with Latin Modern Math for equations.
+- **PDF** --- typeset with LuaLaTeX for professional-quality output. Paper size follows the locale setting (Letter or A4). Includes landscape pages for large interaction matrices and uses Roboto Condensed with Latin Modern Math for equations.
 
 Reports are rendered via Quarto and saved directly to the Project Output Folder as `<datafile>_report_<YYYYMMDD_HHMMSS>.<format>`. A notification confirms the file location on completion.
 

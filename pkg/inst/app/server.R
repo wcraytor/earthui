@@ -98,6 +98,65 @@ function(input, output, session) {
     }
   })
 
+  # --- Locale ---
+  # Load user's locale defaults from SQLite on startup
+  locale_defaults <- earthUI:::settings_db_read_(settings_con, "__locale_defaults__")
+  if (!is.null(locale_defaults) && length(locale_defaults$settings) > 0L) {
+    ld <- locale_defaults$settings
+    if (!is.null(ld$locale_country))  updateSelectInput(session, "locale_country",  selected = ld$locale_country)
+    if (!is.null(ld$locale_paper))    updateSelectInput(session, "locale_paper",    selected = ld$locale_paper)
+    if (!is.null(ld$locale_csv_sep))  updateSelectInput(session, "locale_csv_sep",  selected = ld$locale_csv_sep)
+    if (!is.null(ld$locale_dec))      updateSelectInput(session, "locale_dec",      selected = ld$locale_dec)
+    if (!is.null(ld$locale_date))     updateSelectInput(session, "locale_date",     selected = ld$locale_date)
+    message("earthUI: restored locale defaults from SQLite")
+  }
+
+  # Save locale as user default
+  observeEvent(input$locale_save_default, {
+    locale_settings <- list(
+      locale_country = input$locale_country,
+      locale_paper   = input$locale_paper,
+      locale_csv_sep = input$locale_csv_sep,
+      locale_dec     = input$locale_dec,
+      locale_date    = input$locale_date
+    )
+    earthUI:::settings_db_write_(
+      settings_con, "__locale_defaults__",
+      settings = jsonlite::toJSON(locale_settings, auto_unbox = TRUE)
+    )
+    showNotification("Locale saved as default for all new files.",
+                     type = "message", duration = 4)
+  })
+
+  # When country changes, update override dropdowns to country defaults
+  observeEvent(input$locale_country, {
+    country <- input$locale_country %||% "us"
+    presets <- earthUI:::locale_country_presets_()
+    preset <- presets[[country]] %||% presets[["us"]]
+    updateSelectInput(session, "locale_csv_sep", selected = preset$csv_sep)
+    updateSelectInput(session, "locale_dec",     selected = preset$csv_dec)
+    updateSelectInput(session, "locale_date",    selected = preset$date_fmt)
+    updateSelectInput(session, "locale_paper",   selected = preset$paper)
+    # Determine big_mark from decimal: if dec is "," use country's big_mark
+    earthUI:::set_locale_(country)
+  })
+
+  # When any override changes, update locale env directly
+  observe({
+    csv_sep  <- input$locale_csv_sep %||% ","
+    csv_dec  <- input$locale_dec     %||% "."
+    date_fmt <- input$locale_date    %||% "mdy"
+    paper    <- input$locale_paper   %||% "letter"
+    # Derive big_mark from decimal mark (they must differ)
+    country <- input$locale_country %||% "us"
+    presets <- earthUI:::locale_country_presets_()
+    preset <- presets[[country]] %||% presets[["us"]]
+    big_mark <- preset$big_mark
+    earthUI:::set_locale_(country, csv_sep = csv_sep, csv_dec = csv_dec,
+                          big_mark = big_mark, dec_mark = csv_dec,
+                          date_fmt = date_fmt, paper = paper)
+  })
+
   # --- Data Import ---
   observeEvent(input$file_input, {
     req(input$file_input)
@@ -127,7 +186,9 @@ function(input, output, session) {
       rv$sheets <- NULL
     }
     tryCatch({
-      rv$data <- import_data(input$file_input$datapath, sheet = 1)
+      rv$data <- import_data(input$file_input$datapath, sheet = 1,
+                               sep = earthUI:::locale_csv_sep_(),
+                               dec = earthUI:::locale_csv_dec_())
       rv$categoricals <- detect_categoricals(rv$data)
       rv$col_types <- detect_types(rv$data)
       rv$result <- NULL
@@ -146,7 +207,9 @@ function(input, output, session) {
 
   observeEvent(input$sheet, {
     req(rv$file_path, input$sheet)
-    rv$data <- import_data(rv$file_path, sheet = input$sheet)
+    rv$data <- import_data(rv$file_path, sheet = input$sheet,
+                             sep = earthUI:::locale_csv_sep_(),
+                             dec = earthUI:::locale_csv_dec_())
     rv$categoricals <- detect_categoricals(rv$data)
     rv$col_types <- detect_types(rv$data)
     rv$result <- NULL
@@ -2143,7 +2206,8 @@ function(input, output, session) {
       tryCatch({
         render_report(rv$result,
                       output_format = fmt,
-                      output_file = out_path)
+                      output_file = out_path,
+                      paper_size = earthUI:::locale_paper_())
         setProgress(1, detail = "Done")
         session$sendCustomMessage("download_check",
                                   list(id = "export_report_btn"))
@@ -2589,9 +2653,9 @@ function(input, output, session) {
       # Apply number formats to specific columns
       col_names <- names(export_df)
       fmt_map <- list(
-        residual_sf = "$#,##0.00",
+        residual_sf = "#,##0.00",
         cqa_sf      = "0.00",
-        residual    = "$#,##0",
+        residual    = "#,##0",
         cqa         = "0.00"
       )
       for (cn in names(fmt_map)) {

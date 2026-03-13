@@ -58,12 +58,16 @@ validate_types <- function(df, type_map, predictors) {
       if (is.character(actual)) {
         non_na_idx <- which(!is.na(actual))
         if (length(non_na_idx) > 0L) {
-          # Try parsing with common formats
+          # Try parsing with locale-preferred formats first, then fallbacks
           parsed <- NULL
-          formats <- c("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%m-%d-%Y",
-                       "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d %H:%M:%S",
-                       "%m/%d/%Y %H:%M:%S", "%Y-%m-%dT%H:%M:%S",
-                       "%b %d, %Y", "%B %d, %Y")
+          locale_fmts <- locale_date_formats_()
+          all_fmts <- c("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%m-%d-%Y",
+                        "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
+                        "%Y-%m-%d %H:%M:%S",
+                        "%m/%d/%Y %H:%M:%S", "%d/%m/%Y %H:%M:%S",
+                        "%Y-%m-%dT%H:%M:%S",
+                        "%b %d, %Y", "%B %d, %Y")
+          formats <- unique(c(locale_fmts, all_fmts))
           for (fmt in formats) {
             p <- suppressWarnings(as.Date(actual, format = fmt))
             if (sum(!is.na(p[non_na_idx])) / length(non_na_idx) >= 0.5) {

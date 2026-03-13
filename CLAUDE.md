@@ -21,6 +21,7 @@ pkg/
     format_results.R        # Equation, summary, ANOVA, variable importance formatters
     import_data.R           # CSV/Excel import with snake_case naming
     launch.R                # launch() — starts Shiny app
+    locale.R                # Country-based locale system (31 presets)
     plot_results.R          # All ggplot2/plotly/base-R plot functions
   inst/
     app/
@@ -70,10 +71,16 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
 - **Subject row handling**: In appraisal mode, row 1 is the subject
   property (excluded from fitting, sale price treated as NA). In market
   mode, optional via "Skip first row" checkbox.
+- **Locale system**: `pkg/R/locale.R` provides 31 country presets controlling
+  CSV separator, decimal mark, thousands separator, date format ordering, and
+  paper size. State stored in `eui_locale_env_` (package-level environment).
+  Country dropdown + 4 override dropdowns in Section 1 of sidebar. Global
+  defaults persisted via SQLite (`__locale_defaults__` key). Per-file overrides
+  via existing local storage system. No currency symbols anywhere.
 - **Axis formatting**: `auto_digits_()` detects axis range and selects decimal
   places (range < 1 → 3 dp for lat/long; range >= 100 → 0 dp with commas).
-  Slope labels scale units accordingly (`/0.001` for small-range axes,
-  `/unit` for large-range).
+  Number formatting uses locale big_mark/dec_mark. Slope labels scale units
+  accordingly (`/0.001` for small-range axes, `/unit` for large-range).
 - **LaTeX escaping**: `latex_escape_text_()` in `format_results.R` escapes
   `_`, `$`, `%`, `&`, `#` for both MathJax and PDF/LaTeX output.
 - **CSS sticky headers**: Allowed Interactions matrix uses `position: sticky`

@@ -52,6 +52,12 @@ own license:
 | knitr      | GPL-2+        | Report knitting (optional)               |
 | rmarkdown  | GPL-3         | Document generation (optional)           |
 | jsonlite   | MIT           | JSON parsing (optional)                  |
+| DBI        | LGPL-2+       | Database interface for settings persistence (optional) |
+| RSQLite    | LGPL-2+       | SQLite backend for settings persistence (optional) |
+| openxlsx   | MIT           | Sales Comparison Grid Excel output (optional) |
+| writexl    | BSD-2         | Excel file export (optional)             |
+| showtext   | Apache-2.0    | Custom font rendering (optional)         |
+| sysfonts   | GPL-2         | System font loading (optional)           |
 | testthat   | MIT           | Unit testing (development only)          |
 | roxygen2   | MIT           | Documentation generation (development only) |
 

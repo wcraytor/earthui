@@ -9,6 +9,8 @@
 #'   `"docx"`. Default is `"html"`.
 #' @param output_file Character. Path for the output file. If `NULL`, a
 #'   temporary file is created.
+#' @param paper_size Character. Paper size for PDF output: `"letter"` (US) or
+#'   `"a4"` (European). Default is `"letter"`. Ignored for HTML/Word.
 #'
 #' @return The path to the rendered output file (invisibly).
 #'
@@ -20,7 +22,7 @@
 #'               output_file = tempfile(fileext = ".html"))
 #' }
 render_report <- function(earth_result, output_format = "html",
-                          output_file = NULL) {
+                          output_file = NULL, paper_size = "letter") {
   validate_earthUI_result(earth_result)
 
   if (!requireNamespace("quarto", quietly = TRUE)) {
@@ -53,6 +55,19 @@ render_report <- function(earth_result, output_format = "html",
   file.copy(template, tmp_qmd)
   ref_docx <- system.file("quarto", "reference.docx", package = "earthUI")
   if (ref_docx != "") file.copy(ref_docx, tmp_dir)
+
+  # Inject paper size for PDF output (replace default letter with a4 if needed)
+  paper_size <- match.arg(paper_size, c("letter", "a4"))
+  if (output_format == "pdf" && paper_size == "a4") {
+    qmd_text <- readLines(tmp_qmd, warn = FALSE)
+    # Add papersize to the pdf format block in YAML
+    idx <- grep("^  pdf:", qmd_text, fixed = FALSE)
+    if (length(idx) > 0L) {
+      insert_line <- paste0("    papersize: ", paper_size)
+      qmd_text <- append(qmd_text, insert_line, after = idx[1L])
+      writeLines(qmd_text, tmp_qmd)
+    }
+  }
 
   # Save result object for the template to load
   result_file <- file.path(tmp_dir, "earth_result.rds")

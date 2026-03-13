@@ -292,7 +292,7 @@ generate_sales_grid <- function(adjusted_file,
     borderStyle = "thin", fgFill = "#FFFFFF"
   )
   curr_style <- createStyle(
-    numFmt = "$#,##0", halign = "right", valign = "center",
+    numFmt = "#,##0", halign = "right", valign = "center",
     border = "TopBottomLeftRight", borderColour = "#002060",
     borderStyle = "thin", fgFill = "#FFFFFF"
   )
@@ -313,25 +313,25 @@ generate_sales_grid <- function(adjusted_file,
     borderStyle = "thick"
   )
   adj_sp_style <- createStyle(
-    numFmt = "$#,##0", halign = "center", valign = "center",
+    numFmt = "#,##0", halign = "center", valign = "center",
     textDecoration = "bold",
     border = "TopBottomLeftRight", borderColour = "#002060",
     borderStyle = "thin", fgFill = "#CCCCFF"
   )
   remaining_style <- createStyle(
-    numFmt = "$#,##0", halign = "right", valign = "center",
+    numFmt = "#,##0", halign = "right", valign = "center",
     textDecoration = "bold", fontColour = "#C00000",
     border = "TopBottomLeftRight", borderColour = "#002060",
     borderStyle = "thin", fgFill = "#FFF2CC"
   )
   resid_input_style <- createStyle(
-    numFmt = "$#,##0", halign = "right", valign = "center",
+    numFmt = "#,##0", halign = "right", valign = "center",
     border = "TopBottomLeftRight", borderColour = "#002060",
     borderStyle = "thin", fgFill = "#FFFFDD"
   )
   # Light blue for grouped rows
   grouped_style <- createStyle(
-    numFmt = "$#,##0", halign = "right", valign = "center",
+    numFmt = "#,##0", halign = "right", valign = "center",
     border = "TopBottomLeftRight", borderColour = "#002060",
     borderStyle = "thin", fgFill = "#DAEEF3"
   )

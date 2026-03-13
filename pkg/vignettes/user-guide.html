@@ -369,11 +369,63 @@ properties with optional subject row exclusion.</li>
 <p>This opens the Shiny app at <code>http://localhost:7878</code>.</p>
 </div>
 </div>
+<div id="locale-regional-settings" class="section level2">
+<h2>Locale &amp; Regional Settings</h2>
+<p>earthUI supports international number, date, and CSV formatting
+conventions through a country-based locale system. The
+<strong>Country</strong> dropdown in Section 1 of the sidebar (below the
+file upload) selects a preset for 31 supported countries. Each preset
+configures:</p>
+<ul>
+<li><strong>CSV separator</strong> — comma (<code>,</code>) for
+US/UK/Japan or semicolon (<code>;</code>) for most of Europe, where the
+comma is used as a decimal mark.</li>
+<li><strong>Decimal mark</strong> — period (<code>.</code>) or comma
+(<code>,</code>).</li>
+<li><strong>Thousands separator</strong> — comma (US/UK/Japan), period
+(Germany/Italy/Spain), space
+(Finland/France/Poland/Baltics/Ukraine/Russia), or apostrophe
+(Switzerland).</li>
+<li><strong>Date format</strong> — MM/DD/YYYY (US), DD/MM/YYYY (most of
+Europe), or YYYY-MM-DD (Sweden/Lithuania/Japan/Canada).</li>
+<li><strong>Paper size</strong> — Letter (US/Canada/Mexico) or A4
+(everywhere else).</li>
+</ul>
+<div id="override-dropdowns" class="section level3">
+<h3>Override Dropdowns</h3>
+<p>Below the country selector, four override dropdowns let you change
+individual settings without switching countries:</p>
+<ul>
+<li><strong>Paper</strong> — Letter or A4 (affects PDF report page
+size)</li>
+<li><strong>CSV sep</strong> — comma or semicolon (used when importing
+CSV files)</li>
+<li><strong>Decimal</strong> — period or comma (used in number display
+on plots and axes)</li>
+<li><strong>Date</strong> — MDY, DMY, or YMD (controls the order in
+which date formats are tried when parsing date columns)</li>
+</ul>
+<p>When you change the country, all overrides reset to that country’s
+defaults. Changing an override only affects that one setting.</p>
+</div>
+<div id="saving-defaults" class="section level3">
+<h3>Saving Defaults</h3>
+<p>Click <strong>Save as my default</strong> to store your locale
+preferences globally. These defaults apply to all future sessions
+regardless of which data file you load. Per-file settings (target,
+predictors, parameters) are saved separately in the browser’s local
+storage, but locale defaults persist across all files via an SQLite
+database.</p>
+</div>
+</div>
 <div id="mls-input-data-requirements" class="section level2">
 <h2>MLS Input Data Requirements</h2>
 <p>For real estate workflows, your input data typically comes from an
 MLS export. earthUI accepts CSV and Excel files. On import, column names
-are automatically converted to <code>snake_case</code>.</p>
+are automatically converted to <code>snake_case</code>, e.g. “Area ID”
+gets converted to “area_id”. The CSV separator and decimal mark used
+during import are determined by the locale settings (see “Locale &amp;
+Regional Settings” above).</p>
 <div id="required-columns-for-appraisal-mode" class="section level3">
 <h3>Required Columns for Appraisal Mode</h3>
 <p>The full appraisal workflow (RCA + Sales Grid) benefits from these
@@ -393,7 +445,7 @@ columns:</p>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">Sale Price</td>
+<td align="left">Sale Price (or equivalent wording)</td>
 <td align="left">(target)</td>
 <td align="left">Response variable</td>
 </tr>
@@ -465,8 +517,36 @@ columns:</p>
 </tr>
 </tbody>
 </table>
+<p>Spreadsheet column names can be in a foreign language, the “special”
+names are in English so that the R program can give them special
+treatment. Otherwise, the given column names show up in the regression
+models, graphs and, if doing appraisals, the Intermediate Sales
+Grid.</p>
 <p>Not all columns are required. earthUI adapts — if a column is
-missing, the corresponding feature is simply omitted.</p>
+missing, the corresponding feature is simply omitted. However, that
+being said, for real estate pricing models certain columns are highly
+recommended to achieve acceptable fit:</p>
+<ol style="list-style-type: decimal">
+<li><p>“Sale Age,” which is the number of days between the contract sale
+date and the effective date of the appraisal or analysis. If multi-year
+sales history is being used, especially for periods over 5 years,
+sale_age often plays a central role in estimating the sale price. In
+fact it is often so important that without it, earthUI fails to provide
+any model at all.</p></li>
+<li><p>“Living Area” which also goes by names such as “Living Sqft,”
+“GLA” (gross living area) and so on. This is also another leading
+determinant of sale price.</p></li>
+<li><p>“Total Bath Count” is the total number of full, quarter, half and
+3/4 bathrooms. For example, two full baths and one half-bath would be a
+value of 2.5.</p></li>
+<li><p>“Garage Bays” or “Garage Area” — the number of garage spaces or
+the garage square footage.</p></li>
+<li><p>“Lot Size” — the land area of the property, typically in square
+feet or acres.</p></li>
+<li><p>“Longitude,” “Latitude,” and if available “Area ID.” Adjustments
+for these will be combined under a single Location adjustment in the
+Sales Grid.</p></li>
+</ol>
 </div>
 <div id="data-quality" class="section level3">
 <h3>Data Quality</h3>
@@ -566,7 +646,20 @@ A blue badge shows the assigned type next to each variable name.</p>
 <div id="downloading-data-step-6" class="section level2">
 <h2>Downloading Data (Step 6)</h2>
 <p>After fitting, download an Excel file with predictions and
-diagnostics.</p>
+diagnostics. This output is used in Step 7 (RCA) to assign a CQA
+(Condition/Quality/Appeal) rating to the subject property. The output is
+sorted by <code>residual_sf</code> and <code>cqa_sf</code> to help you
+assess where the subject falls in the ranking. If the model is good
+quality, then the properties should be ranked from lowest appealing to
+most appealing based on residual features that did not go into the
+regression. The middle value should be approximately 0, the lower half
+negative values and the upper half positive values. You should find the
+worst quality homes, or “fixers” near the bottom of the ranking and the
+nicest homes at the top. There will usually be exceptions for anomalies
+such as foreclosures, short sales, probate (inheritance related) sales,
+and quick sales needed for job change or other reasons.<br />
+Investigation of anomalies usually turns up a pertinent reason for the
+price anomaly.</p>
 <div id="output-columns" class="section level3">
 <h3>Output Columns</h3>
 <table>
@@ -579,7 +672,8 @@ diagnostics.</p>
 <tbody>
 <tr class="odd">
 <td align="left"><code>est_&lt;target&gt;</code></td>
-<td align="left">Model prediction</td>
+<td align="left">Model prediction (e.g.,
+<code>est_sale_price</code>)</td>
 </tr>
 <tr class="even">
 <td align="left"><code>residual</code></td>
@@ -595,7 +689,7 @@ diagnostics.</p>
 </tr>
 <tr class="odd">
 <td align="left"><code>cqa_sf</code></td>
-<td align="left">CQA on per-SF residuals</td>
+<td align="left">CQA calculated from ranking via residual_sf</td>
 </tr>
 <tr class="even">
 <td align="left"><code>&lt;var&gt;_contribution</code></td>
@@ -603,7 +697,8 @@ diagnostics.</p>
 </tr>
 <tr class="odd">
 <td align="left"><code>basis</code></td>
-<td align="left">Intercept contribution</td>
+<td align="left">Intercept value contribution (same for all
+properties)</td>
 </tr>
 <tr class="even">
 <td align="left"><code>calc_residual</code></td>
@@ -618,9 +713,9 @@ diagnostics.</p>
 <code>cqa_sf</code>, <code>residual</code>, <code>cqa</code>. Excel
 formatting:</p>
 <ul>
-<li><code>residual_sf</code> — currency, 2 decimal places</li>
+<li><code>residual_sf</code> — numeric, 2 decimal places</li>
 <li><code>cqa_sf</code> — numeric, 2 decimal places</li>
-<li><code>residual</code> — currency, 0 decimal places</li>
+<li><code>residual</code> — numeric, 0 decimal places</li>
 <li><code>cqa</code> — numeric, 2 decimal places</li>
 </ul>
 </div>
@@ -638,13 +733,31 @@ predicted</li>
 <code>residual_sf</code> descending.</p>
 </div>
 </div>
+<div id="mgcvui-auto-export" class="section level2">
+<h2>mgcvUI Auto-Export</h2>
+<p>On every successful fit with <code>degree &lt;= 2</code>, earthUI
+automatically saves the full result object as an <code>.rds</code> file
+to the Project Output Folder. The filename follows the pattern
+<code>&lt;datafile&gt;_earthUI_result_&lt;YYYYMMDD_HHMMSS&gt;.rds</code>.</p>
+<p>This file can be loaded by <a href="https://github.com/wcraytor/mgcvUI">mgcvUI</a> (a companion Shiny
+app for GAM modeling) using <code>readRDS()</code>. mgcvUI uses the
+earth model’s knot locations and basis functions as starting points for
+GAM smooth terms, enabling a seamless transition from MARS to GAM
+modeling.</p>
+<p>Models with <code>degree &gt; 2</code> are skipped because mgcvUI
+only supports pairwise interactions. A manual <strong>Export for
+mgcvUI</strong> button is also available in the sidebar for on-demand
+export.</p>
+</div>
 <div id="rca-calculations-step-7-appraisal-only" class="section level2">
 <h2>RCA Calculations (Step 7, Appraisal Only)</h2>
 <div id="the-rca-dialog" class="section level3">
 <h3>The RCA Dialog</h3>
 <ul>
 <li>Choose <strong>CQA</strong> or <strong>CQA per SF</strong> score
-type</li>
+type. If you choose “CQA per SF”, then based on the CQA score you assign
+the subject, its residual score will be its living_area times the
+residual_sf that matches the given CQA_SF score.</li>
 <li>Enter the subject’s CQA score (0.00–9.99, default 5.00)</li>
 <li>Click <strong>Generate</strong> to compute adjustments</li>
 </ul>
@@ -783,12 +896,294 @@ update</li>
 <li><strong>HTML</strong> — self-contained with interactive tables</li>
 <li><strong>Word</strong> — <code>.docx</code> for editing and
 distribution</li>
-<li><strong>PDF</strong> — typeset with LuaLaTeX</li>
+<li><strong>PDF</strong> — typeset with LuaLaTeX (paper size follows
+locale: Letter or A4)</li>
 </ul>
 <p>Reports include: dataset description, model specification, allowed
 interactions, summary metrics, model equation, coefficients, variable
 importance, g-function plots, correlation matrix, diagnostics, ANOVA,
 and raw earth output.</p>
+</div>
+<div id="demo-dataset-appraisal_1.csv" class="section level2">
+<h2>Demo Dataset: Appraisal_1.csv</h2>
+<p>earthUI includes a demo MLS dataset for exploring the appraisal
+workflow. Load it with:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>demo_file <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="st">&quot;Appraisal_1.csv&quot;</span>, <span class="at">package =</span> <span class="st">&quot;earthUI&quot;</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>df <span class="ot">&lt;-</span> <span class="fu">import_data</span>(demo_file)</span></code></pre></div>
+<p>Or import it directly through the Shiny app file upload.</p>
+<div id="description" class="section level3">
+<h3>Description</h3>
+<p>The file contains 1,502 residential sales (plus 1 subject property in
+row 1) from a simulated MLS export. The data represents single-family
+home sales in a multi-area market with a range of property sizes, ages,
+and locations.</p>
+<p>This is not real data, but is based on a realistic neighborhood in
+Northern California. All identification information has been altered or
+removed.</p>
+</div>
+<div id="columns" class="section level3">
+<h3>Columns</h3>
+<table>
+<colgroup>
+<col width="19%" />
+<col width="14%" />
+<col width="34%" />
+<col width="31%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">Column</th>
+<th align="left">Type</th>
+<th align="left">Special Type</th>
+<th align="left">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left"><code>weight</code></td>
+<td align="left">numeric</td>
+<td align="left">—</td>
+<td align="left">Observation weight (0 = exclude from fitting)</td>
+</tr>
+<tr class="even">
+<td align="left"><code>id</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">Internal record ID</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>property_id</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">MLS property identifier</td>
+</tr>
+<tr class="even">
+<td align="left"><code>listing_id</code></td>
+<td align="left">character</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">MLS listing number</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>parcel_number</code></td>
+<td align="left">character</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">County assessor parcel number (APN)</td>
+</tr>
+<tr class="even">
+<td align="left"><code>street_address</code></td>
+<td align="left">character</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">Property address</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>city_name</code></td>
+<td align="left">character</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">City</td>
+</tr>
+<tr class="even">
+<td align="left"><code>postal_code</code></td>
+<td align="left">character</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">ZIP code</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>county_name</code></td>
+<td align="left">character</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">County</td>
+</tr>
+<tr class="even">
+<td align="left"><code>contract_date</code></td>
+<td align="left">Date</td>
+<td align="left"><code>contract_date</code></td>
+<td align="left">Sale contract date (computes
+<code>sale_age</code>)</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>sale_age</code></td>
+<td align="left">numeric</td>
+<td align="left">—</td>
+<td align="left">Days from contract date to effective date
+(pre-computed)</td>
+</tr>
+<tr class="even">
+<td align="left"><code>coe_date</code></td>
+<td align="left">Date</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">Close of escrow date</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>listing_status</code></td>
+<td align="left">character</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">Listing status (e.g., “Sold”)</td>
+</tr>
+<tr class="even">
+<td align="left"><code>sale_price</code></td>
+<td align="left">numeric</td>
+<td align="left">(target)</td>
+<td align="left">Sale price — response variable</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>rent</code></td>
+<td align="left">numeric</td>
+<td align="left">—</td>
+<td align="left">Monthly rent (for multi-target models)</td>
+</tr>
+<tr class="even">
+<td align="left"><code>list_price</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">Listing price</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>original_list_price</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">Original listing price</td>
+</tr>
+<tr class="even">
+<td align="left"><code>living_sqft</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>living_area</code></td>
+<td align="left">Gross living area in square feet</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>beds_total</code></td>
+<td align="left">integer</td>
+<td align="left">—</td>
+<td align="left">Number of bedrooms</td>
+</tr>
+<tr class="even">
+<td align="left"><code>baths_total</code></td>
+<td align="left">numeric</td>
+<td align="left">—</td>
+<td align="left">Total bath count (e.g., 2.5 = 2 full + 1 half)</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>lot_size</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>lot_size</code></td>
+<td align="left">Lot size in square feet</td>
+</tr>
+<tr class="even">
+<td align="left"><code>area_id</code></td>
+<td align="left">integer</td>
+<td align="left"><code>area</code></td>
+<td align="left">MLS area identifier</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>area_text</code></td>
+<td align="left">character</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">Area name</td>
+</tr>
+<tr class="even">
+<td align="left"><code>age</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>actual_age</code></td>
+<td align="left">Property age in years</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>year_built</code></td>
+<td align="left">integer</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">Year of construction</td>
+</tr>
+<tr class="even">
+<td align="left"><code>latitude</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>latitude</code></td>
+<td align="left">Latitude (rounded to 3 dp for model)</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>longitude</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>longitude</code></td>
+<td align="left">Longitude (rounded to 3 dp for model)</td>
+</tr>
+<tr class="even">
+<td align="left"><code>latitude6</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">Full-precision latitude</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>longitude6</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>display_only</code></td>
+<td align="left">Full-precision longitude</td>
+</tr>
+<tr class="even">
+<td align="left"><code>garage_spaces</code></td>
+<td align="left">integer</td>
+<td align="left">—</td>
+<td align="left">Number of garage bays</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>fp_count</code></td>
+<td align="left">integer</td>
+<td align="left">—</td>
+<td align="left">Number of fireplaces</td>
+</tr>
+<tr class="even">
+<td align="left"><code>no_of_stories</code></td>
+<td align="left">numeric</td>
+<td align="left">—</td>
+<td align="left">Number of stories</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>style</code></td>
+<td align="left">character</td>
+<td align="left">—</td>
+<td align="left">Architectural style</td>
+</tr>
+<tr class="even">
+<td align="left"><code>view</code></td>
+<td align="left">character</td>
+<td align="left">—</td>
+<td align="left">View type (e.g., “Neighborhood”, “Hills”)</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>days_on_market</code></td>
+<td align="left">integer</td>
+<td align="left"><code>dom</code></td>
+<td align="left">Days on market</td>
+</tr>
+<tr class="even">
+<td align="left"><code>listing_date</code></td>
+<td align="left">Date</td>
+<td align="left"><code>listing_date</code></td>
+<td align="left">Listing date</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>sale_concessions</code></td>
+<td align="left">numeric</td>
+<td align="left"><code>concessions</code></td>
+<td align="left">Seller concessions</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="suggested-quick-start" class="section level3">
+<h3>Suggested Quick Start</h3>
+<ol style="list-style-type: decimal">
+<li>Launch earthUI: <code>earthUI::launch()</code></li>
+<li>Import <code>Appraisal_1.csv</code> via the file upload</li>
+<li>Set Purpose to <strong>For Appraisal</strong></li>
+<li>Select <code>sale_price</code> as the target</li>
+<li>Assign special types as shown in the table above</li>
+<li>Include predictors: <code>sale_age</code>, <code>living_sqft</code>,
+<code>baths_total</code>, <code>lot_size</code>, <code>area_id</code>
+(as factor), <code>age</code>, <code>latitude</code>,
+<code>longitude</code>, <code>garage_spaces</code></li>
+<li>Set degree to 1, click <strong>Fit Earth Model</strong></li>
+<li>Download intermediate output (Step 6), review the CQA ranking</li>
+<li>Compute RCA adjustments (Step 7) with a CQA score of ~5.00</li>
+<li>Generate the Sales Comparison Grid (Step 8)</li>
+</ol>
+</div>
 </div>
 
 
