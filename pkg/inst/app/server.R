@@ -105,9 +105,7 @@ function(input, output, session) {
     ld <- locale_defaults$settings
     if (!is.null(ld$locale_country))  updateSelectInput(session, "locale_country",  selected = ld$locale_country)
     if (!is.null(ld$locale_paper))    updateSelectInput(session, "locale_paper",    selected = ld$locale_paper)
-    if (!is.null(ld$locale_csv_sep))  updateSelectInput(session, "locale_csv_sep",  selected = ld$locale_csv_sep)
-    if (!is.null(ld$locale_dec))      updateSelectInput(session, "locale_dec",      selected = ld$locale_dec)
-    if (!is.null(ld$locale_date))     updateSelectInput(session, "locale_date",     selected = ld$locale_date)
+    if (!is.null(ld$locale_import))   updateSelectInput(session, "locale_import",   selected = ld$locale_import)
     message("earthUI: restored locale defaults from SQLite")
   }
 
@@ -116,9 +114,7 @@ function(input, output, session) {
     locale_settings <- list(
       locale_country = input$locale_country,
       locale_paper   = input$locale_paper,
-      locale_csv_sep = input$locale_csv_sep,
-      locale_dec     = input$locale_dec,
-      locale_date    = input$locale_date
+      locale_import  = input$locale_import
     )
     earthUI:::settings_db_write_(
       settings_con, "__locale_defaults__",
@@ -128,33 +124,33 @@ function(input, output, session) {
                      type = "message", duration = 4)
   })
 
-  # When country changes, update override dropdowns to country defaults
+  # When Settings country changes, apply to locale env and sync import locale
   observeEvent(input$locale_country, {
     country <- input$locale_country %||% "us"
     presets <- earthUI:::locale_country_presets_()
     preset <- presets[[country]] %||% presets[["us"]]
-    updateSelectInput(session, "locale_csv_sep", selected = preset$csv_sep)
-    updateSelectInput(session, "locale_dec",     selected = preset$csv_dec)
-    updateSelectInput(session, "locale_date",    selected = preset$date_fmt)
-    updateSelectInput(session, "locale_paper",   selected = preset$paper)
-    # Determine big_mark from decimal: if dec is "," use country's big_mark
+    updateSelectInput(session, "locale_paper",  selected = preset$paper)
+    updateSelectInput(session, "locale_import", selected = country)
     earthUI:::set_locale_(country)
   })
 
-  # When any override changes, update locale env directly
+  # When import locale or paper changes, update locale env
   observe({
-    csv_sep  <- input$locale_csv_sep %||% ","
-    csv_dec  <- input$locale_dec     %||% "."
-    date_fmt <- input$locale_date    %||% "mdy"
-    paper    <- input$locale_paper   %||% "letter"
-    # Derive big_mark from decimal mark (they must differ)
-    country <- input$locale_country %||% "us"
+    # Import locale determines CSV/decimal/date for file import
+    import_country <- input$locale_import %||% input$locale_country %||% "us"
+    # Settings country determines big_mark for display formatting
+    settings_country <- input$locale_country %||% "us"
+    paper <- input$locale_paper %||% "letter"
     presets <- earthUI:::locale_country_presets_()
-    preset <- presets[[country]] %||% presets[["us"]]
-    big_mark <- preset$big_mark
-    earthUI:::set_locale_(country, csv_sep = csv_sep, csv_dec = csv_dec,
-                          big_mark = big_mark, dec_mark = csv_dec,
-                          date_fmt = date_fmt, paper = paper)
+    import_preset <- presets[[import_country]] %||% presets[["us"]]
+    settings_preset <- presets[[settings_country]] %||% presets[["us"]]
+    earthUI:::set_locale_(settings_country,
+                          csv_sep = import_preset$csv_sep,
+                          csv_dec = import_preset$csv_dec,
+                          big_mark = settings_preset$big_mark,
+                          dec_mark = settings_preset$dec_mark,
+                          date_fmt = import_preset$date_fmt,
+                          paper = paper)
   })
 
   # --- Data Import ---
@@ -901,7 +897,7 @@ function(input, output, session) {
                          "contract_date", "display_only", "dom",
                          "effective_age", "latitude", "listing_date",
                          "living_area", "longitude", "lot_size",
-                         "site_dimensions")
+                         "sale_age", "site_dimensions", "weight")
 
     # Header row
     header_cols <- list(
@@ -1304,6 +1300,53 @@ function(input, output, session) {
     mat
   })
 
+  # --- Recompute sale_age when Effective Date changes ---
+  observeEvent(input$effective_date, {
+    req(rv$data, input$purpose %in% c("appraisal", "market"))
+
+    # Find contract_date column from specials
+    specials <- input$col_specials
+    contract_col <- NULL
+    sale_age_col <- NULL
+    if (!is.null(specials)) {
+      for (nm in names(specials)) {
+        if (specials[[nm]] == "contract_date") contract_col <- nm
+        if (specials[[nm]] == "sale_age") sale_age_col <- nm
+      }
+    }
+
+    # If sale_age is a user-designated column, don't overwrite it
+    if (!is.null(sale_age_col)) return()
+
+    # Only recompute if we have a contract_date column and sale_age already exists
+    # (i.e., it was previously computed)
+    if (is.null(contract_col)) return()
+    if (!("sale_age" %in% names(rv$data))) return()
+
+    eff_date <- as.POSIXct(as.character(input$effective_date))
+
+    contract_vals <- rv$data[[contract_col]]
+    if (inherits(contract_vals, "POSIXct")) {
+      contract_posix <- contract_vals
+    } else if (inherits(contract_vals, "Date")) {
+      contract_posix <- as.POSIXct(contract_vals)
+    } else if (is.character(contract_vals)) {
+      contract_posix <- suppressWarnings(as.POSIXct(contract_vals))
+      if (all(is.na(contract_posix[!is.na(contract_vals)]))) return()
+    } else if (is.numeric(contract_vals)) {
+      contract_posix <- as.POSIXct(as.Date(contract_vals, origin = "1899-12-30"))
+    } else {
+      return()
+    }
+
+    sale_age <- as.integer(difftime(eff_date, contract_posix, units = "days"))
+    rv$data[["sale_age"]] <- sale_age
+    showNotification(
+      paste0("Recomputed sale_age for new effective date (", input$effective_date, ")."),
+      type = "message", duration = 5
+    )
+  }, ignoreInit = TRUE)
+
   # --- Fit Model ---
   build_fit_args_ <- function(df = rv$data) {
     na_to_null <- function(x) if (is.na(x) || is.null(x)) NULL else x
@@ -1348,9 +1391,18 @@ function(input, output, session) {
     }
 
     # Weights column → numeric vector (or NULL)
+    # Check special type "weight" first, then fall back to weights_col dropdown
     weights_arg <- NULL
-    if (!is.null(input$weights_col) && input$weights_col != "null" &&
-        input$weights_col %in% names(df)) {
+    weight_col_name <- NULL
+    if (!is.null(input$col_specials)) {
+      for (nm in names(input$col_specials)) {
+        if (input$col_specials[[nm]] == "weight") { weight_col_name <- nm; break }
+      }
+    }
+    if (!is.null(weight_col_name) && weight_col_name %in% names(df)) {
+      weights_arg <- df[[weight_col_name]]
+    } else if (!is.null(input$weights_col) && input$weights_col != "null" &&
+               input$weights_col %in% names(df)) {
       weights_arg <- df[[input$weights_col]]
     }
 
@@ -1417,21 +1469,26 @@ function(input, output, session) {
       }
     }
 
-    # --- Appraiser: add sale_age if contract_date is designated ---
+    # --- Appraiser: compute or identify sale_age ---
     if (input$purpose %in% c("appraisal", "market")) {
-      if (!("sale_age" %in% names(rv$data) && is.numeric(rv$data[["sale_age"]]))) {
-        # Find contract_date column
-        specials <- input$col_specials
-        contract_col <- NULL
-        if (!is.null(specials)) {
-          for (nm in names(specials)) {
-            if (specials[[nm]] == "contract_date") { contract_col <- nm; break }
-          }
+      # Check if a column is already designated as sale_age
+      specials <- input$col_specials
+      sale_age_col <- NULL
+      contract_col <- NULL
+      if (!is.null(specials)) {
+        for (nm in names(specials)) {
+          if (specials[[nm]] == "sale_age") sale_age_col <- nm
+          if (specials[[nm]] == "contract_date") contract_col <- nm
         }
+      }
 
+      # If no sale_age designated and no pre-existing numeric sale_age column,
+      # compute from contract_date
+      if (is.null(sale_age_col) &&
+          !("sale_age" %in% names(rv$data) && is.numeric(rv$data[["sale_age"]]))) {
         if (is.null(contract_col)) {
           showNotification(
-            "No 'contract_date' column designated — skipping sale_age calculation.",
+            "No 'sale_age' or 'contract_date' column designated — skipping sale_age calculation.",
             type = "message", duration = 6
           )
         } else {
@@ -2240,6 +2297,15 @@ function(input, output, session) {
                      "sale_price" %in% colnames(rca)
     wt_col <- if ("weight" %in% colnames(rca)) rca[["weight"]] else rep(1, n_total)
 
+    # Find the sale_age column from specials or default to "sale_age"
+    sg_specials <- input$col_specials
+    sa_col_name <- "sale_age"
+    if (!is.null(sg_specials)) {
+      for (nm in names(sg_specials)) {
+        if (sg_specials[[nm]] == "sale_age") { sa_col_name <- nm; break }
+      }
+    }
+
     # Build comp info table (rows 2..n_total with weight > 0)
     comp_info <- data.frame(
       row       = 2:n_total,
@@ -2250,8 +2316,8 @@ function(input, output, session) {
       sale_price = if ("sale_price" %in% colnames(rca)) {
                      rca[["sale_price"]][2:n_total]
                    } else rep(NA, n_total - 1),
-      sale_age  = if ("sale_age" %in% colnames(rca)) {
-                    rca[["sale_age"]][2:n_total]
+      sale_age  = if (sa_col_name %in% colnames(rca)) {
+                    rca[[sa_col_name]][2:n_total]
                   } else rep(NA, n_total - 1),
       weight    = wt_col[2:n_total],
       gross_adj = if ("gross_adjustments" %in% colnames(rca)) {
@@ -2852,9 +2918,19 @@ function(input, output, session) {
       # so the last 4 RCA columns can be computed.
       # Sale price is left as-is; subject_value holds the conclusion.
       zero_wt <- integer(0)
-      if (!is.null(input$weights_col) && input$weights_col != "null" &&
-          input$weights_col %in% names(export_df)) {
-        wvals <- export_df[[input$weights_col]]
+      # Resolve weight column: special type "weight" first, then weights_col
+      rca_wt_col <- NULL
+      if (!is.null(input$col_specials)) {
+        for (nm in names(input$col_specials)) {
+          if (input$col_specials[[nm]] == "weight") { rca_wt_col <- nm; break }
+        }
+      }
+      if (is.null(rca_wt_col) && !is.null(input$weights_col) &&
+          input$weights_col != "null") {
+        rca_wt_col <- input$weights_col
+      }
+      if (!is.null(rca_wt_col) && rca_wt_col %in% names(export_df)) {
+        wvals <- export_df[[rca_wt_col]]
         message("earthUI RCA: weight col class=", class(wvals),
                 ", unique vals=", paste(head(sort(unique(wvals)), 10), collapse=","),
                 ", n_zero=", sum(wvals == 0, na.rm = TRUE),

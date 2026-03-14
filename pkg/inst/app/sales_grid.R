@@ -175,6 +175,8 @@ generate_sales_grid <- function(adjusted_file,
   # --- Resolve special column names ---
   dom_col    <- sp_col(specials, "dom")
   cd_col     <- sp_col(specials, "contract_date")
+  sa_col     <- sp_col(specials, "sale_age")
+  if (is.null(sa_col) && "sale_age" %in% colnames(df)) sa_col <- "sale_age"
   lat_col    <- sp_col(specials, "latitude")
   lon_col    <- sp_col(specials, "longitude")
   area_col   <- sp_col(specials, "area")
@@ -549,8 +551,8 @@ generate_sales_grid <- function(adjusted_file,
       subj_cd <- col_val(df, 1, cd_col, default = "")
       writeData(wb, s, subj_cd, startRow = row_date_info, startCol = 2)
     }
-    if ("sale_age" %in% colnames(df)) {
-      writeData(wb, s, col_num(df, 1, "sale_age"),
+    if (!is.null(sa_col) && sa_col %in% colnames(df)) {
+      writeData(wb, s, col_num(df, 1, sa_col),
                 startRow = row_date_info, startCol = 3)
     }
     if (!is.null(dom_col) && dom_col %in% colnames(df)) {
@@ -564,8 +566,8 @@ generate_sales_grid <- function(adjusted_file,
         writeData(wb, s, col_val(df, r, cd_col, default = ""),
                   startRow = row_date_info, startCol = col_start)
       }
-      if ("sale_age" %in% colnames(df)) {
-        writeData(wb, s, col_num(df, r, "sale_age"),
+      if (!is.null(sa_col) && sa_col %in% colnames(df)) {
+        writeData(wb, s, col_num(df, r, sa_col),
                   startRow = row_date_info, startCol = col_start + 1)
       }
       if (!is.null(dom_col) && dom_col %in% colnames(df)) {

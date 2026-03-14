@@ -20,9 +20,19 @@ fluidPage(
     .MathJax_Display { text-align: left !important; margin-left: 1em !important; }
     .eui-param-help { position: absolute; top: 0; right: 0; width: 18px; height: 18px; border-radius: 50%; background: #88c0d0; color: #fff; font-size: 11px; font-weight: bold; text-align: center; line-height: 18px; cursor: pointer; z-index: 10; }
     .eui-param-help:hover { background: #5e81ac; }
-    #eui-theme-toggle { position: fixed; top: 12px; right: 20px; z-index: 10000; width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--bs-border-color); background: var(--bs-body-bg); color: var(--bs-body-color); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.15); transition: all 0.3s; }
-    #eui-theme-toggle:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.25); }
-    [data-bs-theme='dark'] #eui-theme-toggle { background: #3b4252; border-color: #434c5e; }
+    #eui-theme-toggle { background: none; border: none; color: var(--bs-navbar-color, #ccc); font-size: 20px; cursor: pointer; padding: 4px 8px; line-height: 1; }
+    #eui-theme-toggle:hover { color: var(--bs-navbar-hover-color, #fff); }
+    .eui-navbar { background: #2e3440; padding: 4px 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .eui-navbar .eui-brand { color: #eceff4; font-size: 1.3em; font-weight: bold; margin-right: 8px; white-space: nowrap; }
+    .eui-navbar .eui-brand small { font-size: 0.55em; color: #81a1c1; font-weight: normal; }
+    .eui-navbar .eui-brand img { height: 26px; margin-right: 6px; vertical-align: middle; }
+    .eui-navbar .dropdown { position: relative; }
+    .eui-navbar .eui-menu-btn { background: none; border: none; color: #d8dee9; font-size: 0.9em; padding: 6px 12px; cursor: pointer; border-radius: 4px; }
+    .eui-navbar .eui-menu-btn:hover { background: rgba(255,255,255,0.1); color: #eceff4; }
+    .eui-navbar .eui-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #ccc); border-radius: 6px; padding: 12px 16px; min-width: 280px; z-index: 10001; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+    .eui-navbar .dropdown.open .eui-dropdown-menu { display: block; }
+    [data-bs-theme='dark'] .eui-navbar .eui-dropdown-menu { background: #3b4252; border-color: #434c5e; }
+    .eui-navbar .eui-spacer { flex: 1; }
     [data-bs-theme='dark'] .eui-popup-content { background: #3b4252; color: #d8dee9; }
     [data-bs-theme='dark'] details > summary { color: #d8dee9 !important; }
     [data-bs-theme='dark'] .nav-tabs .nav-link.active { color: #d8dee9 !important; background-color: #2e3440 !important; border-color: #434c5e #434c5e #2e3440 !important; }
@@ -44,6 +54,7 @@ fluidPage(
     details.eui-section > summary h4 { display: inline; }
     details.eui-section > summary::before { content: '\\25B6'; margin-right: 6px; font-size: 0.75em; transition: transform 0.2s; display: inline-block; }
     details.eui-section[open] > summary::before { transform: rotate(90deg); }
+    .eui-locale-row .form-group { margin-bottom: 0; }
     .radio-inline { margin-right: 16px; }
     .shiny-input-radiogroup input[type='radio'] { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; border: 3px solid #2e3440; border-radius: 50%; margin-right: 5px; vertical-align: middle; cursor: pointer; position: relative; }
     .shiny-input-radiogroup input[type='radio']:checked { border-color: #2e3440; }
@@ -73,9 +84,44 @@ fluidPage(
       obs.observe(document.body, { childList: true, subtree: true });
     });
   ")),
-  tags$button(id = "eui-theme-toggle", onclick = "toggleTheme()", HTML("&#9790;")),
+  # --- Top Menu Bar ---
+  tags$nav(class = "eui-navbar",
+    tags$span(class = "eui-brand",
+      tags$img(src = "logo.png"),
+      "earthUI",
+      tags$small(" - Interactive Earth Model Builder")
+    ),
+    tags$div(class = "dropdown", id = "eui-settings-dropdown",
+      tags$button(class = "eui-menu-btn", onclick = "toggleDropdown('eui-settings-dropdown')",
+                  HTML("&#9881; Settings")),
+      tags$div(class = "eui-dropdown-menu",
+        selectInput("locale_country", "Country",
+                    choices = earthUI:::locale_country_choices_(),
+                    selected = "us", width = "100%"),
+        selectInput("locale_paper", "Paper",
+                    choices = c("Letter" = "letter", "A4" = "a4"),
+                    selected = "letter", width = "100%"),
+        actionLink("locale_save_default", "Save as my default",
+                   style = "font-size: 0.85em; color: #5e81ac; display: block; margin-top: 4px;")
+      )
+    ),
+    tags$div(class = "eui-spacer"),
+    tags$button(id = "eui-theme-toggle", onclick = "toggleTheme()", HTML("&#9790;"))
+  ),
   tags$script(HTML("
     var euiCurrentMode = 'light';
+
+    function toggleDropdown(id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.toggle('open');
+    }
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+      var dropdowns = document.querySelectorAll('.eui-navbar .dropdown');
+      dropdowns.forEach(function(dd) {
+        if (!dd.contains(e.target)) dd.classList.remove('open');
+      });
+    });
 
     function toggleTheme() {
       euiCurrentMode = (euiCurrentMode === 'dark') ? 'light' : 'dark';
@@ -238,7 +284,7 @@ fluidPage(
           if (msg.settings) {
             var s = msg.settings;
             // Selectize inputs
-            ['target','locale_country','locale_paper','locale_csv_sep','locale_dec','locale_date',
+            ['target','locale_country','locale_paper','locale_import',
              'degree','pmethod','glm_family','trace','varmod_method'].forEach(function(id) {
               if (s[id] !== undefined) {
                 var el = document.getElementById(id);
@@ -346,8 +392,7 @@ fluidPage(
       // Selectize inputs (includes new params 1-4)
       var selects = {
         weights_col: 'null',
-        locale_country: 'us', locale_paper: 'letter',
-        locale_csv_sep: ',', locale_dec: '.', locale_date: 'mdy',
+        locale_country: 'us', locale_paper: 'letter', locale_import: 'us',
         degree: '1', pmethod: 'backward', glm_family: 'none',
         trace: '0', varmod_method: 'lm'
       };
@@ -422,16 +467,6 @@ fluidPage(
     });
 
   ")),
-  tags$div(
-    style = "padding: 10px 15px;",
-    tags$h2(
-      tags$img(src = "logo.png", height = "32px",
-               style = "margin-right: 8px; vertical-align: middle;"),
-      "earthUI",
-      tags$small(" - Interactive Earth Model Builder",
-                 style = "font-size: 0.6em; color: var(--bs-secondary-color);")
-    )
-  ),
 
   sidebarLayout(
     sidebarPanel(
@@ -453,41 +488,34 @@ fluidPage(
       hr(),
 
       # --- Data Import ---
-      h4("1. Import Data"),
-      fluidRow(
-        column(6, selectInput("locale_country", "Country",
-                   choices = earthUI:::locale_country_choices_(),
-                   selected = "us", width = "100%")),
-        column(6, selectInput("locale_paper", "Paper",
-                   choices = c("Letter" = "letter", "A4" = "a4"),
-                   selected = "letter", width = "100%"))
+      tags$details(class = "eui-section", open = NA,
+        tags$summary(h4("1. Import Data")),
+        tags$div(class = "eui-locale-row", style = "display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;",
+          tags$label(class = "control-label", "Choose CSV or Excel file"),
+          tags$div(style = "display:flex; align-items:center; gap:6px;",
+            tags$label(class = "control-label", style = "margin-bottom:0;", "Locale"),
+            tags$div(style = "width:150px; margin-bottom:0;",
+              selectInput("locale_import", NULL,
+                          choices = earthUI:::locale_country_choices_(),
+                          selected = "us", width = "100%")
+            )
+          )
+        ),
+        fileInput("file_input", NULL,
+                  accept = c(".csv", ".xlsx", ".xls")),
+        uiOutput("sheet_selector"),
+        uiOutput("data_preview_info")
       ),
-      fluidRow(
-        column(4, selectInput("locale_csv_sep", "CSV sep",
-                   choices = c("," = ",", ";" = ";"),
-                   selected = ",", width = "100%")),
-        column(4, selectInput("locale_dec", "Decimal",
-                   choices = c("." = ".", "," = ","),
-                   selected = ".", width = "100%")),
-        column(4, selectInput("locale_date", "Date",
-                   choices = c("MM/DD/YY" = "mdy", "DD/MM/YY" = "dmy",
-                               "YY-MM-DD" = "ymd"),
-                   selected = "mdy", width = "100%"))
-      ),
-      actionLink("locale_save_default", "Save as my default",
-                 style = "font-size: 0.85em; color: #5e81ac;"),
-      fileInput("file_input", "Choose CSV or Excel file",
-                accept = c(".csv", ".xlsx", ".xls")),
-      uiOutput("sheet_selector"),
-      uiOutput("data_preview_info"),
       hr(),
 
       # --- 2. Output Folder ---
       conditionalPanel(
         condition = "output.data_loaded",
-        h4("2. Project Output Folder"),
-        textInput("output_folder", NULL,
-                  value = path.expand("~/Downloads")),
+        tags$details(class = "eui-section",
+          tags$summary(h4("2. Project Output Folder")),
+          textInput("output_folder", NULL,
+                    value = path.expand("~/Downloads"))
+        ),
         hr()
       ),
 
@@ -791,10 +819,12 @@ fluidPage(
         hr(),
 
         # --- 5. Fit ---
-        h4("5. Fit Earth Model"),
-        actionButton("run_model", "Fit Earth Model",
-                     class = "btn-success btn-lg",
-                     style = "width: 100%; margin-top: 10px;"),
+        tags$details(class = "eui-section", open = NA,
+          tags$summary(h4("5. Fit Earth Model")),
+          actionButton("run_model", "Fit Earth Model",
+                       class = "btn-success btn-lg",
+                       style = "width: 100%; margin-top: 10px;")
+        ),
 
         # --- 6. Download Estimated ... & Residuals ---
         conditionalPanel(

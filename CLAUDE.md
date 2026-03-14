@@ -66,8 +66,10 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
 - **Special columns**: Dropdown per predictor row with options: `no`,
   `contract_date`, `listing_date`, `dom`, `latitude`, `longitude`, `area`,
   `living_area`, `lot_size`, `site_dimensions`, `actual_age`, `effective_age`,
-  `concessions`, `display_only`.
+  `concessions`, `sale_age`, `display_only`.
   Only one column per type (except `display_only` allows multiple).
+  `sale_age` designates an existing column as the sale age; if not designated,
+  earthUI auto-computes it from `contract_date` + effective date.
 - **Subject row handling**: In appraisal mode, row 1 is the subject
   property (excluded from fitting, sale price treated as NA). In market
   mode, optional via "Skip first row" checkbox.
