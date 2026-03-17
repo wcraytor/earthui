@@ -198,7 +198,8 @@ fluidPage(
       var $log = $('#eui-trace-log');
       if ($log.length) {
         var color = '#a3be8c';
-        if (msg.text.match(/^\\s*(CV|cross)/i)) color = '#ebcb8b';
+        if (msg.text.match(/^Preparing results:/)) color = '#88c0d0';
+        else if (msg.text.match(/^\\s*(CV|cross)/i)) color = '#ebcb8b';
         else if (msg.text.match(/error|fail/i)) color = '#bf616a';
         var $line = $('<div style=\"color:' + color + ';\">').text(msg.text);
         $log.append($line);
@@ -230,6 +231,92 @@ fluidPage(
     // Check download buttons on completion
     Shiny.addCustomMessageHandler('download_check', function(msg) {
       addCheck(msg.id);
+    });
+
+    // --- Tab preparation progress overlay ---
+    Shiny.addCustomMessageHandler('prep_progress', function(msg) {
+      if (msg.action === 'show') {
+        $('#eui-prep-overlay').remove();
+        var overlay = $(
+          '<div id=\"eui-prep-overlay\" style=\"position:fixed;top:0;left:0;width:100%;height:100%;' +
+          'background:rgba(0,0,0,0.35);z-index:9999;display:flex;align-items:center;justify-content:center;\">' +
+            '<div style=\"background:#2e3440;color:#d8dee9;border-radius:8px;padding:20px 32px;' +
+            'box-shadow:0 4px 24px rgba(0,0,0,0.5);font-family:monospace;text-align:center;min-width:300px;\">' +
+              '<div style=\"font-size:1.1em;font-weight:bold;margin-bottom:10px;\">' + msg.text + '</div>' +
+              '<div id=\"eui-prep-step\" style=\"font-size:0.9em;color:#88c0d0;\"></div>' +
+              '<div style=\"margin-top:12px;height:4px;background:#3b4252;border-radius:2px;overflow:hidden;\">' +
+                '<div id=\"eui-prep-bar\" style=\"height:100%;width:0%;background:#88c0d0;' +
+                'transition:width 0.3s ease;\"></div>' +
+              '</div>' +
+            '</div>' +
+          '</div>'
+        );
+        overlay.appendTo('body');
+        window.euiPrepSteps = 0;
+        window.euiPrepTotal = 5;
+      } else if (msg.action === 'update') {
+        window.euiPrepSteps = (window.euiPrepSteps || 0) + 1;
+        var pct = Math.min(100, Math.round((window.euiPrepSteps / (window.euiPrepTotal || 5)) * 100));
+        $('#eui-prep-step').text(msg.text);
+        $('#eui-prep-bar').css('width', pct + '%');
+      } else if (msg.action === 'hide') {
+        $('#eui-prep-bar').css('width', '100%');
+        $('#eui-prep-step').text('Done');
+        setTimeout(function() {
+          $('#eui-prep-overlay').fadeOut(300, function() { $(this).remove(); });
+        }, 400);
+      }
+    });
+
+    // --- Report rendering modal ---
+    Shiny.addCustomMessageHandler('report_start', function(msg) {
+      $('#eui-report-modal').remove();
+      var start = Date.now();
+      var modal = $(
+        '<div id=\"eui-report-modal\" style=\"position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10001;' +
+        'background:#2e3440;color:#d8dee9;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.5);' +
+        'width:420px;max-width:90vw;font-family:monospace;overflow:hidden;\">' +
+          '<div style=\"background:#3b4252;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;\">' +
+            '<span style=\"font-size:0.95em;font-weight:bold;\">Rendering Report</span>' +
+            '<span id=\"eui-report-timer\" style=\"font-size:0.85em;color:#81a1c1;\">0s</span>' +
+          '</div>' +
+          '<div id=\"eui-report-log\" style=\"padding:12px 16px;max-height:200px;overflow-y:auto;font-size:0.85em;line-height:1.6;\">' +
+            '<div style=\"color:#88c0d0;\">' + msg.text + '</div>' +
+          '</div>' +
+        '</div>'
+      );
+      $('<div id=\"eui-report-backdrop\" style=\"position:fixed;top:0;left:0;width:100%;height:100%;' +
+        'background:rgba(0,0,0,0.4);z-index:10000;\"></div>').appendTo('body');
+      modal.appendTo('body');
+      window.euiReportTimer = setInterval(function() {
+        var s = Math.floor((Date.now() - start) / 1000);
+        var m = Math.floor(s / 60);
+        var label = m > 0 ? m + 'm ' + (s % 60) + 's' : s + 's';
+        $('#eui-report-timer').text(label);
+      }, 1000);
+    });
+
+    Shiny.addCustomMessageHandler('report_line', function(msg) {
+      var $log = $('#eui-report-log');
+      if ($log.length) {
+        var color = msg.error ? '#bf616a' : '#a3be8c';
+        $log.append($('<div style=\"color:' + color + ';\">').text(msg.text));
+        $log.scrollTop($log[0].scrollHeight);
+      }
+    });
+
+    Shiny.addCustomMessageHandler('report_done', function(msg) {
+      clearInterval(window.euiReportTimer);
+      var $log = $('#eui-report-log');
+      var color = msg.error ? '#bf616a' : '#a3be8c';
+      $log.append($('<div style=\"color:' + color + ';font-weight:bold;margin-top:4px;\">').text(msg.text));
+      $log.scrollTop($log[0].scrollHeight);
+      var $btn = $('<span id=\"eui-report-close\" style=\"position:absolute;top:8px;right:12px;' +
+        'color:#81a1c1;cursor:pointer;font-size:1.3em;line-height:1;\">&times;</span>');
+      $btn.on('click', function() {
+        $('#eui-report-modal, #eui-report-backdrop').fadeOut(300, function(){ $(this).remove(); });
+      });
+      $('#eui-report-modal').append($btn);
     });
 
     // --- wp display, button state, and persistence ---
@@ -919,82 +1006,160 @@ fluidPage(
         )
       ),
       conditionalPanel(
-        condition = "output.model_fitted",
+        condition = "output.fit_attempted",
         tabsetPanel(
           id = "results_tabs",
           tabPanel(
             "Data",
             br(),
             conditionalPanel(
-              condition = "input.purpose === 'appraisal'",
+              condition = "!output.model_fitted",
+              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
+                  h4("Waiting for processing to complete."))
+            ),
+            conditionalPanel(
+              condition = "output.model_fitted && input.purpose === 'appraisal'",
               h5("Subject Property"),
               DT::dataTableOutput("data_subjects_tab"),
               h5("Comparable Sales"),
               DT::dataTableOutput("data_comps_tab")
             ),
             conditionalPanel(
-              condition = "input.purpose !== 'appraisal'",
+              condition = "output.model_fitted && input.purpose !== 'appraisal'",
               DT::dataTableOutput("data_preview_tab")
             )
           ),
           tabPanel(
             "Equation",
             br(),
-            div(style = "overflow-x: auto; padding: 10px 10px 10px 0;",
-                uiOutput("model_equation"))
+            conditionalPanel(
+              condition = "!output.tabs_ready",
+              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
+                  h4("Waiting for processing to complete."))
+            ),
+            conditionalPanel(
+              condition = "output.tabs_ready",
+              div(style = "overflow-x: auto; padding: 10px 10px 10px 0;",
+                  uiOutput("model_equation"))
+            )
           ),
           tabPanel(
             "Summary",
             br(),
-            uiOutput("summary_metrics"),
-            h5("Coefficients & Basis Functions"),
-            DT::dataTableOutput("summary_table")
+            conditionalPanel(
+              condition = "!output.tabs_ready",
+              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
+                  h4("Waiting for processing to complete."))
+            ),
+            conditionalPanel(
+              condition = "output.tabs_ready",
+              uiOutput("summary_metrics"),
+              h5("Coefficients & Basis Functions"),
+              DT::dataTableOutput("summary_table")
+            )
           ),
           tabPanel(
             "Variable Importance",
             br(),
-            plotOutput("importance_plot", height = "400px"),
-            br(),
-            DT::dataTableOutput("importance_table")
+            conditionalPanel(
+              condition = "!output.tabs_ready",
+              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
+                  h4("Waiting for processing to complete."))
+            ),
+            conditionalPanel(
+              condition = "output.tabs_ready",
+              plotOutput("importance_plot", height = "400px"),
+              br(),
+              DT::dataTableOutput("importance_table")
+            )
           ),
           tabPanel(
             "Contribution",
             br(),
-            uiOutput("response_selector_contrib"),
-            uiOutput("contrib_g_selector"),
-            uiOutput("contrib_plot_container")
+            conditionalPanel(
+              condition = "!output.tabs_ready",
+              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
+                  h4("Waiting for processing to complete."))
+            ),
+            conditionalPanel(
+              condition = "output.tabs_ready",
+              uiOutput("response_selector_contrib"),
+              uiOutput("contrib_g_selector"),
+              uiOutput("contrib_plot_container")
+            )
           ),
           tabPanel(
             "Correlation",
             br(),
-            uiOutput("correlation_plot_ui")
+            conditionalPanel(
+              condition = "!output.tabs_ready",
+              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
+                  h4("Waiting for processing to complete."))
+            ),
+            conditionalPanel(
+              condition = "output.tabs_ready",
+              uiOutput("correlation_plot_ui")
+            )
           ),
           tabPanel(
             "Diagnostics",
             br(),
-            uiOutput("response_selector_diag"),
-            fluidRow(
-              column(6, plotOutput("residuals_plot", height = "350px")),
-              column(6, plotOutput("qq_plot", height = "350px"))
+            conditionalPanel(
+              condition = "!output.tabs_ready",
+              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
+                  h4("Waiting for processing to complete."))
             ),
-            br(),
-            plotOutput("actual_vs_predicted_plot", height = "400px")
+            conditionalPanel(
+              condition = "output.tabs_ready",
+              uiOutput("response_selector_diag"),
+              fluidRow(
+                column(6, plotOutput("residuals_plot", height = "350px")),
+                column(6, plotOutput("qq_plot", height = "350px"))
+              ),
+              br(),
+              plotOutput("actual_vs_predicted_plot", height = "400px")
+            )
           ),
           tabPanel(
             "RCA Adjustments",
             br(),
-            uiOutput("rca_plots_ui")
+            conditionalPanel(
+              condition = "!output.rca_ready",
+              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
+                  h4("7. Calculate RCA Adjustments & Download",
+                     "must first be initiated and completed."))
+            ),
+            conditionalPanel(
+              condition = "output.rca_ready",
+              uiOutput("rca_plots_ui")
+            )
           ),
           tabPanel(
             "ANOVA",
             br(),
-            DT::dataTableOutput("anova_table")
+            conditionalPanel(
+              condition = "!output.tabs_ready",
+              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
+                  h4("Waiting for processing to complete."))
+            ),
+            conditionalPanel(
+              condition = "output.tabs_ready",
+              DT::dataTableOutput("anova_table")
+            )
           ),
           tabPanel(
             "Earth Output",
             br(),
-            div(style = "overflow-x: auto;",
-                verbatimTextOutput("earth_output"))
+            conditionalPanel(
+              condition = "!output.tabs_ready",
+              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
+                  h4("Waiting for processing to complete."))
+            ),
+            conditionalPanel(
+              condition = "output.tabs_ready",
+              div(style = "overflow-x: auto;",
+                  verbatimTextOutput("earth_output"))
+            )
           )
         )
       )

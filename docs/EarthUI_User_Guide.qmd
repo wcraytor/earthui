@@ -60,6 +60,7 @@ format:
 {\fontsize{48}{56}\selectfont\textbf{earthUI}}\\[12pt]
 {\Large User Guide}\\[24pt]
 {\small General Use · Appraisal Features · Market Area Analysis · Complete Reference}
+by William B. Craytor, Pacific Vista Net
 \end{center}
 
 \vspace{2cm}
@@ -1129,11 +1130,11 @@ After fitting a model, the Download Report section (sidebar section 7, 8, or 9 d
 
 Three formats are available via the format dropdown:
 
-- **HTML** --- a self-contained `.html` file with interactive tables, embedded images, and a table of contents. Uses the Flatly Bootstrap theme and Roboto Condensed font.
+- **HTML** --- an `.html` file with KaTeX math rendering, embedded images, and a table of contents. Uses the Flatly Bootstrap theme and Roboto Condensed font.
 - **Word** --- a `.docx` file suitable for editing and distribution. Includes a table of contents and uses a custom reference template for consistent styling.
 - **PDF** --- typeset with LuaLaTeX for professional-quality output. Paper size follows the locale setting (Letter or A4). Includes landscape pages for large interaction matrices and uses Roboto Condensed with Latin Modern Math for equations.
 
-Reports are rendered via Quarto and saved directly to the Project Output Folder as `<datafile>_report_<YYYYMMDD_HHMMSS>.<format>`. A notification confirms the file location on completion.
+Reports are rendered via Quarto and saved directly to the Project Output Folder as `<datafile>_report_<YYYYMMDD_HHMMSS>.<format>`. Rendering runs in the background --- a modal dialog shows elapsed time and Quarto progress while the app remains responsive. All plots and data are pre-generated after each successful fit, so switching between formats is fast (no R re-computation). A notification confirms the file location on completion.
 
 ## Report Contents
 

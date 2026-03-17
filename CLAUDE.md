@@ -60,6 +60,11 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
 - **Async model fitting**: Uses `callr::r_bg()` with `wd = tempdir()`,
   stdout/stderr piping, and a 300ms polling observer. Falls back to
   synchronous `fit_earth()` if callr is unavailable.
+- **Post-fit precomputation**: After fit completes, a deferred observer
+  pre-computes all tab data (`format_summary`, `format_model_equation`,
+  `format_variable_importance`, `list_g_functions`, `format_anova`) into
+  `rv$computed`, then pre-generates report assets into `rv_report$assets_dir`.
+  The fitting modal shows "preparing tabs..." until ready.
 - **Purpose modes**: Radio button (`input$purpose`) with three options:
   `"general"`, `"appraisal"`, `"market"`. Controls sidebar visibility,
   subject row handling, special column options, and download workflows.
@@ -104,8 +109,18 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
 - **Weights + NA removal**: `fit_earth()` subsets the `weights` vector by the
   same `complete.cases()` mask used to remove NA rows, preventing length
   mismatch errors.
+- **Report asset pre-generation**: `prepare_report_assets()` runs once after
+  each fit (deferred observer), pre-generating all plots (PNG + PDF) and
+  pre-computing all data (summary, equation, importance, g-functions, ANOVA).
+  Stored in `rv_report$assets_dir`. Report rendering then only runs
+  Quarto/pandoc format conversion — no R computation in the QMD template.
+- **Async report rendering**: Uses `callr::r_bg()` with a modal dialog
+  (matching the fitting modal style) showing elapsed time and Quarto output.
+  Falls back to synchronous rendering if callr is unavailable.
 - **PDF export**: Renders to a temp file first, then binary-copies to Shiny's
   download path. Uses base R `persp()` for 3D plots (no external dependencies).
+- **HTML reports**: Use KaTeX (not MathJax) for math rendering — much smaller
+  and faster. No `embed-resources` — reports are saved locally.
 - **Report: Allowed Interactions matrix**: Rendered in landscape mode across
   all formats. PDF uses `pdflscape` (`\begin{landscape}`). Word uses raw
   OpenXML section breaks for landscape pages. HTML uses custom table with
@@ -198,4 +213,8 @@ Modal-based comp selection with auto-recommendation:
   function below (this has caused lost exports).
 - macOS temp paths involve `/var` → `/private/var` symlinks; use
   `normalizePath()` when creating temp dirs for Quarto rendering.
+- **Plotly surface convention**: `add_surface(x, y, z)` renders `z[i,j]` at
+  `(x[j], y[i])` — rows map to y, columns map to x. This is the **transpose**
+  of base R `persp()` which uses `z[i,j]` at `(x[i], y[j])`. Always pass
+  `t(z_mat)` to plotly when `z_mat` is filled with the persp convention.
 - Kill port 7878 before relaunching: `lsof -ti:7878 | xargs kill`.

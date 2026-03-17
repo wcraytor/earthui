@@ -78,7 +78,8 @@ function(input, output, session) {
     rca_df = NULL,             # RCA export data for histogram plots
     rca_targets = NULL,        # target variable names for RCA plots
     sg_recommended = NULL,     # recommended comps for sales grid
-    sg_others = NULL           # other comps for sales grid
+    sg_others = NULL,          # other comps for sales grid
+    computed = NULL             # pre-computed tab results (populated after fit)
   )
 
   # Track user's explicit varmod.method changes
@@ -188,6 +189,17 @@ function(input, output, session) {
       rv$categoricals <- detect_categoricals(rv$data)
       rv$col_types <- detect_types(rv$data)
       rv$result <- NULL
+      rv$computed <- NULL
+      if (!is.null(rv_report$assets_proc) &&
+          inherits(rv_report$assets_proc, "r_process") &&
+          rv_report$assets_proc$is_alive()) {
+        rv_report$assets_proc$kill()
+      }
+      rv_report$assets_proc <- NULL
+      if (!is.null(rv_report$assets_dir)) {
+        unlink(rv_report$assets_dir, recursive = TRUE)
+        rv_report$assets_dir <- NULL
+      }
       message("earthUI: import OK, ", nrow(rv$data), " rows, ", ncol(rv$data), " cols")
     }, error = function(e) {
       message("earthUI: IMPORT ERROR: ", e$message)
@@ -209,6 +221,11 @@ function(input, output, session) {
     rv$categoricals <- detect_categoricals(rv$data)
     rv$col_types <- detect_types(rv$data)
     rv$result <- NULL
+    rv$computed <- NULL
+    if (!is.null(rv_report$assets_dir)) {
+      unlink(rv_report$assets_dir, recursive = TRUE)
+      rv_report$assets_dir <- NULL
+    }
   })
 
   # Update weights dropdown with numeric column names when data loads
@@ -224,6 +241,16 @@ function(input, output, session) {
 
   output$model_fitted <- reactive(!is.null(rv$result))
   outputOptions(output, "model_fitted", suspendWhenHidden = FALSE)
+
+  output$tabs_ready <- reactive(!is.null(rv$computed))
+  outputOptions(output, "tabs_ready", suspendWhenHidden = FALSE)
+
+  output$rca_ready <- reactive(!is.null(rv$rca_df))
+  outputOptions(output, "rca_ready", suspendWhenHidden = FALSE)
+
+  rv_fit_attempted <- reactiveVal(FALSE)
+  output$fit_attempted <- reactive(rv_fit_attempted())
+  outputOptions(output, "fit_attempted", suspendWhenHidden = FALSE)
 
   output$report_heading <- renderUI({
     n <- if (identical(input$purpose, "appraisal")) "9" else "7"
@@ -1456,8 +1483,102 @@ function(input, output, session) {
     )
   }
 
+  # --- Pre-compute all tab results (deferred so fitting_done flushes first) ---
+  precompute_results_ <- function(result) {
+    list(
+      summary     = tryCatch(format_summary(result), error = function(e) NULL),
+      equation    = tryCatch(format_model_equation(result), error = function(e) NULL),
+      importance  = tryCatch(format_variable_importance(result), error = function(e) NULL),
+      g_functions = tryCatch(list_g_functions(result), error = function(e) NULL),
+      anova       = tryCatch(format_anova(result), error = function(e) NULL)
+    )
+  }
+
+  # After rv$result is set, schedule precomputation AFTER the current flush
+  # so the browser sees tabs with "Waiting for processing to complete." first.
+  observe({
+    result <- rv$result
+    if (is.null(result)) return()
+    if (!is.null(rv$computed)) return()
+
+    # Schedule work AFTER this flush reaches the browser
+    session$onFlushed(function() {
+      # Show progress overlay
+      session$sendCustomMessage("prep_progress",
+        list(action = "show", text = "Preparing results..."))
+
+      # Pre-compute tab data
+      session$sendCustomMessage("prep_progress",
+        list(action = "update", text = "Preparing: Summary..."))
+      computed <- list(
+        summary = tryCatch(format_summary(result), error = function(e) NULL)
+      )
+
+      session$sendCustomMessage("prep_progress",
+        list(action = "update", text = "Preparing: Equation..."))
+      computed$equation <- tryCatch(format_model_equation(result),
+                                    error = function(e) NULL)
+
+      session$sendCustomMessage("prep_progress",
+        list(action = "update", text = "Preparing: Variable importance..."))
+      computed$importance <- tryCatch(format_variable_importance(result),
+                                      error = function(e) NULL)
+
+      session$sendCustomMessage("prep_progress",
+        list(action = "update", text = "Preparing: G-functions..."))
+      computed$g_functions <- tryCatch(list_g_functions(result),
+                                       error = function(e) NULL)
+
+      session$sendCustomMessage("prep_progress",
+        list(action = "update", text = "Preparing: ANOVA..."))
+      computed$anova <- tryCatch(format_anova(result),
+                                  error = function(e) NULL)
+
+      rv$computed <- computed
+
+      # Dismiss progress overlay
+      session$sendCustomMessage("prep_progress",
+        list(action = "hide"))
+
+      # Launch background process to pre-generate report assets (slow: many plots)
+      if (requireNamespace("callr", quietly = TRUE)) {
+        tmp_rds <- tempfile(fileext = ".rds")
+        saveRDS(result, tmp_rds)
+        rv_report$assets_proc <- callr::r_bg(
+          function(rds_path) {
+            res <- readRDS(rds_path)
+            earthUI::prepare_report_assets(res)
+          },
+          args = list(rds_path = tmp_rds),
+          supervise = TRUE,
+          wd = tempdir()
+        )
+      }
+    }, once = TRUE)
+  })
+
+  # Polling observer for background asset generation
+  observe({
+    req(rv_report$assets_proc)
+    invalidateLater(1000)
+    proc <- rv_report$assets_proc
+    if (!inherits(proc, "r_process")) return()
+    if (!proc$is_alive()) {
+      tryCatch({
+        assets_path <- proc$get_result()
+        rv_report$assets_dir <- assets_path
+        message("earthUI: report assets ready at ", assets_path)
+      }, error = function(e) {
+        message("earthUI: asset prep error: ", e$message)
+        rv_report$assets_dir <- NULL
+      })
+      rv_report$assets_proc <- NULL
+    }
+  })
+
   observeEvent(input$run_model, {
     req(rv$data, input$target, input$predictors)
+    rv_fit_attempted(TRUE)
 
     # --- Appraiser: round latitude/longitude to 3 decimal places ---
     if (input$purpose %in% c("appraisal", "market") && !is.null(input$col_specials)) {
@@ -1600,6 +1721,17 @@ function(input, output, session) {
       }
       rv$trace_lines <- character(0)
       rv$result <- NULL
+      rv$computed <- NULL
+      if (!is.null(rv_report$assets_proc) &&
+          inherits(rv_report$assets_proc, "r_process") &&
+          rv_report$assets_proc$is_alive()) {
+        rv_report$assets_proc$kill()
+      }
+      rv_report$assets_proc <- NULL
+      if (!is.null(rv_report$assets_dir)) {
+        unlink(rv_report$assets_dir, recursive = TRUE)
+        rv_report$assets_dir <- NULL
+      }
       rv$rca_df <- NULL
       rv$rca_targets <- NULL
 
@@ -1674,7 +1806,8 @@ function(input, output, session) {
           elapsed <- rv$result$elapsed
           setProgress(1, detail = "Done")
           session$sendCustomMessage("fitting_done",
-            list(text = sprintf("Done in %.1fs", elapsed)))
+            list(text = sprintf("Done in %.1fs  \u2014  preparing tabs...",
+                                elapsed)))
           write_fit_log_(input$output_folder, rv$result$trace_output, rv$file_name)
           # Auto-export for mgcvUI (degree <= 2)
           auto_export_for_mgcv_(rv$result, input$output_folder, rv$file_name)
@@ -1744,7 +1877,8 @@ function(input, output, session) {
           result$trace_output <- rv$trace_lines
           rv$result <- result
           session$sendCustomMessage("fitting_done",
-            list(text = sprintf("Done in %.1fs", result$elapsed)))
+            list(text = sprintf("Done in %.1fs  \u2014  preparing tabs...",
+                                result$elapsed)))
           # Write log file on success
           write_fit_log_(input$output_folder, rv$trace_lines, rv$file_name)
           # Auto-export for mgcvUI (degree <= 2)
@@ -1837,8 +1971,9 @@ function(input, output, session) {
 
   # --- Results: Summary ---
   output$summary_metrics <- renderUI({
-    req(rv$result)
-    s <- format_summary(rv$result)
+    req(rv$computed)
+    s <- rv$computed$summary
+    req(s)
 
     if (isTRUE(s$multi)) {
       # Per-response metrics cards
@@ -1944,8 +2079,9 @@ function(input, output, session) {
 
   # --- Results: Model Equation ---
   output$model_equation <- renderUI({
-    req(rv$result)
-    eq <- format_model_equation(rv$result)
+    req(rv$computed)
+    eq <- rv$computed$equation
+    req(eq)
     if (inherits(eq, "earthUI_equation_multi")) {
       # Show one equation per response with a heading
       eq_blocks <- lapply(seq_along(eq$targets), function(i) {
@@ -1962,8 +2098,9 @@ function(input, output, session) {
   })
 
   output$summary_table <- DT::renderDataTable({
-    req(rv$result)
-    s <- format_summary(rv$result)
+    req(rv$computed)
+    s <- rv$computed$summary
+    req(s)
     dt <- DT::datatable(s$coefficients, options = list(pageLength = 20),
                         rownames = FALSE, class = "compact stripe")
     numeric_cols <- names(s$coefficients)[vapply(s$coefficients, is.numeric, logical(1))]
@@ -1997,8 +2134,9 @@ function(input, output, session) {
   })
 
   output$importance_table <- DT::renderDataTable({
-    req(rv$result)
-    imp_df <- format_variable_importance(rv$result)
+    req(rv$computed)
+    imp_df <- rv$computed$importance
+    req(imp_df)
     dt <- DT::datatable(imp_df, options = list(pageLength = 20),
                         rownames = FALSE, class = "compact stripe")
     numeric_cols <- names(imp_df)[vapply(imp_df, is.numeric, logical(1))]
@@ -2008,8 +2146,9 @@ function(input, output, session) {
 
   # --- Results: Contribution (g-function plots) ---
   output$contrib_g_selector <- renderUI({
-    req(rv$result)
-    gf <- list_g_functions(rv$result)
+    req(rv$computed)
+    gf <- rv$computed$g_functions
+    req(gf)
     if (nrow(gf) == 0L) return(p("No g-functions in model."))
 
     # Build display labels: "1: sq_ft_total" or "6: sq_ft_total x beds [3D]"
@@ -2025,8 +2164,9 @@ function(input, output, session) {
   })
 
   output$contrib_plot_container <- renderUI({
-    req(rv$result, input$contrib_g_index)
-    gf <- list_g_functions(rv$result)
+    req(rv$computed, input$contrib_g_index)
+    gf <- rv$computed$g_functions
+    req(gf)
     idx <- as.integer(input$contrib_g_index)
     if (idx < 1L || idx > nrow(gf)) return(NULL)
 
@@ -2126,8 +2266,9 @@ function(input, output, session) {
 
   # --- Results: ANOVA ---
   output$anova_table <- DT::renderDataTable({
-    req(rv$result)
-    anova_df <- format_anova(rv$result)
+    req(rv$computed)
+    anova_df <- rv$computed$anova
+    req(anova_df)
     dt <- DT::datatable(anova_df, options = list(pageLength = 20),
                         rownames = FALSE, class = "compact stripe")
     numeric_cols <- names(anova_df)[vapply(anova_df, is.numeric, logical(1))]
@@ -2244,9 +2385,19 @@ function(input, output, session) {
     }
   })
 
-  # --- Export Report (saves to output folder) ---
+  # --- Export Report (saves to output folder, async via callr) ---
+  rv_report <- reactiveValues(proc = NULL, out_path = NULL, assets_dir = NULL,
+                              assets_proc = NULL)
+
   observeEvent(input$export_report_btn, {
     req(rv$result)
+    # Don't start a new render if one is already running
+    if (!is.null(rv_report$proc)) {
+      showNotification("Report rendering already in progress.",
+                       type = "warning", duration = 5)
+      return()
+    }
+
     fmt <- input$export_format
     folder <- input$output_folder
     if (is.null(folder) || !nzchar(folder)) {
@@ -2258,26 +2409,100 @@ function(input, output, session) {
     out_name <- paste0(base, "_report_",
                        format(Sys.time(), "%Y%m%d_%H%M%S"), ".", fmt)
     out_path <- file.path(folder, out_name)
+    rv_report$out_path <- out_path
 
-    withProgress(message = "Rendering report...", value = 0.3, {
+    session$sendCustomMessage("report_start",
+      list(text = paste0("Rendering ", toupper(fmt), " report...")))
+
+    assets <- rv_report$assets_dir
+    paper <- earthUI:::locale_paper_()
+
+    use_async <- requireNamespace("callr", quietly = TRUE)
+    if (use_async) {
+      rv_report$proc <- callr::r_bg(
+        function(assets_dir, output_format, output_file, paper_size, result) {
+          earthUI::render_report(result,
+                                 output_format = output_format,
+                                 output_file = output_file,
+                                 paper_size = paper_size,
+                                 assets_dir = assets_dir)
+        },
+        args = list(assets_dir = assets, output_format = fmt,
+                     output_file = out_path, paper_size = paper,
+                     result = rv$result),
+        stdout = "|", stderr = "|",
+        supervise = TRUE,
+        wd = tempdir()
+      )
+    } else {
+      # Sync fallback
       tryCatch({
         render_report(rv$result,
                       output_format = fmt,
                       output_file = out_path,
-                      paper_size = earthUI:::locale_paper_())
-        setProgress(1, detail = "Done")
+                      paper_size = paper,
+                      assets_dir = assets)
         session$sendCustomMessage("download_check",
                                   list(id = "export_report_btn"))
-        showNotification(
-          paste0("Report saved to: ", out_path),
-          type = "message", duration = 8)
+        session$sendCustomMessage("report_done",
+          list(text = paste0("Report saved to: ", out_path), error = FALSE))
         message("earthUI: report saved to ", out_path)
       }, error = function(e) {
         message("earthUI export error: ", e$message)
-        showNotification(paste("Export error:", e$message),
-                         type = "error", duration = 15)
+        session$sendCustomMessage("report_done",
+          list(text = paste("Error:", e$message), error = TRUE))
       })
-    })
+      rv_report$proc <- NULL
+    }
+  })
+
+  # Polling observer for async report rendering
+  observe({
+    req(rv_report$proc)
+    invalidateLater(500)
+    proc <- rv_report$proc
+    if (!inherits(proc, "r_process")) return()
+
+    # Read stdout/stderr for progress
+    out_lines <- tryCatch(proc$read_output_lines(), error = function(e) character(0))
+    err_lines <- tryCatch(proc$read_error_lines(), error = function(e) character(0))
+    for (line in c(out_lines, err_lines)) {
+      if (nzchar(trimws(line))) {
+        session$sendCustomMessage("report_line", list(text = line, error = FALSE))
+      }
+    }
+
+    if (!proc$is_alive()) {
+      # Collect any remaining output
+      final_out <- tryCatch(proc$read_output_lines(), error = function(e) character(0))
+      final_err <- tryCatch(proc$read_error_lines(), error = function(e) character(0))
+      for (line in c(final_out, final_err)) {
+        if (nzchar(trimws(line))) {
+          session$sendCustomMessage("report_line", list(text = line, error = FALSE))
+        }
+      }
+
+      tryCatch({
+        proc$get_result()
+        out_path <- rv_report$out_path
+        if (file.exists(out_path)) {
+          session$sendCustomMessage("download_check",
+                                    list(id = "export_report_btn"))
+          session$sendCustomMessage("report_done",
+            list(text = paste0("Report saved to: ", out_path), error = FALSE))
+          message("earthUI: report saved to ", out_path)
+        } else {
+          session$sendCustomMessage("report_done",
+            list(text = "Error: output file not found", error = TRUE))
+        }
+      }, error = function(e) {
+        err_msg <- if (!is.null(e$parent)) e$parent$message else e$message
+        message("earthUI export error: ", err_msg)
+        session$sendCustomMessage("report_done",
+          list(text = paste("Error:", err_msg), error = TRUE))
+      })
+      rv_report$proc <- NULL
+    }
   })
 
   # --- 8. Generate Sales Grid & Download ---

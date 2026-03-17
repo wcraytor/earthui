@@ -8,7 +8,8 @@ render_report(
   earth_result,
   output_format = "html",
   output_file = NULL,
-  paper_size = "letter"
+  paper_size = "letter",
+  assets_dir = NULL
 )
 }
 \arguments{
@@ -23,6 +24,9 @@ temporary file is created.}
 
 \item{paper_size}{Character. Paper size for PDF output: \code{"letter"} (US) or
 \code{"a4"} (European). Default is \code{"letter"}. Ignored for HTML/Word.}
+
+\item{assets_dir}{Character or \code{NULL}. Path to pre-generated assets from
+\code{\link[=prepare_report_assets]{prepare_report_assets()}}. If \code{NULL}, assets are generated on-the-fly.}
 }
 \value{
 The path to the rendered output file (invisibly).

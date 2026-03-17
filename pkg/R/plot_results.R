@@ -1278,7 +1278,7 @@ plot_g_3d_ <- function(earth_result, grp, response_idx = NULL) {
       z_mat <- matrix(z_vals, nrow = n_grid, ncol = n_grid)
 
       fig <- fig |> plotly::add_surface(
-        x = x1_seq, y = x2_seq, z = z_mat,
+        x = x1_seq, y = x2_seq, z = t(z_mat),
         colorscale = list(c(0, "#2166AC"), c(0.5, "#f7f7f7"), c(1, "#B2182B")),
         opacity = 0.85,
         colorbar = list(title = paste("Contribution\nto", target_label)),
@@ -1336,7 +1336,7 @@ plot_g_3d_ <- function(earth_result, grp, response_idx = NULL) {
 
   plotly::plot_ly() |>
     plotly::add_surface(
-      x = x1_seq, y = x2_seq, z = z_mat,
+      x = x1_seq, y = x2_seq, z = t(z_mat),
       colorscale = list(c(0, "#2166AC"), c(0.5, "#f7f7f7"), c(1, "#B2182B")),
       opacity = 0.85,
       colorbar = list(title = paste("Contribution\nto", target_label)),

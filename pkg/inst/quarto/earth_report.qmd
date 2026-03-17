@@ -4,8 +4,8 @@ format:
   html:
     toc: true
     theme: flatly
-    embed-resources: true
     mainfont: "Roboto Condensed"
+    html-math-method: katex
     include-in-header:
       text: |
         <style>
@@ -29,31 +29,65 @@ format:
     toc: true
     reference-doc: reference.docx
 params:
+  data_file: ""
   result_file: ""
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-library(earthUI)
-library(ggplot2)
 
-# Load Roboto Condensed for plots (skip download if already registered)
-if (requireNamespace("sysfonts", quietly = TRUE) &&
-    requireNamespace("showtext", quietly = TRUE)) {
-  if (!"Roboto Condensed" %in% sysfonts::font_families()) {
-    sysfonts::font_add_google("Roboto Condensed", "Roboto Condensed")
+# Load pre-generated assets if available, otherwise fall back to computing
+if (nzchar(params$data_file) && file.exists(params$data_file)) {
+  .assets <- readRDS(params$data_file)
+  result <- .assets$result
+  summary_info <- .assets$summary_info
+  gf <- .assets$gf
+  multi <- .assets$multi
+  targets <- .assets$targets
+  .plots_dir <- file.path(dirname(params$data_file), "plots")
+  .has_assets <- dir.exists(.plots_dir) &&
+    length(list.files(.plots_dir)) > 0L
+} else if (nzchar(params$result_file) && file.exists(params$result_file)) {
+  # Legacy path: compute everything (slower)
+  library(earthUI)
+  library(ggplot2)
+  if (requireNamespace("sysfonts", quietly = TRUE) &&
+      requireNamespace("showtext", quietly = TRUE)) {
+    if (!"Roboto Condensed" %in% sysfonts::font_families()) {
+      tryCatch(
+        sysfonts::font_add_google("Roboto Condensed", "Roboto Condensed"),
+        error = function(e) NULL)
+    }
+    showtext::showtext_auto()
+    theme_set(theme_minimal(base_family = "Roboto Condensed"))
+  } else {
+    theme_set(theme_minimal(base_family = "sans"))
   }
-  showtext::showtext_auto()
-  theme_set(theme_minimal(base_family = "Roboto Condensed"))
-} else {
-  theme_set(theme_minimal(base_family = "sans"))
+  result <- readRDS(params$result_file)
+  summary_info <- earthUI::format_summary(result)
+  gf <- earthUI::list_g_functions(result)
+  multi <- isTRUE(summary_info$multi)
+  targets <- result$target
+  .has_assets <- FALSE
+  .assets <- NULL
 }
 
-result <- readRDS(params$result_file)
-summary_info <- format_summary(result)
-multi <- isTRUE(summary_info$multi)
-targets <- result$target
-gf <- list_g_functions(result)
+fmt <- if (!is.null(knitr::pandoc_to())) knitr::pandoc_to() else "html"
+.plot_ext <- if (fmt == "latex") "pdf" else "png"
+
+# Helper: include a pre-generated plot or generate on-the-fly
+include_plot <- function(name, gen_expr, width = 8, height = 5) {
+  if (.has_assets) {
+    f <- file.path(.plots_dir, paste0(name, ".", .plot_ext))
+    if (file.exists(f)) {
+      knitr::include_graphics(f)
+    } else {
+      eval(gen_expr)
+    }
+  } else {
+    eval(gen_expr)
+  }
+}
 ```
 
 ## Dataset Description
@@ -87,8 +121,6 @@ for (i in seq_len(n)) {
     display[i, j] <- if (i == j) "" else if (mat[i, j]) "\u2713" else "\u2014"
   }
 }
-
-fmt <- if (!is.null(knitr::pandoc_to())) knitr::pandoc_to() else "html"
 
 # Truncate long predictor names for compact display
 max_len <- if (n > 8) 12 else if (n > 5) 16 else 30
@@ -169,7 +201,7 @@ if (result$cv_enabled && !is.na(summary_info$cv_rsq)) {
 
 ```{r single-response-equation, results='asis', eval=!multi}
 cat("\n## Model Equation\n\n")
-eq <- format_model_equation(result)
+eq <- if (!is.null(.assets)) .assets$equation else earthUI::format_model_equation(result)
 if (!is.null(knitr::pandoc_to()) && knitr::pandoc_to() == "docx") {
   cat("$$\n", eq$latex_word, "\n$$\n")
 } else {
@@ -186,11 +218,12 @@ knitr::kable(summary_info$coefficients, digits = 4)
 ## Variable Importance
 
 ```{r importance-plot, fig.width=8, fig.height=5}
-plot_variable_importance(result)
+include_plot("importance", quote(earthUI::plot_variable_importance(result)))
 ```
 
 ```{r importance-table}
-knitr::kable(format_variable_importance(result), digits = 4)
+imp <- if (!is.null(.assets)) .assets$importance else earthUI::format_variable_importance(result)
+knitr::kable(imp, digits = 4)
 ```
 
 ```{r single-response-gfunctions, fig.width=8, fig.height=6, results='asis', eval=!multi}
@@ -200,14 +233,12 @@ for (i in seq_len(nrow(gf))) {
   if (gf$d[i] >= 2) label <- gsub(" ", " \u00d7 ", label)
   cat(sprintf("\n### %s\n\n", label))
   if (gf$d[i] >= 2) {
-    plot_g_persp(result, i)
+    include_plot(paste0("gfunc_", i, "_persp"),
+                 quote(earthUI::plot_g_persp(result, i)))
     cat("\n\n")
-    p <- plot_g_contour(result, i)
-    print(p)
-  } else {
-    p <- plot_g_contour(result, i)
-    print(p)
   }
+  include_plot(paste0("gfunc_", i, "_contour"),
+               quote(earthUI::plot_g_contour(result, i)))
   cat("\n\n")
 }
 ```
@@ -215,21 +246,23 @@ for (i in seq_len(nrow(gf))) {
 ## Correlation Matrix
 
 ```{r correlation-matrix, fig.width=10, fig.height=8}
-plot_correlation_matrix(result)
+include_plot("correlation", quote(earthUI::plot_correlation_matrix(result)),
+             width = 10, height = 8)
 ```
 
 ```{r single-response-diagnostics, fig.width=8, fig.height=5, results='asis', eval=!multi}
 cat("\n## Diagnostics\n\n")
 cat("\n### Residuals vs Fitted\n\n")
-print(plot_residuals(result))
+include_plot("residuals", quote(print(earthUI::plot_residuals(result))))
 cat("\n\n### Normal Q-Q Plot\n\n")
-print(plot_qq(result))
+include_plot("qq", quote(print(earthUI::plot_qq(result))))
 cat("\n\n### Actual vs Predicted\n\n")
-print(plot_actual_vs_predicted(result))
+include_plot("actual_vs_predicted",
+             quote(print(earthUI::plot_actual_vs_predicted(result))))
 ```
 
 ```{r multi-response-sections, fig.width=8, fig.height=5, results='asis', eval=multi}
-eq <- format_model_equation(result)
+eq <- if (!is.null(.assets)) .assets$equation else earthUI::format_model_equation(result)
 render_eq <- function(e) {
   if (!is.null(knitr::pandoc_to()) && knitr::pandoc_to() == "docx") {
     cat("$$\n", e$latex_word, "\n$$\n")
@@ -240,6 +273,7 @@ render_eq <- function(e) {
 
 for (ri in seq_along(targets)) {
   tgt <- targets[ri]
+  suffix <- paste0("_r", ri)
   cat(sprintf("\n## Response: %s\n\n", tgt))
 
   # --- Summary metrics ---
@@ -267,14 +301,12 @@ for (ri in seq_along(targets)) {
       if (gf$d[i] >= 2) label <- gsub(" ", " \u00d7 ", label)
       cat(sprintf("\n#### %s\n\n", label))
       if (gf$d[i] >= 2) {
-        plot_g_persp(result, i, response_idx = ri)
+        include_plot(paste0("gfunc_", i, suffix, "_persp"),
+                     bquote(earthUI::plot_g_persp(result, .(i), response_idx = .(ri))))
         cat("\n\n")
-        p <- plot_g_contour(result, i, response_idx = ri)
-        print(p)
-      } else {
-        p <- plot_g_contour(result, i, response_idx = ri)
-        print(p)
       }
+      include_plot(paste0("gfunc_", i, suffix, "_contour"),
+                   bquote(p <- earthUI::plot_g_contour(result, .(i), response_idx = .(ri)); print(p)))
       cat("\n\n")
     }
   }
@@ -282,11 +314,14 @@ for (ri in seq_along(targets)) {
   # --- Diagnostics ---
   cat("\n### Diagnostics\n\n")
   cat("\n#### Residuals vs Fitted\n\n")
-  print(plot_residuals(result, response_idx = ri))
+  include_plot(paste0("residuals", suffix),
+               bquote(print(earthUI::plot_residuals(result, response_idx = .(ri)))))
   cat("\n\n#### Normal Q-Q Plot\n\n")
-  print(plot_qq(result, response_idx = ri))
+  include_plot(paste0("qq", suffix),
+               bquote(print(earthUI::plot_qq(result, response_idx = .(ri)))))
   cat("\n\n#### Actual vs Predicted\n\n")
-  print(plot_actual_vs_predicted(result, response_idx = ri))
+  include_plot(paste0("actual_vs_predicted", suffix),
+               bquote(print(earthUI::plot_actual_vs_predicted(result, response_idx = .(ri)))))
   cat("\n\n")
 }
 ```
@@ -294,7 +329,8 @@ for (ri in seq_along(targets)) {
 ## ANOVA Decomposition
 
 ```{r anova}
-knitr::kable(format_anova(result), digits = 4)
+anova_df <- if (!is.null(.assets)) .assets$anova else earthUI::format_anova(result)
+knitr::kable(anova_df, digits = 4)
 ```
 
 ## Earth Output
