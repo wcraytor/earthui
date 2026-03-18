@@ -168,5 +168,6 @@ render_report(result, "pdf",  "report.pdf",  assets_dir = assets)
 render_report(result, "docx", "report.docx", assets_dir = assets)
 ```
 
-In the Shiny app, assets are pre-generated automatically after each
-successful fit, so clicking "Download Report" for any format is fast.
+In the Shiny app, report rendering runs in the background --- the UI
+stays responsive while the report is generated, and a modal dialog
+shows progress.

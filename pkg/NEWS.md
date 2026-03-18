@@ -1,3 +1,52 @@
+# earthUI 0.2.0
+
+## 3D Interaction Plot Fix
+
+* Fixed plotly surface transposition bug — `add_surface()` uses `z[i,j]`
+  at `(x[j], y[i])`, the transpose of base R `persp()`. Data point dots
+  now correctly align with the surface in interaction contribution graphs.
+
+## Report Rendering
+
+* New `prepare_report_assets()` function pre-generates all plots (PNG + PDF)
+  and pre-computes all data, so `render_report()` only runs Quarto/pandoc
+  format conversion.
+* `render_report()` gains `assets_dir` parameter to accept pre-generated
+  assets for faster multi-format rendering.
+* Report rendering now runs asynchronously via `callr::r_bg()` with a modal
+  dialog showing elapsed time and Quarto progress. The app stays responsive.
+* HTML reports now use KaTeX instead of MathJax for faster math rendering.
+* Word reports now include "Page X of Y" page numbers in the footer.
+
+## Post-Fit UX
+
+* Results tabs appear immediately with "Waiting for processing to complete."
+  messages while the model is fitting. The RCA Adjustments tab shows
+  "7. Calculate RCA Adjustments & Download must first be initiated and
+  completed."
+* The Data tab persists across fits — same output IDs used before and after
+  fitting, so the data table is never destroyed and recreated.
+* Tab content renders on-demand (only the active tab computes).
+* `auto_export_for_mgcv_()` (saveRDS) now runs in a background process to
+  avoid blocking the UI after fit completion.
+* Fit log and mgcv auto-export deferred via `session$onFlushed()` and
+  `callr::r_bg()` so tabs appear instantly.
+
+## Event Logging
+
+* New session event log: `<filename>_earthui_log.txt` in the output folder
+  records start/end timestamps and elapsed times for Model Fit, Download
+  Output, RCA Adjustments, Sales Grid generation, and Report rendering.
+  One file per data file, appended to across operations.
+
+## Testing
+
+* 71 new tests (1026 total):
+  - `eval_g_function_()` direct unit tests for all component types (17 tests)
+  - Plotly surface transposition verification (15 tests)
+  - `prepare_report_assets()` and `render_report()` with `assets_dir` (15 tests)
+  - Expanded export report error handling tests
+
 # earthUI 0.1.3
 
 ## Locale & Regional Settings

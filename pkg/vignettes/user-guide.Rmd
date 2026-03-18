@@ -375,7 +375,7 @@ All formulas, data values, and labels are locked.
 Three formats via Quarto:
 
 - **HTML** --- with KaTeX math rendering
-- **Word** --- `.docx` for editing and distribution
+- **Word** --- `.docx` for editing and distribution, with page numbers
 - **PDF** --- typeset with LuaLaTeX (paper size follows locale: Letter or A4)
 
 Reports include: dataset description, model specification, allowed
@@ -384,9 +384,10 @@ importance, g-function plots, correlation matrix, diagnostics, ANOVA, and
 raw earth output.
 
 Report rendering runs in the background --- a modal dialog shows elapsed
-time and Quarto progress, and the app remains responsive. All plots and
-data are pre-generated after each successful fit, so switching between
-HTML, PDF, and Word formats is fast (no R re-computation).
+time and Quarto progress, and the app remains responsive.
+
+All operations are logged to `<filename>_earthui_log.txt` in the output
+folder with start/end timestamps and elapsed times for troubleshooting.
 
 ## Demo Dataset: Appraisal_1.csv
 

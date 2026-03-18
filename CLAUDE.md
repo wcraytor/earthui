@@ -60,11 +60,21 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
 - **Async model fitting**: Uses `callr::r_bg()` with `wd = tempdir()`,
   stdout/stderr piping, and a 300ms polling observer. Falls back to
   synchronous `fit_earth()` if callr is unavailable.
-- **Post-fit precomputation**: After fit completes, a deferred observer
-  pre-computes all tab data (`format_summary`, `format_model_equation`,
-  `format_variable_importance`, `list_g_functions`, `format_anova`) into
-  `rv$computed`, then pre-generates report assets into `rv_report$assets_dir`.
-  The fitting modal shows "preparing tabs..." until ready.
+- **Post-fit flow**: After fit completes, `rv$result` is set and the active
+  tab renders on-demand (no pre-computation — only the visible tab computes).
+  File I/O (`write_fit_log_`, `auto_export_for_mgcv_`) is deferred via
+  `session$onFlushed()` (log) and `callr::r_bg()` (saveRDS) so the UI
+  never blocks. Report assets are generated on-demand when Download Report
+  is clicked.
+- **Tab waiting messages**: Each results tab (except Data) uses a server-side
+  `uiOutput` wrapper that shows "Waiting for processing to complete." when
+  `rv$result` is NULL. The RCA tab shows "7. Calculate RCA Adjustments &
+  Download must first be initiated and completed." Do NOT use
+  `conditionalPanel` inside tabs (causes all tabs to render simultaneously).
+- **Data tab persistence**: The Data tab uses the same output IDs
+  (`data_subjects`, `data_comps`, `data_preview`) before and after fitting.
+  The tabsetPanel is shown when data is loaded (not when model is fitted),
+  so the Data tab is never destroyed and recreated.
 - **Purpose modes**: Radio button (`input$purpose`) with three options:
   `"general"`, `"appraisal"`, `"market"`. Controls sidebar visibility,
   subject row handling, special column options, and download workflows.
@@ -109,11 +119,12 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
 - **Weights + NA removal**: `fit_earth()` subsets the `weights` vector by the
   same `complete.cases()` mask used to remove NA rows, preventing length
   mismatch errors.
-- **Report asset pre-generation**: `prepare_report_assets()` runs once after
-  each fit (deferred observer), pre-generating all plots (PNG + PDF) and
-  pre-computing all data (summary, equation, importance, g-functions, ANOVA).
-  Stored in `rv_report$assets_dir`. Report rendering then only runs
-  Quarto/pandoc format conversion — no R computation in the QMD template.
+- **Report asset pre-generation**: `prepare_report_assets()` pre-generates
+  all plots (PNG + PDF) and pre-computes data (summary, equation, importance,
+  g-functions, ANOVA). Called on-demand when the user clicks Download Report
+  (NOT eagerly after fit — saveRDS is too slow to run synchronously).
+  `render_report()` accepts an `assets_dir` parameter to reuse pre-generated
+  assets across multiple format renders.
 - **Async report rendering**: Uses `callr::r_bg()` with a modal dialog
   (matching the fitting modal style) showing elapsed time and Quarto output.
   Falls back to synchronous rendering if callr is unavailable.
@@ -132,8 +143,14 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
 - **mgcvUI auto-export**: On every successful fit with `degree <= 2`, the
   full result object is auto-saved via `saveRDS()` as
   `<filename>_earthUI_result_<timestamp>.rds` to the output folder.
-  mgcvUI loads this with `readRDS()`. Degree > 2 is skipped (mgcvUI only
-  supports pairwise interactions). A manual export button also exists.
+  Runs in a `callr::r_bg()` background process to avoid blocking the UI
+  (saveRDS of large result objects is slow). mgcvUI loads this with
+  `readRDS()`. Degree > 2 is skipped (mgcvUI only supports pairwise
+  interactions). A manual export button also exists.
+- **Event log**: `<filename>_earthui_log.txt` in the output folder records
+  start/end timestamps and elapsed times for: Model Fit, Download Estimated
+  Sales Prices & Residuals, RCA Adjustments & Download, Sales Grid generation,
+  and Download Report (per format). One file per data file, appended to.
 - **roxygen2**: All exported functions have roxygen docs. Run `roxygenise()`
   after editing any `@export` or `@param` tags.
 - **NAMESPACE**: Auto-generated. Never edit by hand.

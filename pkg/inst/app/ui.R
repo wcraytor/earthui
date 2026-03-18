@@ -233,40 +233,6 @@ fluidPage(
       addCheck(msg.id);
     });
 
-    // --- Tab preparation progress overlay ---
-    Shiny.addCustomMessageHandler('prep_progress', function(msg) {
-      if (msg.action === 'show') {
-        $('#eui-prep-overlay').remove();
-        var overlay = $(
-          '<div id=\"eui-prep-overlay\" style=\"position:fixed;top:0;left:0;width:100%;height:100%;' +
-          'background:rgba(0,0,0,0.35);z-index:9999;display:flex;align-items:center;justify-content:center;\">' +
-            '<div style=\"background:#2e3440;color:#d8dee9;border-radius:8px;padding:20px 32px;' +
-            'box-shadow:0 4px 24px rgba(0,0,0,0.5);font-family:monospace;text-align:center;min-width:300px;\">' +
-              '<div style=\"font-size:1.1em;font-weight:bold;margin-bottom:10px;\">' + msg.text + '</div>' +
-              '<div id=\"eui-prep-step\" style=\"font-size:0.9em;color:#88c0d0;\"></div>' +
-              '<div style=\"margin-top:12px;height:4px;background:#3b4252;border-radius:2px;overflow:hidden;\">' +
-                '<div id=\"eui-prep-bar\" style=\"height:100%;width:0%;background:#88c0d0;' +
-                'transition:width 0.3s ease;\"></div>' +
-              '</div>' +
-            '</div>' +
-          '</div>'
-        );
-        overlay.appendTo('body');
-        window.euiPrepSteps = 0;
-        window.euiPrepTotal = 5;
-      } else if (msg.action === 'update') {
-        window.euiPrepSteps = (window.euiPrepSteps || 0) + 1;
-        var pct = Math.min(100, Math.round((window.euiPrepSteps / (window.euiPrepTotal || 5)) * 100));
-        $('#eui-prep-step').text(msg.text);
-        $('#eui-prep-bar').css('width', pct + '%');
-      } else if (msg.action === 'hide') {
-        $('#eui-prep-bar').css('width', '100%');
-        $('#eui-prep-step').text('Done');
-        setTimeout(function() {
-          $('#eui-prep-overlay').fadeOut(300, function() { $(this).remove(); });
-        }, 400);
-      }
-    });
 
     // --- Report rendering modal ---
     Shiny.addCustomMessageHandler('report_start', function(msg) {
@@ -278,7 +244,7 @@ fluidPage(
         'width:420px;max-width:90vw;font-family:monospace;overflow:hidden;\">' +
           '<div style=\"background:#3b4252;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;\">' +
             '<span style=\"font-size:0.95em;font-weight:bold;\">Rendering Report</span>' +
-            '<span id=\"eui-report-timer\" style=\"font-size:0.85em;color:#81a1c1;\">0s</span>' +
+            '<span id=\"eui-report-timer\" style=\"font-size:0.85em;color:#81a1c1;margin-right:30px;\">0s</span>' +
           '</div>' +
           '<div id=\"eui-report-log\" style=\"padding:12px 16px;max-height:200px;overflow-y:auto;font-size:0.85em;line-height:1.6;\">' +
             '<div style=\"color:#88c0d0;\">' + msg.text + '</div>' +
@@ -991,176 +957,42 @@ fluidPage(
         )
       ),
       conditionalPanel(
-        condition = "output.data_loaded && !output.model_fitted",
-        h4("Data Preview"),
-        conditionalPanel(
-          condition = "input.purpose === 'appraisal'",
-          h5("Subject Property"),
-          DT::dataTableOutput("data_subjects"),
-          h5("Comparable Sales"),
-          DT::dataTableOutput("data_comps")
-        ),
-        conditionalPanel(
-          condition = "input.purpose !== 'appraisal'",
-          DT::dataTableOutput("data_preview")
-        )
-      ),
-      conditionalPanel(
-        condition = "output.fit_attempted",
+        condition = "output.data_loaded",
         tabsetPanel(
           id = "results_tabs",
           tabPanel(
             "Data",
             br(),
             conditionalPanel(
-              condition = "!output.model_fitted",
-              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-                  h4("Waiting for processing to complete."))
-            ),
-            conditionalPanel(
-              condition = "output.model_fitted && input.purpose === 'appraisal'",
+              condition = "input.purpose === 'appraisal'",
               h5("Subject Property"),
-              DT::dataTableOutput("data_subjects_tab"),
+              DT::dataTableOutput("data_subjects"),
               h5("Comparable Sales"),
-              DT::dataTableOutput("data_comps_tab")
+              DT::dataTableOutput("data_comps")
             ),
             conditionalPanel(
-              condition = "output.model_fitted && input.purpose !== 'appraisal'",
-              DT::dataTableOutput("data_preview_tab")
+              condition = "input.purpose !== 'appraisal'",
+              DT::dataTableOutput("data_preview")
             )
           ),
-          tabPanel(
-            "Equation",
-            br(),
-            conditionalPanel(
-              condition = "!output.tabs_ready",
-              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-                  h4("Waiting for processing to complete."))
-            ),
-            conditionalPanel(
-              condition = "output.tabs_ready",
-              div(style = "overflow-x: auto; padding: 10px 10px 10px 0;",
-                  uiOutput("model_equation"))
-            )
-          ),
-          tabPanel(
-            "Summary",
-            br(),
-            conditionalPanel(
-              condition = "!output.tabs_ready",
-              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-                  h4("Waiting for processing to complete."))
-            ),
-            conditionalPanel(
-              condition = "output.tabs_ready",
-              uiOutput("summary_metrics"),
-              h5("Coefficients & Basis Functions"),
-              DT::dataTableOutput("summary_table")
-            )
-          ),
-          tabPanel(
-            "Variable Importance",
-            br(),
-            conditionalPanel(
-              condition = "!output.tabs_ready",
-              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-                  h4("Waiting for processing to complete."))
-            ),
-            conditionalPanel(
-              condition = "output.tabs_ready",
-              plotOutput("importance_plot", height = "400px"),
-              br(),
-              DT::dataTableOutput("importance_table")
-            )
-          ),
-          tabPanel(
-            "Contribution",
-            br(),
-            conditionalPanel(
-              condition = "!output.tabs_ready",
-              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-                  h4("Waiting for processing to complete."))
-            ),
-            conditionalPanel(
-              condition = "output.tabs_ready",
-              uiOutput("response_selector_contrib"),
-              uiOutput("contrib_g_selector"),
-              uiOutput("contrib_plot_container")
-            )
-          ),
-          tabPanel(
-            "Correlation",
-            br(),
-            conditionalPanel(
-              condition = "!output.tabs_ready",
-              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-                  h4("Waiting for processing to complete."))
-            ),
-            conditionalPanel(
-              condition = "output.tabs_ready",
-              uiOutput("correlation_plot_ui")
-            )
-          ),
-          tabPanel(
-            "Diagnostics",
-            br(),
-            conditionalPanel(
-              condition = "!output.tabs_ready",
-              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-                  h4("Waiting for processing to complete."))
-            ),
-            conditionalPanel(
-              condition = "output.tabs_ready",
-              uiOutput("response_selector_diag"),
-              fluidRow(
-                column(6, plotOutput("residuals_plot", height = "350px")),
-                column(6, plotOutput("qq_plot", height = "350px"))
-              ),
-              br(),
-              plotOutput("actual_vs_predicted_plot", height = "400px")
-            )
-          ),
-          tabPanel(
-            "RCA Adjustments",
-            br(),
-            conditionalPanel(
-              condition = "!output.rca_ready",
-              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-                  h4("7. Calculate RCA Adjustments & Download",
-                     "must first be initiated and completed."))
-            ),
-            conditionalPanel(
-              condition = "output.rca_ready",
-              uiOutput("rca_plots_ui")
-            )
-          ),
-          tabPanel(
-            "ANOVA",
-            br(),
-            conditionalPanel(
-              condition = "!output.tabs_ready",
-              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-                  h4("Waiting for processing to complete."))
-            ),
-            conditionalPanel(
-              condition = "output.tabs_ready",
-              DT::dataTableOutput("anova_table")
-            )
-          ),
-          tabPanel(
-            "Earth Output",
-            br(),
-            conditionalPanel(
-              condition = "!output.tabs_ready",
-              div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-                  h4("Waiting for processing to complete."))
-            ),
-            conditionalPanel(
-              condition = "output.tabs_ready",
-              div(style = "overflow-x: auto;",
-                  verbatimTextOutput("earth_output"))
-            )
-          )
+          # NOTE: Each tab below uses a single uiOutput wrapper defined in
+          # server.R. The wrapper shows "Waiting for processing to complete."
+          # when rv$result is NULL, and the actual content when rv$result is
+          # set. This is a REQUIREMENT — do NOT remove the waiting messages
+          # or replace uiOutput wrappers with inline content. Using uiOutput
+          # (not conditionalPanel) ensures only the active tab renders,
+          # preserving performance. The RCA tab has a specific message:
+          # "7. Calculate RCA Adjustments & Download must first be initiated
+          # and completed."
+          tabPanel("Equation",    br(), uiOutput("equation_tab_ui")),
+          tabPanel("Summary",     br(), uiOutput("summary_tab_ui")),
+          tabPanel("Variable Importance", br(), uiOutput("importance_tab_ui")),
+          tabPanel("Contribution", br(), uiOutput("contribution_tab_ui")),
+          tabPanel("Correlation",  br(), uiOutput("correlation_tab_ui")),
+          tabPanel("Diagnostics",  br(), uiOutput("diagnostics_tab_ui")),
+          tabPanel("RCA Adjustments", br(), uiOutput("rca_tab_ui")),
+          tabPanel("ANOVA",        br(), uiOutput("anova_tab_ui")),
+          tabPanel("Earth Output", br(), uiOutput("earth_output_tab_ui"))
         )
       )
     )

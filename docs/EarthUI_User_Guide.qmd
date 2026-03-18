@@ -59,8 +59,8 @@ format:
 \begin{center}
 {\fontsize{48}{56}\selectfont\textbf{earthUI}}\\[12pt]
 {\Large User Guide}\\[24pt]
-{\small General Use · Appraisal Features · Market Area Analysis · Complete Reference}
-by William B. Craytor, Pacific Vista Net
+{\small General Use · Appraisal Features · Market Area Analysis · Complete Reference}\\[24pt]
+{\small by William B. Craytor, 3/17/2026}
 \end{center}
 
 \vspace{2cm}
@@ -71,7 +71,7 @@ by William B. Craytor, Pacific Vista Net
 \hline
 \rowcolor{earthaccent}\textbf{Version} & \textbf{Audience} & \textbf{Last Updated} \\
 \hline
-1.1 & All Users & 2026 \\
+1.2 & All Users & March 2026 \\
 \hline
 \end{tabular}
 \end{center}
@@ -1131,10 +1131,12 @@ After fitting a model, the Download Report section (sidebar section 7, 8, or 9 d
 Three formats are available via the format dropdown:
 
 - **HTML** --- an `.html` file with KaTeX math rendering, embedded images, and a table of contents. Uses the Flatly Bootstrap theme and Roboto Condensed font.
-- **Word** --- a `.docx` file suitable for editing and distribution. Includes a table of contents and uses a custom reference template for consistent styling.
+- **Word** --- a `.docx` file suitable for editing and distribution. Includes a table of contents, page numbers, and uses a custom reference template for consistent styling.
 - **PDF** --- typeset with LuaLaTeX for professional-quality output. Paper size follows the locale setting (Letter or A4). Includes landscape pages for large interaction matrices and uses Roboto Condensed with Latin Modern Math for equations.
 
-Reports are rendered via Quarto and saved directly to the Project Output Folder as `<datafile>_report_<YYYYMMDD_HHMMSS>.<format>`. Rendering runs in the background --- a modal dialog shows elapsed time and Quarto progress while the app remains responsive. All plots and data are pre-generated after each successful fit, so switching between formats is fast (no R re-computation). A notification confirms the file location on completion.
+Reports are rendered via Quarto and saved directly to the Project Output Folder as `<datafile>_report_<YYYYMMDD_HHMMSS>.<format>`. Rendering runs in the background --- a modal dialog shows elapsed time and Quarto progress while the app remains responsive. A notification confirms the file location on completion.
+
+All operations (model fitting, data downloads, RCA calculations, sales grid generation, and report rendering) are logged with start/end timestamps and elapsed times to `<datafile>_earthui_log.txt` in the output folder, for troubleshooting and performance monitoring.
 
 ## Report Contents
 
