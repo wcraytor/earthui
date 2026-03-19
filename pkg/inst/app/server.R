@@ -107,7 +107,22 @@ function(input, output, session) {
       out_path <- file.path(folder, paste0(base, "_earthUI_result_",
                             format(Sys.time(), "%Y%m%d_%H%M%S"), ".rds"))
       saveRDS(result, out_path)
-      message("earthUI: auto-exported result for mgcvUI to ", out_path)
+      # Verify the file is readable and contains a valid earthUI_result
+      verify <- tryCatch({
+        obj <- readRDS(out_path)
+        if (!inherits(obj, "earthUI_result")) stop("not an earthUI_result")
+        if (is.null(obj$model)) stop("model is NULL")
+        stats::predict(obj$model, newdata = obj$data[1L, , drop = FALSE])
+        TRUE
+      }, error = function(e) {
+        message("earthUI: RDS verification FAILED: ", e$message,
+                " — deleting corrupt file")
+        unlink(out_path)
+        FALSE
+      })
+      if (verify) {
+        message("earthUI: auto-exported result for mgcvUI to ", out_path)
+      }
     }, error = function(e) {
       message("earthUI: auto-export for mgcvUI failed: ", e$message)
     })
@@ -278,6 +293,16 @@ function(input, output, session) {
       unlink(rv_report$assets_dir, recursive = TRUE)
       rv_report$assets_dir <- NULL
     }
+  })
+
+  # Toggle tab waiting messages via JS (not uiOutput — suspended tabs don't render)
+  observe({
+    ready <- !is.null(rv$result)
+    session$sendCustomMessage("eui_tabs_ready", list(ready = ready))
+  })
+  observe({
+    ready <- !is.null(rv$rca_df)
+    session$sendCustomMessage("eui_rca_ready", list(ready = ready))
   })
 
   # Update weights dropdown with numeric column names when data loads
@@ -1783,30 +1808,31 @@ function(input, output, session) {
           session$sendCustomMessage("fitting_done",
             list(text = sprintf("Done in %.1fs",
                                 elapsed)))
-          # Defer file I/O until AFTER the flush so tabs appear immediately
+          # Defer file I/O so tab content renders first.
+          # write_fit_log_ in onFlushed (fast).
+          # auto_export_for_mgcv_ (saveRDS) must not block tab rendering:
+          #   Unix/macOS: parallel::mcparallel() forks without serialization
+          #   Windows: later::later() delays until tabs render, then blocks briefly
+          # Must NOT use callr::r_bg — double-serialization corrupts the object.
           eui_log_$end("5. Fit Earth Model")
           local({
-            traces <- rv$result$trace_output
+            res <- rv$result
+            traces <- isolate(rv$trace_lines)
             folder <- input$output_folder
             fname <- rv$file_name
             session$onFlushed(function() {
               write_fit_log_(folder, traces, fname)
             }, once = TRUE)
+            if (.Platform$OS.type == "unix") {
+              parallel::mcparallel({
+                auto_export_for_mgcv_(res, folder, fname)
+              })
+            } else {
+              later::later(function() {
+                auto_export_for_mgcv_(res, folder, fname)
+              }, delay = 10)
+            }
           })
-          # Run saveRDS in background so it never blocks the UI
-          if (requireNamespace("callr", quietly = TRUE)) {
-            local({
-              res <- rv$result
-              folder <- input$output_folder
-              fname <- rv$file_name
-              callr::r_bg(function(r, f, fn) {
-                earthUI:::auto_export_for_mgcv_(r, f, fn)
-              }, args = list(r = res, f = folder, fn = fname),
-              supervise = TRUE, wd = tempdir())
-            })
-          } else {
-            auto_export_for_mgcv_(rv$result, input$output_folder, rv$file_name)
-          }
         }, error = function(e) {
           eui_log_$err("5. Fit Earth Model", e$message)
           session$sendCustomMessage("fitting_done",
@@ -1877,29 +1903,19 @@ function(input, output, session) {
           session$sendCustomMessage("fitting_done",
             list(text = sprintf("Done in %.1fs",
                                 result$elapsed)))
-          # Defer file I/O until AFTER the flush so tabs appear immediately
+          # Defer file I/O until AFTER the flush so tabs appear immediately.
+          # saveRDS runs in onFlushed (not callr::r_bg) to avoid double-serialization
+          # which corrupts environments/formulas in the earth model object.
           local({
+            res <- result
             traces <- rv$trace_lines
             folder <- input$output_folder
             fname <- rv$file_name
             session$onFlushed(function() {
               write_fit_log_(folder, traces, fname)
+              auto_export_for_mgcv_(res, folder, fname)
             }, once = TRUE)
           })
-          # Run saveRDS in background so it never blocks the UI
-          if (requireNamespace("callr", quietly = TRUE)) {
-            local({
-              res <- result
-              folder <- input$output_folder
-              fname <- rv$file_name
-              callr::r_bg(function(r, f, fn) {
-                earthUI:::auto_export_for_mgcv_(r, f, fn)
-              }, args = list(r = res, f = folder, fn = fname),
-              supervise = TRUE, wd = tempdir())
-            })
-          } else {
-            auto_export_for_mgcv_(result, input$output_folder, rv$file_name)
-          }
         }, error = function(e) {
           eui_log_$err("5. Fit Earth Model", e$message)
           # Extract the real error from callr's wrapper
@@ -1987,88 +2003,12 @@ function(input, output, session) {
     ))
   })
 
-  # --- Tab wrappers: show "Waiting..." when rv$result is NULL ---
-  # REQUIREMENT: Every results tab (except Data) MUST show a waiting message
-  # when no model is fitted. The RCA tab shows a specific message about
-  # initiating step 7. Do NOT remove these wrappers or the waiting messages.
-  # Using server-side uiOutput (not conditionalPanel) ensures only the
-  # active tab renders, avoiding the performance regression where all tabs
-  # render simultaneously.
-  waiting_msg_ <- function(msg = "Waiting for processing to complete.") {
-    div(class = "text-muted", style = "text-align: center; padding: 60px 20px;",
-        h4(msg))
-  }
-
-  output$equation_tab_ui <- renderUI({
-    if (is.null(rv$result)) return(waiting_msg_())
-    div(style = "overflow-x: auto; padding: 10px 10px 10px 0;",
-        uiOutput("model_equation"))
-  })
-
-  output$summary_tab_ui <- renderUI({
-    if (is.null(rv$result)) return(waiting_msg_())
-    tagList(
-      uiOutput("summary_metrics"),
-      h5("Coefficients & Basis Functions"),
-      DT::dataTableOutput("summary_table")
-    )
-  })
-
-  output$importance_tab_ui <- renderUI({
-    if (is.null(rv$result)) return(waiting_msg_())
-    tagList(
-      plotOutput("importance_plot", height = "400px"),
-      br(),
-      DT::dataTableOutput("importance_table")
-    )
-  })
-
-  output$contribution_tab_ui <- renderUI({
-    if (is.null(rv$result)) return(waiting_msg_())
-    tagList(
-      uiOutput("response_selector_contrib"),
-      uiOutput("contrib_g_selector"),
-      uiOutput("contrib_plot_container")
-    )
-  })
-
-  output$correlation_tab_ui <- renderUI({
-    if (is.null(rv$result)) return(waiting_msg_())
-    uiOutput("correlation_plot_ui")
-  })
-
-  output$diagnostics_tab_ui <- renderUI({
-    if (is.null(rv$result)) return(waiting_msg_())
-    tagList(
-      uiOutput("response_selector_diag"),
-      fluidRow(
-        column(6, plotOutput("residuals_plot", height = "350px")),
-        column(6, plotOutput("qq_plot", height = "350px"))
-      ),
-      br(),
-      plotOutput("actual_vs_predicted_plot", height = "400px")
-    )
-  })
-
-  # REQUIREMENT: RCA tab must show specific message about step 7
-  output$rca_tab_ui <- renderUI({
-    if (is.null(rv$rca_df)) {
-      return(waiting_msg_(
-        "7. Calculate RCA Adjustments & Download must first be initiated and completed."))
-    }
-    uiOutput("rca_plots_ui")
-  })
-
-  output$anova_tab_ui <- renderUI({
-    if (is.null(rv$result)) return(waiting_msg_())
-    DT::dataTableOutput("anova_table")
-  })
-
-  output$earth_output_tab_ui <- renderUI({
-    if (is.null(rv$result)) return(waiting_msg_())
-    div(style = "overflow-x: auto;",
-        verbatimTextOutput("earth_output"))
-  })
+  # REQUIREMENT: Tab waiting messages are handled via static HTML + JS toggling.
+  # See ui.R: each tab has .eui-tab-waiting (visible by default) and
+  # .eui-tab-content (hidden by default). The observers above send
+  # 'eui_tabs_ready' and 'eui_rca_ready' JS messages to toggle them.
+  # Do NOT use uiOutput wrappers (suspended in inactive tabs, never update).
+  # Do NOT use conditionalPanel (causes all tabs to render simultaneously).
 
   # --- Results: Summary ---
   output$summary_metrics <- renderUI({
@@ -2861,11 +2801,14 @@ function(input, output, session) {
     if (is.null(folder) || !nzchar(folder)) folder <- path.expand("~/Downloads")
     if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
     out_path <- file.path(folder, export_data_filename_())
-    eui_log_$start("6. Download Estimated Sales Prices & Residuals")
+    message("earthUI: export_data clicked, writing to ", out_path)
+    eui_log_$start("6. Download Intermediate Output")
     export_data_content_(out_path, "export_data")
-    eui_log_$end("6. Download Estimated Sales Prices & Residuals")
-    showNotification(paste0("Output saved to: ", out_path),
-                     type = "message", duration = 8)
+    eui_log_$end("6. Download Intermediate Output")
+    if (file.exists(out_path)) {
+      showNotification(paste0("Output saved to: ", out_path),
+                       type = "message", duration = 8)
+    }
   })
 
   observeEvent(input$export_data_nonadj, {

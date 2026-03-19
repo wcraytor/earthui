@@ -9,6 +9,7 @@ fluidPage(
       });
     ")),
     tags$style(HTML("
+    .container-fluid { padding-left: 8px; padding-right: 8px; }
     .dataTable td, .dataTable th { padding: 4px 8px !important; }
     .dataTables_wrapper { font-size: 0.9em; overflow-x: auto; }
     .dataTable td { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -231,6 +232,49 @@ fluidPage(
     // Check download buttons on completion
     Shiny.addCustomMessageHandler('download_check', function(msg) {
       addCheck(msg.id);
+    });
+
+    // Toggle tab waiting messages vs content.
+    // When ready=false: show waiting, hide content.
+    // When ready=true: show content immediately (so Shiny can render the
+    // outputs — hidden divs cause suspension). Keep waiting visible as
+    // overlay until outputs finish recalculating, then hide it.
+    Shiny.addCustomMessageHandler('eui_tabs_ready', function(msg) {
+      clearInterval(window.euiTabsReadyPoll);
+      if (msg.ready) {
+        // Show content ONLY in the active tab so Shiny renders just that one.
+        // Inactive tabs stay hidden (suspended) until clicked.
+        var $active = $('.tab-pane.active');
+        $active.find('.eui-tab-content').show();
+        // Poll until active tab finishes, then hide its waiting message
+        window.euiTabsReadyPoll = setInterval(function() {
+          var still = $active.find('.eui-tab-content .recalculating').length;
+          if (still === 0) {
+            clearInterval(window.euiTabsReadyPoll);
+            $active.find('.eui-tab-waiting').hide();
+          }
+        }, 300);
+        // When user clicks a different tab, show its content and hide waiting
+        $(document).off('shown.bs.tab.eui').on('shown.bs.tab.eui', function(e) {
+          var $pane = $($(e.target).attr('href'));
+          $pane.find('.eui-tab-content').show();
+          $pane.find('.eui-tab-waiting').hide();
+        });
+      } else {
+        $(document).off('shown.bs.tab.eui');
+        $('.eui-tab-waiting').show();
+        $('.eui-tab-content').hide();
+      }
+    });
+    // RCA tab has its own toggle
+    Shiny.addCustomMessageHandler('eui_rca_ready', function(msg) {
+      if (msg.ready) {
+        $('.eui-rca-waiting').hide();
+        $('.eui-rca-content').show();
+      } else {
+        $('.eui-rca-waiting').show();
+        $('.eui-rca-content').hide();
+      }
     });
 
 
@@ -975,24 +1019,81 @@ fluidPage(
               DT::dataTableOutput("data_preview")
             )
           ),
-          # NOTE: Each tab below uses a single uiOutput wrapper defined in
-          # server.R. The wrapper shows "Waiting for processing to complete."
-          # when rv$result is NULL, and the actual content when rv$result is
-          # set. This is a REQUIREMENT — do NOT remove the waiting messages
-          # or replace uiOutput wrappers with inline content. Using uiOutput
-          # (not conditionalPanel) ensures only the active tab renders,
-          # preserving performance. The RCA tab has a specific message:
-          # "7. Calculate RCA Adjustments & Download must first be initiated
-          # and completed."
-          tabPanel("Equation",    br(), uiOutput("equation_tab_ui")),
-          tabPanel("Summary",     br(), uiOutput("summary_tab_ui")),
-          tabPanel("Variable Importance", br(), uiOutput("importance_tab_ui")),
-          tabPanel("Contribution", br(), uiOutput("contribution_tab_ui")),
-          tabPanel("Correlation",  br(), uiOutput("correlation_tab_ui")),
-          tabPanel("Diagnostics",  br(), uiOutput("diagnostics_tab_ui")),
-          tabPanel("RCA Adjustments", br(), uiOutput("rca_tab_ui")),
-          tabPanel("ANOVA",        br(), uiOutput("anova_tab_ui")),
-          tabPanel("Earth Output", br(), uiOutput("earth_output_tab_ui"))
+          # REQUIREMENT: Each tab has a static "Waiting..." div and a content
+          # div. JS toggles visibility via 'eui_tabs_ready' message from server.
+          # Do NOT use uiOutput wrappers (suspended in inactive tabs) or
+          # conditionalPanel (renders all tabs simultaneously). The RCA tab
+          # has a specific message about step 7.
+          tabPanel("Equation", br(),
+            div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
+                h4(class = "text-muted", "Waiting for processing to complete.")),
+            div(class = "eui-tab-content", style = "display:none;",
+                div(style = "overflow-x: auto; padding: 10px 10px 10px 0;",
+                    uiOutput("model_equation")))
+          ),
+          tabPanel("Summary", br(),
+            div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
+                h4(class = "text-muted", "Waiting for processing to complete.")),
+            div(class = "eui-tab-content", style = "display:none;",
+                uiOutput("summary_metrics"),
+                h5("Coefficients & Basis Functions"),
+                DT::dataTableOutput("summary_table"))
+          ),
+          tabPanel("Variable Importance", br(),
+            div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
+                h4(class = "text-muted", "Waiting for processing to complete.")),
+            div(class = "eui-tab-content", style = "display:none;",
+                plotOutput("importance_plot", height = "400px"),
+                br(),
+                DT::dataTableOutput("importance_table"))
+          ),
+          tabPanel("Contribution", br(),
+            div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
+                h4(class = "text-muted", "Waiting for processing to complete.")),
+            div(class = "eui-tab-content", style = "display:none;",
+                uiOutput("response_selector_contrib"),
+                uiOutput("contrib_g_selector"),
+                uiOutput("contrib_plot_container"))
+          ),
+          tabPanel("Correlation", br(),
+            div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
+                h4(class = "text-muted", "Waiting for processing to complete.")),
+            div(class = "eui-tab-content", style = "display:none;",
+                uiOutput("correlation_plot_ui"))
+          ),
+          tabPanel("Diagnostics", br(),
+            div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
+                h4(class = "text-muted", "Waiting for processing to complete.")),
+            div(class = "eui-tab-content", style = "display:none;",
+                uiOutput("response_selector_diag"),
+                fluidRow(
+                  column(6, plotOutput("residuals_plot", height = "350px")),
+                  column(6, plotOutput("qq_plot", height = "350px"))
+                ),
+                br(),
+                plotOutput("actual_vs_predicted_plot", height = "400px"))
+          ),
+          tabPanel("RCA Adjustments", br(),
+            div(class = "eui-tab-waiting eui-rca-waiting",
+                style = "text-align: center; padding: 60px 20px;",
+                h4(class = "text-muted",
+                   "7. Calculate RCA Adjustments & Download must first be initiated and completed.")),
+            div(class = "eui-tab-content eui-rca-content", style = "display:none;",
+                uiOutput("rca_plots_ui"))
+          ),
+          tabPanel("ANOVA", br(),
+            div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
+                h4(class = "text-muted", "Waiting for processing to complete.")),
+            div(class = "eui-tab-content", style = "display:none;",
+                DT::dataTableOutput("anova_table"))
+          ),
+          tabPanel("Earth Output", br(),
+            div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
+                h4(class = "text-muted", "Waiting for processing to complete.")),
+            div(class = "eui-tab-content", style = "display:none;",
+                div(style = "overflow-x: auto;",
+                    verbatimTextOutput("earth_output")))
+          )
         )
       )
     )

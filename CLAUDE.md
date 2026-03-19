@@ -62,19 +62,33 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
   synchronous `fit_earth()` if callr is unavailable.
 - **Post-fit flow**: After fit completes, `rv$result` is set and the active
   tab renders on-demand (no pre-computation — only the visible tab computes).
-  File I/O (`write_fit_log_`, `auto_export_for_mgcv_`) is deferred via
-  `session$onFlushed()` (log) and `callr::r_bg()` (saveRDS) so the UI
-  never blocks. Report assets are generated on-demand when Download Report
-  is clicked.
-- **Tab waiting messages**: Each results tab (except Data) uses a server-side
-  `uiOutput` wrapper that shows "Waiting for processing to complete." when
-  `rv$result` is NULL. The RCA tab shows "7. Calculate RCA Adjustments &
-  Download must first be initiated and completed." Do NOT use
-  `conditionalPanel` inside tabs (causes all tabs to render simultaneously).
+  `write_fit_log_` is deferred via `session$onFlushed()`.
+  `auto_export_for_mgcv_` (saveRDS) uses `parallel::mcparallel()` on
+  Unix/macOS (fork without serialization, non-blocking) and
+  `later::later(delay=10)` on Windows (delayed to avoid blocking tab
+  renders). Must NOT use `callr::r_bg()` for saveRDS — double-serialization
+  corrupts the model object. The RDS is verified after writing by reading it
+  back and running `predict()`. Report assets are generated on-demand when
+  Download Report is clicked (NOT eagerly after fit).
+- **Tab waiting messages**: Static HTML elements in `ui.R` toggled by
+  JavaScript. Waiting messages (class `eui-tab-waiting`, visible by default)
+  and tab content (class `eui-tab-content`, hidden by default) are both
+  static HTML. An R observer sends the `eui_tabs_ready` custom JS message
+  when `rv$result` changes. When `ready=false`: JS immediately shows
+  waiting, hides content. When `ready=true`: JS polls every 300ms until
+  outputs stop recalculating (no `.recalculating` CSS class on the active
+  tab), THEN toggles — prevents showing blank content before renders
+  complete. When the user clicks another tab, that tab's content is shown
+  and its waiting message hidden. The RCA tab has its own toggle
+  (`eui_rca_ready`) gated on `rv$rca_df`. Do NOT use `uiOutput` wrappers
+  (suspended in inactive tabs, never update). Do NOT use `conditionalPanel`
+  inside tabs (causes all tabs to render simultaneously).
 - **Data tab persistence**: The Data tab uses the same output IDs
   (`data_subjects`, `data_comps`, `data_preview`) before and after fitting.
   The tabsetPanel is shown when data is loaded (not when model is fitted),
   so the Data tab is never destroyed and recreated.
+- **Container margin**: `container-fluid` padding reduced to 8px for more
+  usable screen space.
 - **Purpose modes**: Radio button (`input$purpose`) with three options:
   `"general"`, `"appraisal"`, `"market"`. Controls sidebar visibility,
   subject row handling, special column options, and download workflows.
@@ -122,12 +136,11 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
 - **Report asset pre-generation**: `prepare_report_assets()` pre-generates
   all plots (PNG + PDF) and pre-computes data (summary, equation, importance,
   g-functions, ANOVA). Called on-demand when the user clicks Download Report
-  (NOT eagerly after fit — saveRDS is too slow to run synchronously).
-  `render_report()` accepts an `assets_dir` parameter to reuse pre-generated
-  assets across multiple format renders.
+  (NOT eagerly after fit). `render_report()` accepts an `assets_dir`
+  parameter to reuse pre-generated assets across multiple format renders.
 - **Async report rendering**: Uses `callr::r_bg()` with a modal dialog
-  (matching the fitting modal style) showing elapsed time and Quarto output.
-  Falls back to synchronous rendering if callr is unavailable.
+  showing elapsed time and Quarto output. Falls back to synchronous
+  rendering if callr is unavailable.
 - **PDF export**: Renders to a temp file first, then binary-copies to Shiny's
   download path. Uses base R `persp()` for 3D plots (no external dependencies).
 - **HTML reports**: Use KaTeX (not MathJax) for math rendering — much smaller
@@ -143,14 +156,17 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
 - **mgcvUI auto-export**: On every successful fit with `degree <= 2`, the
   full result object is auto-saved via `saveRDS()` as
   `<filename>_earthUI_result_<timestamp>.rds` to the output folder.
-  Runs in a `callr::r_bg()` background process to avoid blocking the UI
-  (saveRDS of large result objects is slow). mgcvUI loads this with
-  `readRDS()`. Degree > 2 is skipped (mgcvUI only supports pairwise
-  interactions). A manual export button also exists.
+  Uses `parallel::mcparallel()` on Unix/macOS (fork — no serialization,
+  non-blocking) or `later::later(delay=10)` on Windows (delayed to avoid
+  blocking tab renders). Must NOT use `callr::r_bg()` — it
+  double-serializes the model object, corrupting it. The RDS file is
+  verified after writing by reading it back and running `predict()`.
+  mgcvUI loads this with `readRDS()`. Degree > 2 is skipped (mgcvUI only
+  supports pairwise interactions). A manual export button also exists.
 - **Event log**: `<filename>_earthui_log.txt` in the output folder records
-  start/end timestamps and elapsed times for: Model Fit, Download Estimated
-  Sales Prices & Residuals, RCA Adjustments & Download, Sales Grid generation,
-  and Download Report (per format). One file per data file, appended to.
+  start/end timestamps and elapsed times for: Model Fit, Download
+  Intermediate Output, RCA Adjustments, Sales Grid, and Report rendering.
+  One file per data file, appended to.
 - **roxygen2**: All exported functions have roxygen docs. Run `roxygenise()`
   after editing any `@export` or `@param` tags.
 - **NAMESPACE**: Auto-generated. Never edit by hand.
@@ -234,4 +250,11 @@ Modal-based comp selection with auto-recommendation:
   `(x[j], y[i])` — rows map to y, columns map to x. This is the **transpose**
   of base R `persp()` which uses `z[i,j]` at `(x[i], y[j])`. Always pass
   `t(z_mat)` to plotly when `z_mat` is filled with the persp convention.
+- **saveRDS via callr::r_bg() corrupts models**: `callr::r_bg()` serializes
+  arguments into the child process and back, causing double-serialization of
+  earth model objects. Use `parallel::mcparallel()` (Unix/macOS) or
+  `later::later()` (Windows) instead for `auto_export_for_mgcv_`.
+- **Tab waiting via uiOutput fails**: Server-side `uiOutput` wrappers for
+  tab waiting messages are suspended in inactive tabs and never update.
+  Use static HTML toggled by JS custom messages (`eui_tabs_ready`) instead.
 - Kill port 7878 before relaunching: `lsof -ti:7878 | xargs kill`.

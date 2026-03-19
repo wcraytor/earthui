@@ -925,6 +925,33 @@ This file can be loaded by mgcvUI (a companion Shiny app for GAM modeling) using
 
 Models with `degree` > 2 are skipped because mgcvUI only supports pairwise interactions. A manual **Export for mgcvUI** button is also available in the sidebar for on-demand export.
 
+## glmnetUI Import
+
+The same `.rds` file saved for mgcvUI can also be imported into **glmnetUI** (a companion Shiny app for elastic net regression). In glmnetUI, navigate to **Section 2: Import from earthUI** and use the Browse button to select the `.rds` file.
+
+glmnetUI uses the standard `earth::model.matrix()` approach: the earth model's basis functions (hinges, interactions, and linear terms) become the columns of glmnet's design matrix. glmnet then performs regularized regression on these basis columns, selecting and shrinking them via lasso/elastic net. This combines earth's adaptive basis construction with glmnet's regularization.
+
+### Key Benefits
+
+- **Interpretable interactions**: earth's hinge-based interactions (including 3-way terms) have clear geometric meaning, unlike glmnet's native cross-product interactions which are difficult to explain in court or audit settings.
+- **Automatic nonlinearity**: earth's hinge functions capture nonlinear relationships that a standard glmnet model with raw predictors would miss.
+- **Variable selection**: glmnet can further prune the earth basis, dropping hinge terms that don't contribute.
+
+### Important: Weight Column Must Match
+
+\begin{tcolorbox}[colback=yellow!10, colframe=earthaccent, title=Warning]
+If earthUI uses a weight column (e.g., to exclude the subject row with weight=0), the same weight column must be designated in glmnetUI's variable configuration. If the weight settings differ, the row counts will not align and the earth basis cannot be appended to glmnet's model matrix.
+\end{tcolorbox}
+
+### Workflow
+
+1. Fit an earth model in earthUI (any degree).
+2. The `.rds` result file is saved automatically to the Project Output Folder.
+3. In glmnetUI, open **Section 2: Import from earthUI** and browse to the `.rds` file.
+4. Verify that the **same data file** and **same weight column** are used in both apps.
+5. Configure glmnet parameters in Section 5 (the Interaction Matrix is automatically disabled when an earthUI import is active).
+6. Click **Fit Model**. The earth basis columns appear in the Equation, Coefficients, and Contributions tabs.
+
 \newpage
 
 <!-- CHAPTER 10 -->
