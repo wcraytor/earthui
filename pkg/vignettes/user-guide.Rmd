@@ -215,6 +215,46 @@ In appraisal and market modes, each predictor can be assigned a special type:
 Only one column per special type (except `display_only`). A blue badge shows
 the assigned type next to each variable name.
 
+## Allowed Interactions (Degree 2+)
+
+When `degree >= 2`, the **Allowed Interactions** matrix appears under
+Earth Call Parameters. This upper-triangular matrix controls which
+variable pairs can form interaction terms (hinge products).
+
+- **Check a cell** to allow the interaction `h(x1) * h(x2)`
+- **Left-click a variable name** (row or column) to toggle all its
+  interactions at once
+- **Allow All / Clear All** buttons toggle the entire matrix
+- Selections persist via localStorage per input file
+
+### Block from Degree 1 (Interaction Only)
+
+**Right-click** a variable name in the Allowed Interactions matrix to
+block it from entering the model as a main effect (degree-1 hinge).
+A bold **" 1"** indicator appears after the variable name.
+
+When blocked:
+
+- The variable **cannot** enter as `h(variable - knot)` (main effect)
+- The variable **can** enter through interactions like
+  `h(variable - k1) * h(other_var - k2)` (degree 2+)
+- Right-click again to unblock
+
+**Use case:** When modeling time adjustments that should scale with
+property size, block `sale_age` from degree 1 and allow it only in an
+interaction with `living_area`. This forces earth to discover
+`h(sale_age - k1) * h(living_area - k2)` -- a time appreciation rate
+that varies by house size -- rather than a flat $/day rate that applies
+equally to all properties.
+
+```{r eval=FALSE}
+# Programmatic equivalent using the allowed function:
+mat <- build_allowed_matrix(c("sale_age", "living_area", "lot_size"))
+func <- build_allowed_function(mat, block_degree1 = "sale_age")
+result <- fit_earth(df, "sale_price", predictors,
+                    degree = 2L, allowed_func = func)
+```
+
 ## Downloading Data (Step 6)
 
 After fitting, download an Excel file with predictions and diagnostics.

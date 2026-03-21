@@ -128,6 +128,9 @@ function(input, output, session) {
     })
   }
 
+  # Seed history per file (last 5, most recent first)
+  rv_seed_history <- reactiveVal(integer(0))
+
   # --- Reactive values ---
   rv <- reactiveValues(
     data = NULL,
@@ -267,6 +270,7 @@ function(input, output, session) {
         unlink(rv_report$assets_dir, recursive = TRUE)
         rv_report$assets_dir <- NULL
       }
+      rv_seed_history(integer(0))
       message("earthUI: import OK, ", nrow(rv$data), " rows, ", ncol(rv$data), " cols")
     }, error = function(e) {
       message("earthUI: IMPORT ERROR: ", e$message)
@@ -293,6 +297,33 @@ function(input, output, session) {
       unlink(rv_report$assets_dir, recursive = TRUE)
       rv_report$assets_dir <- NULL
     }
+  })
+
+  # Seed history dropdown (shows last 5 seeds used, clicking one fills the input)
+  output$seed_history_ui <- renderUI({
+    hist <- rv_seed_history()
+    if (length(hist) == 0L) return(NULL)
+    tags$div(style = "margin-top: -8px; margin-bottom: 8px;",
+      tags$label("Recent seeds (last used is first):", style = "font-size: 0.8em; color: var(--bs-secondary-color);"),
+      tags$div(style = "display: flex; flex-wrap: wrap; gap: 4px;",
+        lapply(hist, function(s) {
+          actionLink(
+            paste0("seed_recall_", s),
+            label = as.character(s),
+            style = "font-size: 0.8em; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; text-decoration: none;")
+        })
+      )
+    )
+  })
+
+  # Click a recent seed to fill the input
+  observe({
+    hist <- rv_seed_history()
+    lapply(hist, function(s) {
+      observeEvent(input[[paste0("seed_recall_", s)]], {
+        updateTextInput(session, "random_seed", value = as.character(s))
+      }, ignoreInit = TRUE)
+    })
   })
 
   # Toggle tab waiting messages via JS (not uiOutput — suspended tabs don't render)
@@ -1362,8 +1393,55 @@ function(input, output, session) {
           // Trigger change to save and sync
           if (cbs.length > 0) cbs[0].trigger('change');
         });
+
+        // --- Block Degree 1: right-click variable name to toggle ---
+        var preds = %s;
+        var blk1Key = 'earthUI_blk1_' + %s;
+        var blk1 = {};
+        // Restore saved block-degree-1 state
+        try { var saved = JSON.parse(localStorage.getItem(blk1Key)); if (saved) blk1 = saved; } catch(e) {}
+
+        function updateBlk1Labels() {
+          $('.eui-matrix-varlabel').each(function() {
+            var idx = parseInt($(this).attr('data-var-idx'));
+            if (isNaN(idx)) return;
+            var varName = preds[idx - 1];
+            var indicator = $(this).find('.blk1-indicator');
+            if (blk1[varName]) {
+              if (indicator.length === 0) {
+                $(this).append('<span class=\"blk1-indicator\" style=\"color:var(--bs-body-color, #000); font-weight:bold; font-size:0.85em;\"> 1</span>');
+              }
+            } else {
+              indicator.remove();
+            }
+          });
+        }
+
+        function syncBlk1() {
+          var blocked = [];
+          for (var v in blk1) { if (blk1[v]) blocked.push(v); }
+          Shiny.setInputValue('block_degree1', blocked.length > 0 ? blocked : null);
+          try { localStorage.setItem(blk1Key, JSON.stringify(blk1)); } catch(e) {}
+        }
+
+        updateBlk1Labels();
+        setTimeout(syncBlk1, 250);
+
+        $(document).off('contextmenu.euiblk1').on('contextmenu.euiblk1', '.eui-matrix-varlabel', function(e) {
+          e.preventDefault();
+          var idx = parseInt($(this).attr('data-var-idx'));
+          if (isNaN(idx)) return;
+          var varName = preds[idx - 1];
+          blk1[varName] = !blk1[varName];
+          updateBlk1Labels();
+          syncBlk1();
+          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(%s);
+        });
       })();
     ", n, jsonlite::toJSON(storage_key, auto_unbox = TRUE),
+       jsonlite::toJSON(storage_key, auto_unbox = TRUE),
+       jsonlite::toJSON(preds, auto_unbox = FALSE),
+       jsonlite::toJSON(storage_key, auto_unbox = TRUE),
        jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
 
     div(
@@ -1476,9 +1554,11 @@ function(input, output, session) {
 
     allowed_func <- NULL
     allowed_matrix_arg <- NULL
-    if (degree >= 2) {
+    blk1 <- input$block_degree1
+    if (degree >= 2 || length(blk1) > 0L) {
       allowed_matrix_arg <- get_allowed_matrix()
-      allowed_func <- build_allowed_function(allowed_matrix_arg)
+      allowed_func <- build_allowed_function(allowed_matrix_arg,
+                                              block_degree1 = blk1)
     }
 
     glm_arg <- NULL
@@ -1709,6 +1789,26 @@ function(input, output, session) {
       }
     }
 
+    # --- Random seed for reproducibility ---
+    user_seed <- suppressWarnings(as.integer(input$random_seed))
+    if (is.null(user_seed) || is.na(user_seed)) {
+      seed <- sample.int(.Machine$integer.max, 1L)
+    } else {
+      seed <- user_seed
+    }
+    fit_args$.seed <- seed
+
+    # Save to history (last 5 per file) and auto-fill new seed for next run.
+    # Use Sys.time() + PID to generate next seed (not R's RNG which may not
+    # have advanced in the async path since earth runs in a child process).
+    hist <- rv_seed_history()
+    hist <- c(seed, setdiff(hist, seed))
+    if (length(hist) > 5L) hist <- hist[1:5]
+    rv_seed_history(hist)
+    next_seed <- as.integer(
+      (as.numeric(Sys.time()) * 1000 + Sys.getpid()) %% .Machine$integer.max)
+    updateTextInput(session, "random_seed", value = as.character(next_seed))
+
     use_async <- requireNamespace("callr", quietly = TRUE)
 
     if (use_async) {
@@ -1735,13 +1835,17 @@ function(input, output, session) {
 
       rv$bg_proc <- callr::r_bg(
         function(args) {
-          cat(sprintf("Dataset: %d obs, %d predictors, degree=%d\n",
-                      nrow(args$df), length(args$predictors), args$degree))
+          seed <- args$.seed
+          args$.seed <- NULL
+          set.seed(seed)
+          cat(sprintf("Dataset: %d obs, %d predictors, degree=%d, seed=%d\n",
+                      nrow(args$df), length(args$predictors), args$degree, seed))
           if (!is.null(args$nfold) && args$nfold > 0)
             cat(sprintf("Cross-validation: %d folds\n", args$nfold))
           cat("Running forward pass...\n")
           flush(stdout())
           result <- do.call(earthUI::fit_earth, args)
+          result$seed <- seed
           cat(sprintf("Completed in %.1f seconds\n", result$elapsed))
           flush(stdout())
           result
@@ -1757,6 +1861,7 @@ function(input, output, session) {
 
     } else {
       # --- Sync fallback (no callr) ---
+      set.seed(seed)
       eui_log_$start("5. Fit Earth Model")
       session$sendCustomMessage("fitting_start", list())
       withProgress(message = "Fitting Earth model...", value = 0.2, {
@@ -1803,6 +1908,7 @@ function(input, output, session) {
             wp = fit_args$wp,
             weights = fit_args$weights
           )
+          rv$result$seed <- seed
           elapsed <- rv$result$elapsed
           setProgress(1, detail = "Done")
           session$sendCustomMessage("fitting_done",
@@ -2389,7 +2495,11 @@ function(input, output, session) {
     req(rv$result)
     model <- rv$result$model
 
-    cat(sprintf("== Timing: %.2f seconds ==\n\n", rv$result$elapsed))
+    cat(sprintf("== Timing: %.2f seconds ==\n", rv$result$elapsed))
+    if (!is.null(rv$result$seed)) {
+      cat(sprintf("== Random Seed: %d ==\n", rv$result$seed))
+    }
+    cat("\n")
 
     cat("== Model ==\n\n")
     print(model)

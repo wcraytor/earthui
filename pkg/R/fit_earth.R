@@ -308,7 +308,7 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   if (!is.null(wp))              earth_args$wp               <- wp
   if (!is.null(weights))         earth_args$weights          <- weights
 
-  if (degree >= 2L && !is.null(allowed_func)) {
+  if (!is.null(allowed_func)) {
     earth_args$allowed <- allowed_func
   }
 

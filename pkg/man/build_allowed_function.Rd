@@ -4,11 +4,18 @@
 \alias{build_allowed_function}
 \title{Build an allowed function for earth()}
 \usage{
-build_allowed_function(allowed_matrix)
+build_allowed_function(allowed_matrix, block_degree1 = NULL)
 }
 \arguments{
 \item{allowed_matrix}{A symmetric logical matrix as returned by
 \code{\link[=build_allowed_matrix]{build_allowed_matrix()}}.}
+
+\item{block_degree1}{Optional character vector of predictor names to
+block from entering the model as degree-1 (main effect) terms. These
+variables can still participate in interactions (degree >= 2). This is
+useful when a variable like \code{sale_age} should only enter through an
+interaction (e.g. with \code{living_area}) to capture size-varying time
+adjustments.}
 }
 \value{
 A function with signature
@@ -30,10 +37,18 @@ allowed in the matrix.
 
 For a 3-way interaction between X, Y, Z, the function verifies that
 (X,Y), (Y,Z), and (X,Z) are all TRUE in the matrix.
+
+When \code{block_degree1} is specified, any predictor in that list is blocked
+from entering as a degree-1 term but is allowed in higher-degree
+interactions (subject to the allowed matrix).
 }
 \examples{
 mat <- build_allowed_matrix(c("sqft", "bedrooms", "pool"))
 mat["sqft", "pool"] <- FALSE
 mat["pool", "sqft"] <- FALSE
 func <- build_allowed_function(mat)
+
+# Block sale_age from degree 1 (interaction only)
+mat2 <- build_allowed_matrix(c("sale_age", "living_area", "lot_size"))
+func2 <- build_allowed_function(mat2, block_degree1 = "sale_age")
 }

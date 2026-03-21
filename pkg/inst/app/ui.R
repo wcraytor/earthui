@@ -399,7 +399,7 @@ fluidPage(
             ['nprune','thresh','penalty','minspan','endspan','fast_k','nfold_override',
              'nk','newvar_penalty','fast_beta','ncross','varmod_exponent','varmod_conv',
              'varmod_clamp','varmod_minspan','adjust_endspan','exhaustive_tol',
-             'output_folder'].forEach(function(id) {
+             'output_folder','random_seed'].forEach(function(id) {
               if (s[id] !== undefined) $('#' + id).val(s[id]).trigger('change');
             });
             // Radio button inputs
@@ -506,7 +506,8 @@ fluidPage(
         nprune: '', nfold_override: 10, ncross: 20,
         varmod_exponent: 1, varmod_conv: 1, varmod_clamp: 0.1, varmod_minspan: -3,
         adjust_endspan: 2, exhaustive_tol: 1e-10,
-        subset_arg: ''
+        subset_arg: '',
+        random_seed: String(Math.floor(Math.random() * 2147483647) + 1)
       };
       for (var id in numerics) {
         $('#' + id).val(numerics[id]).trigger('change');
@@ -918,6 +919,17 @@ fluidPage(
         # --- 5. Fit ---
         tags$details(class = "eui-section", open = NA,
           tags$summary(h4("5. Fit Earth Model")),
+          div(style = "position: relative;",
+            textInput("random_seed", "Random seed",
+                      value = as.character(sample.int(.Machine$integer.max, 1L))),
+            uiOutput("seed_history_ui"),
+            tags$span(class = "eui-param-help",
+                      `data-bs-toggle` = "popover",
+                      `data-bs-trigger` = "hover focus",
+                      `data-bs-content` = "Integer seed for reproducible cross-validation folds. Default 42. Change to get different fold assignments. Dropdown shows the last 10 seeds used. The seed used is shown in Earth Output after fitting.",
+                      `data-bs-placement` = "left",
+                      "?")
+          ),
           actionButton("run_model", "Fit Earth Model",
                        class = "btn-success btn-lg",
                        style = "width: 100%; margin-top: 10px;")
