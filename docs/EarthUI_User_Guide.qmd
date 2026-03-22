@@ -71,7 +71,7 @@ format:
 \hline
 \rowcolor{earthaccent}\textbf{Version} & \textbf{Audience} & \textbf{Last Updated} \\
 \hline
-1.2 & All Users & March 2026 \\
+0.3.0 & All Users & March 2026 \\
 \hline
 \end{tabular}
 \end{center}
