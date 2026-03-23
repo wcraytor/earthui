@@ -1,6 +1,6 @@
 Package: earthUI
 Title: Interactive 'shiny' GUI for the 'earth' Package
-Version: 0.3.0
+Version: 0.4.0
 Authors@R:
     person("William", "Craytor", , "bcraytor@proton.me", role = c("aut", "cre"))
 Description: Provides a 'shiny'-based graphical user interface for the 'earth'
