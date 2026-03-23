@@ -76,17 +76,27 @@ fmt <- if (!is.null(knitr::pandoc_to())) knitr::pandoc_to() else "html"
 .plot_ext <- if (fmt == "latex") "pdf" else "png"
 
 # Helper: include a pre-generated plot or generate on-the-fly
-include_plot <- function(name, gen_expr, width = 8, height = 5) {
+include_plot <- function(name, gen_expr, width = 8, height = 5,
+                         asis = FALSE) {
   if (.has_assets) {
     f <- file.path(.plots_dir, paste0(name, ".", .plot_ext))
     if (file.exists(f)) {
-      knitr::include_graphics(f)
-    } else {
-      eval(gen_expr)
+      if (asis) {
+        if (fmt == "latex") {
+          # PDF: use relative path (lualatex resolves from working dir)
+          rel <- file.path("plots", paste0(name, ".", .plot_ext))
+          cat(sprintf("![](%s)\n\n", rel))
+        } else {
+          # HTML/Word: embed as base64 data URI so image travels with the file
+          cat(sprintf("![](%s)\n\n", knitr::image_uri(f)))
+        }
+        return(invisible(NULL))
+      } else {
+        return(knitr::include_graphics(f))
+      }
     }
-  } else {
-    eval(gen_expr)
   }
+  eval(gen_expr)
 }
 ```
 
@@ -234,11 +244,11 @@ for (i in seq_len(nrow(gf))) {
   cat(sprintf("\n### %s\n\n", label))
   if (gf$d[i] >= 2) {
     include_plot(paste0("gfunc_", i, "_persp"),
-                 quote(earthUI::plot_g_persp(result, i)))
+                 quote(earthUI::plot_g_persp(result, i)), asis = TRUE)
     cat("\n\n")
   }
   include_plot(paste0("gfunc_", i, "_contour"),
-               quote(earthUI::plot_g_contour(result, i)))
+               quote(earthUI::plot_g_contour(result, i)), asis = TRUE)
   cat("\n\n")
 }
 ```
@@ -253,12 +263,12 @@ include_plot("correlation", quote(earthUI::plot_correlation_matrix(result)),
 ```{r single-response-diagnostics, fig.width=8, fig.height=5, results='asis', eval=!multi}
 cat("\n## Diagnostics\n\n")
 cat("\n### Residuals vs Fitted\n\n")
-include_plot("residuals", quote(print(earthUI::plot_residuals(result))))
+include_plot("residuals", quote(print(earthUI::plot_residuals(result))), asis = TRUE)
 cat("\n\n### Normal Q-Q Plot\n\n")
-include_plot("qq", quote(print(earthUI::plot_qq(result))))
+include_plot("qq", quote(print(earthUI::plot_qq(result))), asis = TRUE)
 cat("\n\n### Actual vs Predicted\n\n")
 include_plot("actual_vs_predicted",
-             quote(print(earthUI::plot_actual_vs_predicted(result))))
+             quote(print(earthUI::plot_actual_vs_predicted(result))), asis = TRUE)
 ```
 
 ```{r multi-response-sections, fig.width=8, fig.height=5, results='asis', eval=multi}
@@ -302,11 +312,11 @@ for (ri in seq_along(targets)) {
       cat(sprintf("\n#### %s\n\n", label))
       if (gf$d[i] >= 2) {
         include_plot(paste0("gfunc_", i, suffix, "_persp"),
-                     bquote(earthUI::plot_g_persp(result, .(i), response_idx = .(ri))))
+                     bquote(earthUI::plot_g_persp(result, .(i), response_idx = .(ri))), asis = TRUE)
         cat("\n\n")
       }
       include_plot(paste0("gfunc_", i, suffix, "_contour"),
-                   bquote(p <- earthUI::plot_g_contour(result, .(i), response_idx = .(ri)); print(p)))
+                   bquote(p <- earthUI::plot_g_contour(result, .(i), response_idx = .(ri)); print(p)), asis = TRUE)
       cat("\n\n")
     }
   }
@@ -315,13 +325,13 @@ for (ri in seq_along(targets)) {
   cat("\n### Diagnostics\n\n")
   cat("\n#### Residuals vs Fitted\n\n")
   include_plot(paste0("residuals", suffix),
-               bquote(print(earthUI::plot_residuals(result, response_idx = .(ri)))))
+               bquote(print(earthUI::plot_residuals(result, response_idx = .(ri)))), asis = TRUE)
   cat("\n\n#### Normal Q-Q Plot\n\n")
   include_plot(paste0("qq", suffix),
-               bquote(print(earthUI::plot_qq(result, response_idx = .(ri)))))
+               bquote(print(earthUI::plot_qq(result, response_idx = .(ri)))), asis = TRUE)
   cat("\n\n#### Actual vs Predicted\n\n")
   include_plot(paste0("actual_vs_predicted", suffix),
-               bquote(print(earthUI::plot_actual_vs_predicted(result, response_idx = .(ri)))))
+               bquote(print(earthUI::plot_actual_vs_predicted(result, response_idx = .(ri)))), asis = TRUE)
   cat("\n\n")
 }
 ```

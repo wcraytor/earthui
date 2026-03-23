@@ -153,19 +153,35 @@ fluidPage(
         $btn.append(' <span class=\"eui-check\" style=\"color:#fff;\">&#10003;</span>');
       }
     }
+    function addCheckMulti(btnId) {
+      var $btn = $('#' + btnId);
+      if ($btn.length) {
+        $btn.append('<span class=\"eui-check\" style=\"color:#fff;\"> &#10003;</span>');
+      }
+    }
     function removeCheck(btnId) {
       $('#' + btnId + ' .eui-check').remove();
     }
+    function removeAllChecks() {
+      $('.eui-check').remove();
+    }
+
+    // Clear all checkmarks when purpose changes
+    $(document).on('change', 'input[name=purpose]', function() {
+      removeAllChecks();
+    });
 
     Shiny.addCustomMessageHandler('fitting_start', function(msg) {
       // Remove any previous overlays and checkmarks
-      $('#eui-fitting-modal').remove();
+      $('#eui-fitting-modal, #eui-fitting-backdrop').remove();
       clearInterval(window.euiTimerInterval);
+      clearInterval(window.euiFittingTabsPoll);
       removeCheck('run_model');
       removeCheck('export_data');
       removeCheck('export_data_nonadj');
       removeCheck('rca_output_btn');
       removeCheck('sales_grid_btn');
+      removeCheck('export_report_btn');
 
       var start = Date.now();
       var modal = $(
@@ -174,7 +190,11 @@ fluidPage(
         'width:520px;max-width:90vw;font-family:monospace;overflow:hidden;\">' +
           '<div style=\"background:#3b4252;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;\">' +
             '<span style=\"font-size:0.95em;font-weight:bold;\">Fitting Earth Model</span>' +
-            '<span id=\"eui-timer\" style=\"font-size:0.85em;color:#81a1c1;margin-right:30px;\">0s</span>' +
+            '<span id=\"eui-timer\" style=\"font-size:0.85em;color:#81a1c1;\">0s</span>' +
+            '<button id=\"eui-fitting-abort\" style=\"margin-left:12px;padding:2px 12px;font-size:0.8em;' +
+              'background:#bf616a;color:#fff;border:none;border-radius:4px;cursor:pointer;\">Abort</button>' +
+            '<span id=\"eui-fitting-close\" style=\"display:none;color:#81a1c1;cursor:pointer;' +
+              'font-size:1.3em;line-height:1;margin-left:12px;\">&times;</span>' +
           '</div>' +
           '<div id=\"eui-trace-log\" style=\"padding:8px 12px;height:300px;overflow-y:auto;font-size:0.78em;line-height:1.5;\"></div>' +
         '</div>'
@@ -183,6 +203,24 @@ fluidPage(
       $('<div id=\"eui-fitting-backdrop\" style=\"position:fixed;top:0;left:0;width:100%;height:100%;' +
         'background:rgba(0,0,0,0.4);z-index:10000;\"></div>').appendTo('body');
       modal.appendTo('body');
+
+      // Abort button handler
+      $('#eui-fitting-abort').on('click', function() {
+        $(this).prop('disabled', true).text('Aborting...');
+        Shiny.setInputValue('abort_fit', Date.now(), {priority: 'event'});
+        setTimeout(function() {
+          $('#eui-fitting-modal, #eui-fitting-backdrop').fadeOut(300, function(){ $(this).remove(); });
+        }, 500);
+      });
+
+      // Close X handler
+      $('#eui-fitting-close').on('click', function() {
+        clearInterval(window.euiTimerInterval);
+        clearInterval(window.euiFittingTabsPoll);
+        window.euiTimerInterval = null;
+        window.euiFittingTabsPoll = null;
+        $('#eui-fitting-modal, #eui-fitting-backdrop').fadeOut(300, function(){ $(this).remove(); });
+      });
 
       // Add initial message
       $('#eui-trace-log').append($('<div style=\"color:#88c0d0;\">').text('Starting model fit...'));
@@ -209,7 +247,7 @@ fluidPage(
     });
 
     Shiny.addCustomMessageHandler('fitting_done', function(msg) {
-      clearInterval(window.euiTimerInterval);
+      $('#eui-fitting-abort').hide();
       var $log = $('#eui-trace-log');
       var hasError = msg.text === 'Error' || $log.find('div').filter(function() {
         return $(this).text().match(/error|fail/i);
@@ -217,21 +255,40 @@ fluidPage(
       var color = hasError ? '#bf616a' : '#a3be8c';
       $log.append($('<div style=\"color:' + color + ';font-weight:bold;margin-top:4px;\">').text(msg.text));
       $log.scrollTop($log[0].scrollHeight);
-      if (!hasError) addCheck('run_model');
-      // Add close X button — user dismisses manually
-      if (!$('#eui-fitting-close').length) {
-        var $btn = $('<span id=\"eui-fitting-close\" style=\"position:absolute;top:8px;right:12px;' +
-          'color:#81a1c1;cursor:pointer;font-size:1.3em;line-height:1;\">&times;</span>');
-        $btn.on('click', function() {
-          $('#eui-fitting-modal, #eui-fitting-backdrop').fadeOut(300, function(){ $(this).remove(); });
-        });
-        $('#eui-fitting-modal').css('position', 'fixed').append($btn);
+      if (hasError) {
+        clearInterval(window.euiTimerInterval);
+        $('#eui-fitting-close').show();
+      } else {
+        addCheck('run_model');
+        $log.append($('<div style=\"color:#88c0d0;margin-top:2px;\">').text('Now completing the tabs.'));
+        $log.scrollTop($log[0].scrollHeight);
+        var tabPollCount = 0;
+        window.euiFittingTabsPoll = setInterval(function() {
+          tabPollCount++;
+          var $active = $('.tab-pane.active');
+          var still = $active.find('.eui-tab-content .recalculating').length;
+          var contentVisible = $active.find('.eui-tab-content:visible').length > 0;
+          // Complete when tabs are done, or after 30s safety timeout
+          if ((contentVisible && still === 0) || tabPollCount > 100) {
+            clearInterval(window.euiFittingTabsPoll);
+            window.euiFittingTabsPoll = null;
+            clearInterval(window.euiTimerInterval);
+            window.euiTimerInterval = null;
+            var elapsed = $('#eui-timer').text();
+            $log.append($('<div style=\"color:#a3be8c;font-weight:bold;margin-top:2px;\">').text('Tabs complete. (' + elapsed + ')'));
+            $log.scrollTop($log[0].scrollHeight);
+            $('#eui-fitting-close').show();
+          }
+        }, 300);
       }
     });
 
     // Check download buttons on completion
     Shiny.addCustomMessageHandler('download_check', function(msg) {
       addCheck(msg.id);
+    });
+    Shiny.addCustomMessageHandler('download_check_multi', function(msg) {
+      addCheckMulti(msg.id);
     });
 
     // Toggle tab waiting messages vs content.
@@ -580,8 +637,8 @@ fluidPage(
                      selected = "general", inline = TRUE)
       ),
       conditionalPanel(
-        condition = "input.purpose === 'market'",
-        checkboxInput("skip_subject_row", "Skip first row (subject property)", value = FALSE)
+        condition = "input.purpose !== 'appraisal'",
+        checkboxInput("skip_subject_row", "Skip first row", value = FALSE)
       ),
       hr(),
 

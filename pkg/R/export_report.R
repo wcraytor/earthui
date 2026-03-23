@@ -69,7 +69,7 @@ prepare_report_assets <- function(earth_result, assets_dir = NULL) {
   }
 
   # --- Generate all plots as both PNG and PDF ---
-  save_plot_ <- function(name, expr, width = 8, height = 5) {
+  save_plot_ <- function(name, plot_fn, width = 8, height = 5) {
     for (ext in c("png", "pdf")) {
       path <- file.path(plots_dir, paste0(name, ".", ext))
       if (ext == "png") {
@@ -79,7 +79,7 @@ prepare_report_assets <- function(earth_result, assets_dir = NULL) {
         grDevices::pdf(path, width = width, height = height)
       }
       tryCatch({
-        result <- expr
+        result <- plot_fn()
         if (inherits(result, "ggplot")) print(result)
       }, error = function(e) {
         graphics::plot.new()
@@ -111,11 +111,11 @@ prepare_report_assets <- function(earth_result, assets_dir = NULL) {
   }
 
   # Variable importance plot
-  save_plot_("importance", plot_variable_importance(earth_result),
+  save_plot_("importance", function() plot_variable_importance(earth_result),
              width = 8, height = 5)
 
   # Correlation matrix
-  save_plot_("correlation", plot_correlation_matrix(earth_result),
+  save_plot_("correlation", function() plot_correlation_matrix(earth_result),
              width = 10, height = 8)
 
   # g-function plots (per response for multi-target)
@@ -127,8 +127,11 @@ prepare_report_assets <- function(earth_result, assets_dir = NULL) {
         plot_name <- paste0("gfunc_", i, suffix)
         if (gf$d[i] >= 2L) {
           # 3D persp plot (base R)
-          save_plot_(paste0(plot_name, "_persp"),
-                     plot_g_persp(earth_result, i, response_idx = ri_arg),
+          persp_fn <- (function(idx, ri) {
+            force(idx); force(ri)
+            function() plot_g_persp(earth_result, idx, response_idx = ri)
+          })(i, ri_arg)
+          save_plot_(paste0(plot_name, "_persp"), persp_fn,
                      width = 8, height = 6)
         }
         # 2D/contour plot (ggplot2)

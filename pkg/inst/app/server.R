@@ -649,7 +649,7 @@ function(input, output, session) {
   # Restore wp weights from localStorage when data/target changes
   observeEvent(input$wp_weights_restored, {
     restored <- input$wp_weights_restored
-    if (!is.null(restored) && length(restored) > 0) {
+    if (!is.null(restored) && length(restored) > 0 && length(input$target) > 1L) {
       targets <- input$target
       weights <- vapply(targets, function(t) {
         val <- restored[[t]]
@@ -758,7 +758,7 @@ function(input, output, session) {
   preview_data_ <- function() {
     req(rv$data)
     df <- rv$data
-    if (identical(input$purpose, "market") && isTRUE(input$skip_subject_row) && nrow(df) >= 2L) {
+    if (input$purpose != "appraisal" && isTRUE(input$skip_subject_row) && nrow(df) >= 2L) {
       df <- df[2:nrow(df), , drop = FALSE]
     }
     df
@@ -869,7 +869,7 @@ function(input, output, session) {
         var checkboxIds = ['stratify', 'keepxy', 'scale_y', 'auto_linpreds',
                            'use_beta_cache', 'force_xtx_prune', 'get_leverages',
                            'force_weights', 'skip_subject_row'];
-        var radioIds = ['purpose'];
+        var radioIds = [];
         var dateIds = ['effective_date'];
         var allIds = selectIds.concat(numericIds).concat(checkboxIds).concat(radioIds).concat(dateIds);
 
@@ -1583,7 +1583,8 @@ function(input, output, session) {
     }
 
     # wp (response weights) — per-target numeric vector from dialog
-    wp_arg <- rv$wp_weights
+    # Only use wp for multi-target models (earth rejects wp with Scale.y)
+    wp_arg <- if (length(input$target) > 1L) rv$wp_weights else NULL
 
     # Collect type_map from JS dropdown state
     type_map_arg <- input$col_types  # named list from gatherState()
@@ -1746,7 +1747,7 @@ function(input, output, session) {
     skip_first <- FALSE
     if (input$purpose == "appraisal") {
       skip_first <- TRUE
-    } else if (input$purpose == "market" && isTRUE(input$skip_subject_row)) {
+    } else if (input$purpose != "appraisal" && isTRUE(input$skip_subject_row)) {
       skip_first <- TRUE
     }
     if (skip_first && nrow(rv$data) >= 2L) {
@@ -2049,6 +2050,20 @@ function(input, output, session) {
     })
   })
 
+  # --- Abort Fitting ---
+  observeEvent(input$abort_fit, {
+    proc <- rv$bg_proc
+    if (!is.null(proc) && inherits(proc, "r_process") && proc$is_alive()) {
+      proc$kill()
+      rv$trace_lines <- c(rv$trace_lines, "Aborted by user.")
+      eui_log_$err("5. Fit Earth Model", "Aborted by user")
+      write_fit_log_(input$output_folder, rv$trace_lines, rv$file_name)
+    }
+    rv$fitting <- FALSE
+    rv$bg_proc <- NULL
+    session$sendCustomMessage("fitting_done", list(text = "Aborted by user."))
+  })
+
   # --- Parameter Info Modal ---
   observeEvent(input$param_info, {
     showModal(modalDialog(
@@ -2312,7 +2327,11 @@ function(input, output, session) {
     if (idx < 1L || idx > nrow(gf)) return(NULL)
 
     if (gf$d[idx] >= 2L && requireNamespace("plotly", quietly = TRUE)) {
-      plotly::plotlyOutput("contrib_plot_3d", height = "500px")
+      tagList(
+        plotly::plotlyOutput("contrib_plot_3d", height = "500px"),
+        hr(),
+        plotOutput("contrib_plot_contour", height = "400px")
+      )
     } else {
       plotOutput("contrib_plot_2d", height = "400px")
     }
@@ -2355,6 +2374,24 @@ function(input, output, session) {
       )
     })
   }
+
+  output$contrib_plot_contour <- renderPlot({
+    req(rv$result, input$contrib_g_index)
+    ri <- if (length(rv$result$target) > 1L && !is.null(input$contrib_response)) {
+      as.integer(input$contrib_response)
+    } else {
+      NULL
+    }
+    tryCatch(
+      plot_g_contour(rv$result, as.integer(input$contrib_g_index),
+                     response_idx = ri),
+      error = function(e) {
+        message("earthUI: g-function contour plot error: ", e$message)
+        plot.new()
+        text(0.5, 0.5, paste("Error:", e$message), cex = 1.2)
+      }
+    )
+  })
 
   # --- Results: Correlation Matrix ---
   output$correlation_plot_ui <- renderUI({
@@ -2588,7 +2625,7 @@ function(input, output, session) {
                       output_file = out_path,
                       paper_size = paper,
                       assets_dir = assets)
-        session$sendCustomMessage("download_check",
+        session$sendCustomMessage("download_check_multi",
                                   list(id = "export_report_btn"))
         session$sendCustomMessage("report_done",
           list(text = paste0("Report saved to: ", out_path), error = FALSE))

@@ -145,6 +145,25 @@ R CMD build pkg && R CMD check earthui_*.tar.gz
   download path. Uses base R `persp()` for 3D plots (no external dependencies).
 - **HTML reports**: Use KaTeX (not MathJax) for math rendering — much smaller
   and faster. No `embed-resources` — reports are saved locally.
+- **Report plot inclusion (CRITICAL)**: The QMD template's `include_plot()`
+  helper handles two contexts:
+  (1) **Non-asis chunks** (importance, correlation): Use
+  `knitr::include_graphics(f)` — must `return()` the result so knitr
+  processes it as the chunk output.
+  (2) **`results='asis'` chunks** (g-functions, diagnostics): Use
+  `cat(sprintf("![](...)\n\n"))` since `include_graphics` doesn't work
+  in asis mode. For **PDF/LaTeX**, use relative file paths
+  (`plots/name.pdf`) — lualatex resolves from the working directory.
+  For **HTML**, use `knitr::image_uri(f)` to emit base64 data URIs —
+  the HTML file is copied to the output folder without the plots
+  directory, so relative paths would break. **Word** also uses data URIs.
+  Do NOT change this architecture without testing all three formats.
+- **Report asset generation**: `save_plot_()` in `export_report.R` takes
+  a **function** (not an evaluated expression) to ensure base R plots
+  (e.g., `persp()`) draw inside the correct graphics device. Passing an
+  already-evaluated expression causes the plot side-effect to occur
+  before the device is opened. `save_ggplot_()` takes a ggplot object
+  directly since ggplot objects are self-contained.
 - **Report: Allowed Interactions matrix**: Rendered in landscape mode across
   all formats. PDF uses `pdflscape` (`\begin{landscape}`). Word uses raw
   OpenXML section breaks for landscape pages. HTML uses custom table with
@@ -257,4 +276,15 @@ Modal-based comp selection with auto-recommendation:
 - **Tab waiting via uiOutput fails**: Server-side `uiOutput` wrappers for
   tab waiting messages are suspended in inactive tabs and never update.
   Use static HTML toggled by JS custom messages (`eui_tabs_ready`) instead.
+- **Report plots in `results='asis'` chunks**: `knitr::include_graphics()`
+  does NOT work in `results='asis'` chunks — use `cat()` with markdown
+  image syntax instead. For HTML, use `knitr::image_uri(f)` to generate
+  base64 data URIs (relative file paths break because the HTML is copied
+  to the output folder without accompanying plot files). For PDF, use
+  relative paths (`plots/name.pdf`). See `include_plot()` in the QMD.
+- **`save_plot_()` must take a function, not an expression**: Base R
+  plotting functions like `persp()` draw as side effects during argument
+  evaluation. If passed as an evaluated expression to `save_plot_()`, the
+  plot draws before the graphics device is opened. Always wrap in
+  `function() plot_g_persp(...)`.
 - Kill port 7878 before relaunching: `lsof -ti:7878 | xargs kill`.
