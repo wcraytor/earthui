@@ -797,6 +797,8 @@ function(input, output, session) {
     }
     show_cols <- unique(c(display_cols, tgt, preds))
     show_cols <- intersect(show_cols, names(rv$data))
+    # Show all columns if no target/predictors selected yet
+    if (length(show_cols) == 0L) show_cols <- names(rv$data)
     subj <- rv$data[1L, show_cols, drop = FALSE]
     if (!is.null(tgt) && length(tgt) > 0L) {
       for (t in tgt) {
@@ -823,6 +825,8 @@ function(input, output, session) {
     }
     show_cols <- unique(c(display_cols, tgt, preds))
     show_cols <- intersect(show_cols, names(rv$data))
+    # Show all columns if no target/predictors selected yet
+    if (length(show_cols) == 0L) show_cols <- names(rv$data)
     comps <- rv$data[2:nrow(rv$data), show_cols, drop = FALSE]
     comps <- cbind(data.frame(row = seq_len(nrow(comps)), check.names = FALSE), comps)
     low_rows <- integer(0)
@@ -869,7 +873,7 @@ function(input, output, session) {
         var checkboxIds = ['stratify', 'keepxy', 'scale_y', 'auto_linpreds',
                            'use_beta_cache', 'force_xtx_prune', 'get_leverages',
                            'force_weights', 'skip_subject_row'];
-        var radioIds = [];
+        var radioIds = ['purpose'];
         var dateIds = ['effective_date'];
         var allIds = selectIds.concat(numericIds).concat(checkboxIds).concat(radioIds).concat(dateIds);
 
@@ -1006,7 +1010,11 @@ function(input, output, session) {
   })
 
   output$variable_table <- renderUI({
-    req(rv$data, input$target)
+    req(rv$data)
+    if (is.null(input$target) || length(input$target) == 0L) {
+      return(tags$p(class = "text-muted", style = "padding: 12px; text-align: center;",
+                    "Select a target variable above to configure predictors."))
+    }
     candidates <- setdiff(names(rv$data), input$target)
     nrows <- nrow(rv$data)
 
@@ -1026,24 +1034,25 @@ function(input, output, session) {
                          "living_area", "longitude", "lot_size",
                          "sale_age", "site_dimensions", "weight")
 
-    # Header row
+    # Header row — vertical labels for checkboxes, like glmnetUI
+    angled_hdr <- "text-align:center; font-size:0.85em; writing-mode:vertical-lr; transform:rotate(180deg); height:55px; line-height:1; font-weight:bold;"
     header_cols <- list(
-      tags$div(style = "flex: 1; min-width: 100px;", "Variable"),
-      tags$div(style = "width: 85px; text-align: center;", "Type"),
-      tags$div(style = "width: 45px; text-align: center;", "Inc?")
+      tags$div(style = "flex: 1; min-width: 60px; font-weight: bold; font-size: 0.85em;", "Variable"),
+      tags$div(style = "width: 75px; text-align: center; font-weight: bold; font-size: 0.85em;", "Type"),
+      tags$div(style = paste0("width: 20px;", angled_hdr), "Include"),
+      tags$div(style = paste0("width: 20px;", angled_hdr), "Factor"),
+      tags$div(style = paste0("width: 20px;", angled_hdr), "Linear")
     )
     if (appraiser) {
       header_cols <- c(header_cols, list(
-        tags$div(style = "width: 95px; text-align: center;", "Special")
+        tags$div(style = "width: 80px; text-align: center; font-weight: bold; font-size: 0.85em;", "Special")
       ))
     }
     header_cols <- c(header_cols, list(
-      tags$div(style = "width: 55px; text-align: center;", "Factor"),
-      tags$div(style = "width: 55px; text-align: center;", "Linear"),
-      tags$div(style = "width: 50px; text-align: right; padding-right: 4px;", "NAs")
+      tags$div(style = "width: 32px; text-align: right; padding-right: 4px; font-weight: bold; font-size: 0.85em;", "NAs")
     ))
     header <- tags$div(
-      style = "display: flex; align-items: center; padding: 4px 0; border-bottom: 2px solid #ccc; font-weight: bold; font-size: 0.85em;",
+      style = "display: flex; align-items: flex-end; padding: 4px 0; border-bottom: 2px solid var(--bs-border-color, #ccc); position: sticky; top: 0; z-index: 1; background: var(--bs-tertiary-bg, var(--bs-body-bg, #f0f0f0)); gap: 2px;",
       header_cols
     )
 
@@ -1070,19 +1079,25 @@ function(input, output, session) {
         }
       })
 
-      # Build row cells
+      # Build row cells — checkboxes grouped together (Include, Factor, Linear)
       row_cells <- list(
-        tags$div(style = "flex: 1; min-width: 100px; font-size: 0.82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+        tags$div(style = "flex: 1; min-width: 60px; font-size: 0.82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
                  title = col, col,
                  tags$span(id = paste0("eui_special_badge_", i),
                            style = "font-size: 0.7em; color: #0d6efd; font-style: italic; margin-left: 4px;")),
-        tags$div(style = "width: 85px; text-align: center;",
+        tags$div(style = "width: 75px; text-align: center;",
                  tags$select(id = paste0("eui_type_", i),
                              class = "eui-type-select",
-                             style = "width: 78px; font-size: 0.75em; padding: 1px 2px; border: 1px solid #ccc; border-radius: 3px; background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #333);",
+                             style = "width: 70px; font-size: 0.75em; padding: 1px 2px; border: 1px solid var(--bs-border-color, #ccc); border-radius: 3px; background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #333);",
                              option_tags)),
-        tags$div(style = "width: 45px; text-align: center;",
+        tags$div(style = "width: 20px; text-align: center;",
                  tags$input(type = "checkbox", id = paste0("eui_inc_", i),
+                            class = "eui-var-cb")),
+        tags$div(style = "width: 20px; text-align: center;",
+                 tags$input(type = "checkbox", id = paste0("eui_fac_", i),
+                            class = "eui-var-cb")),
+        tags$div(style = "width: 20px; text-align: center;",
+                 tags$input(type = "checkbox", id = paste0("eui_lin_", i),
                             class = "eui-var-cb"))
       )
       if (appraiser) {
@@ -1090,26 +1105,20 @@ function(input, output, session) {
           tags$option(value = opt, opt)
         })
         row_cells <- c(row_cells, list(
-          tags$div(style = "width: 95px; text-align: center;",
+          tags$div(style = "width: 80px; text-align: center;",
                    tags$select(id = paste0("eui_special_", i),
                                class = "eui-special-select",
-                               style = "width: 90px; font-size: 0.75em; padding: 1px 2px; border: 1px solid #ccc; border-radius: 3px; background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #333);",
+                               style = "width: 74px; font-size: 0.75em; padding: 1px 2px; border: 1px solid var(--bs-border-color, #ccc); border-radius: 3px; background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #333);",
                                special_option_tags))
         ))
       }
       row_cells <- c(row_cells, list(
-        tags$div(style = "width: 55px; text-align: center;",
-                 tags$input(type = "checkbox", id = paste0("eui_fac_", i),
-                            class = "eui-var-cb")),
-        tags$div(style = "width: 55px; text-align: center;",
-                 tags$input(type = "checkbox", id = paste0("eui_lin_", i),
-                            class = "eui-var-cb")),
-        tags$div(style = paste0("width: 50px; text-align: right; font-size: 0.8em; padding-right: 4px;", na_style),
+        tags$div(style = paste0("width: 32px; text-align: right; font-size: 0.8em; padding-right: 4px;", na_style),
                  if (n_na > 0L) as.character(n_na) else "")
       ))
 
       tags$div(
-        style = "display: flex; align-items: center; padding: 2px 0; border-bottom: 1px solid #eee;",
+        style = "display: flex; align-items: center; padding: 2px 0; border-bottom: 1px solid var(--bs-border-color, #eee); gap: 2px;",
         row_cells
       )
     })

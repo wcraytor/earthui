@@ -686,7 +686,7 @@ fluidPage(
           ),
           h5("Predictor Settings"),
           uiOutput("predictor_hint_text"),
-          div(style = "max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 4px;",
+          div(style = "max-height: 400px; overflow-y: auto; border: 1px solid var(--bs-border-color, #ddd); border-radius: 4px;",
               uiOutput("variable_table"))
         ),
         hr(),
