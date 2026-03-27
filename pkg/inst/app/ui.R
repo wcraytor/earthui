@@ -52,7 +52,7 @@ fluidPage(
     [data-eui-theme='dark'] .eui-special-select { background: #3b4252 !important; color: #d8dee9 !important; border-color: #434c5e !important; }
     .col-sm-4 { min-width: 500px; }
     #shiny-notification-panel { width: 450px; }
-    .shiny-notification { font-size: 0.85em; word-wrap: break-word; overflow-wrap: break-word; }
+    .shiny-notification { font-size: 0.85em; word-wrap: break-word; overflow-wrap: anywhere; }
     details.eui-section > summary { cursor: pointer; list-style: none; }
     details.eui-section > summary::-webkit-details-marker { display: none; }
     details.eui-section > summary h4 { display: inline; }
