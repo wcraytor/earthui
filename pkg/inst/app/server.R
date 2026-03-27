@@ -336,6 +336,28 @@ function(input, output, session) {
     session$sendCustomMessage("eui_rca_ready", list(ready = ready))
   })
 
+  # When the purpose radio changes, clear all result / RCA / sales-grid state
+
+  observeEvent(input$purpose, {
+    rv$result       <- NULL
+    rv$rca_df       <- NULL
+    rv$rca_targets  <- NULL
+    rv$sg_recommended <- NULL
+    rv$sg_others    <- NULL
+    rv$trace_lines  <- character(0)
+    # Kill any in-flight report asset process and clean up its temp dir
+    if (!is.null(rv_report$assets_proc) &&
+        inherits(rv_report$assets_proc, "r_process") &&
+        rv_report$assets_proc$is_alive()) {
+      rv_report$assets_proc$kill()
+    }
+    rv_report$assets_proc <- NULL
+    if (!is.null(rv_report$assets_dir)) {
+      unlink(rv_report$assets_dir, recursive = TRUE)
+      rv_report$assets_dir <- NULL
+    }
+  }, ignoreInit = TRUE)
+
   # Update weights dropdown with numeric column names when data loads
   observe({
     req(rv$data)
