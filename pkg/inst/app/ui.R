@@ -149,6 +149,16 @@ fluidPage(
         document.body.setAttribute('data-eui-theme', 'light');
         Shiny.setInputValue('dark_mode', 'light', {priority: 'event'});
       }
+
+      // Restore last-used purpose
+      var lastPurpose = null;
+      try { lastPurpose = localStorage.getItem('earthUI_last_purpose'); } catch(e) {}
+      if (lastPurpose) {
+        var radio = $(\"input[name='purpose'][value='\" + lastPurpose + \"']\");
+        if (radio.length) {
+          radio.prop('checked', true).trigger('change');
+        }
+      }
     });
   ")),
   tags$script(HTML("
@@ -172,9 +182,10 @@ fluidPage(
       $('.eui-check').remove();
     }
 
-    // Clear all checkmarks when purpose changes
+    // Clear all checkmarks when purpose changes & persist selection
     $(document).on('change', 'input[name=purpose]', function() {
       removeAllChecks();
+      try { localStorage.setItem('earthUI_last_purpose', $(this).val()); } catch(e) {}
     });
 
     Shiny.addCustomMessageHandler('fitting_start', function(msg) {

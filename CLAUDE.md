@@ -288,3 +288,22 @@ Modal-based comp selection with auto-recommendation:
   plot draws before the graphics device is opened. Always wrap in
   `function() plot_g_persp(...)`.
 - Kill port 7878 before relaunching: `lsof -ti:7878 | xargs kill`.
+
+## Shared UI Conventions (earthUI, glmnetUI, mgcvUI)
+
+These conventions apply consistently across all three sibling apps:
+
+- **Nord Theme**: All UI colors must come from the official Nord palette
+  (nord0–nord15). See https://www.nordtheme.com/docs/colors-and-palettes.
+  Light mode uses Snow Storm base (nord6 bg, nord0 fg). Dark mode uses
+  Polar Night base (nord0 bg, nord4 fg). Frost for accents, Aurora only
+  for warnings/errors (alerts, validation messages), never on buttons.
+- **Button classes**: Interactive buttons use Frost colors only:
+  `btn-primary`, `btn-secondary`, `btn-outline-primary`,
+  `btn-outline-secondary`. Never use `btn-success`, `btn-danger`,
+  `btn-outline-success`, or `btn-outline-danger` on buttons.
+- **Purpose persistence**: Last-used purpose is saved to localStorage
+  (`earthUI_last_purpose`) on change and restored on `shiny:connected`.
+  Each app uses its own key so they persist independently.
+- **sales_grid.R exception**: Excel export colors follow third-party
+  conventions, not the Nord palette.
