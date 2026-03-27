@@ -419,7 +419,7 @@ function(input, output, session) {
                                 choices = c("<", ">", "<=", ">=", "==", "!="),
                                 selected = cond$op)),
           column(4, val_input),
-          column(2, tags$button("X", class = "btn btn-outline-danger btn-sm",
+          column(2, tags$button("X", class = "btn btn-outline-secondary btn-sm",
                                 style = "margin-top: 25px;",
                                 onclick = sprintf("Shiny.setInputValue('subset_remove_idx', %d, {priority: 'event'});", i)))
         )
@@ -474,7 +474,7 @@ function(input, output, session) {
         tags$strong("Preview: "), preview
       ),
       footer = tagList(
-        actionButton("subset_apply", "Apply", class = "btn-success"),
+        actionButton("subset_apply", "Apply", class = "btn-primary"),
         modalButton("Cancel")
       )
     ))
@@ -624,7 +624,7 @@ function(input, output, session) {
              style = "font-size: 0.9em; color: #666;"),
       weight_inputs,
       footer = tagList(
-        actionButton("wp_apply", "Apply", class = "btn-success"),
+        actionButton("wp_apply", "Apply", class = "btn-primary"),
         modalButton("Cancel")
       )
     ))
@@ -1667,6 +1667,10 @@ function(input, output, session) {
   })
 
   observeEvent(input$run_model, {
+    message("earthUI: Fit clicked. data=", !is.null(rv$data),
+            " target=", paste(input$target, collapse=","),
+            " predictors=", paste(input$predictors, collapse=","),
+            " purpose=", input$purpose)
     req(rv$data, input$target, input$predictors)
 
     # --- Appraiser: round latitude/longitude to 3 decimal places ---
@@ -2836,7 +2840,7 @@ function(input, output, session) {
       footer = tagList(
         modalButton("Cancel"),
         actionButton("sg_confirm", "Generate Sales Grid",
-                     class = "btn-success")
+                     class = "btn-primary")
       )
     ))
   })
@@ -3198,7 +3202,7 @@ function(input, output, session) {
                    value = 5.00, min = 0, max = 9.99, step = 0.01),
       footer = tagList(
         modalButton("Cancel"),
-        actionButton("export_rca", "Generate", class = "btn-success")
+        actionButton("export_rca", "Generate", class = "btn-primary")
       ),
       size = "s"
     ))

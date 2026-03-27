@@ -21,32 +21,35 @@ fluidPage(
     .MathJax_Display { text-align: left !important; margin-left: 1em !important; }
     .eui-param-help { position: absolute; top: 0; right: 0; width: 18px; height: 18px; border-radius: 50%; background: #88c0d0; color: #fff; font-size: 11px; font-weight: bold; text-align: center; line-height: 18px; cursor: pointer; z-index: 10; }
     .eui-param-help:hover { background: #5e81ac; }
-    #eui-theme-toggle { background: none; border: none; color: var(--bs-navbar-color, #ccc); font-size: 20px; cursor: pointer; padding: 4px 8px; line-height: 1; }
-    #eui-theme-toggle:hover { color: var(--bs-navbar-hover-color, #fff); }
-    .eui-navbar { background: #2e3440; padding: 4px 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .eui-navbar .eui-brand { color: #eceff4; font-size: 1.3em; font-weight: bold; margin-right: 8px; white-space: nowrap; }
-    .eui-navbar .eui-brand small { font-size: 0.55em; color: #81a1c1; font-weight: normal; }
+    .eui-section-info { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #88c0d0; color: #fff; font-size: 11px; font-weight: bold; line-height: 18px; cursor: pointer; }
+    .eui-section-info:hover { background: #5e81ac; }
+    details.eui-section > summary { position: relative; padding-right: 28px; }
+    .eui-section-hdr { position: relative; padding-right: 28px; }
+    #eui-theme-toggle { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--bs-border-color); background: var(--bs-body-bg); color: var(--bs-body-color); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.15); transition: all 0.3s; }
+    #eui-theme-toggle:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.25); }
+    .eui-navbar { display: flex; align-items: center; padding: 10px 15px; gap: 8px; flex-wrap: wrap; }
+    .eui-navbar .eui-brand { font-size: 1.3em; font-weight: bold; margin-right: 8px; white-space: nowrap; }
+    .eui-navbar .eui-brand small { font-size: 0.55em; color: var(--bs-secondary-color); font-weight: normal; }
     .eui-navbar .eui-brand img { height: 26px; margin-right: 6px; vertical-align: middle; }
     .eui-navbar .dropdown { position: relative; }
-    .eui-navbar .eui-menu-btn { background: none; border: none; color: #d8dee9; font-size: 0.9em; padding: 6px 12px; cursor: pointer; border-radius: 4px; }
-    .eui-navbar .eui-menu-btn:hover { background: rgba(255,255,255,0.1); color: #eceff4; }
-    .eui-navbar .eui-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #ccc); border-radius: 6px; padding: 12px 16px; min-width: 280px; z-index: 10001; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+    .eui-navbar .eui-menu-btn { background: none; border: 1px solid var(--bs-border-color); color: var(--bs-body-color); font-size: 0.9em; padding: 6px 12px; cursor: pointer; border-radius: 4px; }
+    .eui-navbar .eui-menu-btn:hover { background: var(--bs-tertiary-bg); }
+    .eui-navbar .eui-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 6px; padding: 12px 16px; min-width: 280px; z-index: 10001; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
     .eui-navbar .dropdown.open .eui-dropdown-menu { display: block; }
-    [data-bs-theme='dark'] .eui-navbar .eui-dropdown-menu { background: #3b4252; border-color: #434c5e; }
     .eui-navbar .eui-spacer { flex: 1; }
-    [data-bs-theme='dark'] .eui-popup-content { background: #3b4252; color: #d8dee9; }
-    [data-bs-theme='dark'] details > summary { color: #d8dee9 !important; }
-    [data-bs-theme='dark'] .nav-tabs .nav-link.active { color: #d8dee9 !important; background-color: #2e3440 !important; border-color: #434c5e #434c5e #2e3440 !important; }
-    [data-bs-theme='dark'] .nav-tabs .nav-link { color: #81a1c1; }
-    [data-bs-theme='dark'] .nav-tabs .nav-link:hover { color: #d8dee9; border-color: #434c5e; }
+    [data-eui-theme='dark'] .eui-popup-content { background: #3b4252; color: #d8dee9; }
+    [data-eui-theme='dark'] details > summary { color: #d8dee9 !important; }
+    [data-eui-theme='dark'] .nav-tabs .nav-link.active { color: #d8dee9 !important; background-color: #2e3440 !important; border-color: #434c5e #434c5e #2e3440 !important; }
+    [data-eui-theme='dark'] .nav-tabs .nav-link { color: #81a1c1; }
+    [data-eui-theme='dark'] .nav-tabs .nav-link:hover { color: #d8dee9; border-color: #434c5e; }
     #earth_output { font-family: 'Roboto Condensed', sans-serif; font-size: 0.9em; line-height: 1.5; }
     .eui-matrix-header th { position: sticky; top: 0; z-index: 2; background: var(--bs-body-bg, #fff); }
     .eui-matrix-header th:first-child { position: sticky; left: 0; z-index: 3; }
     .eui-matrix-rowlabel { position: sticky; left: 0; z-index: 1; background: var(--bs-body-bg, #fff); }
     .eui-type-select { appearance: auto; -webkit-appearance: auto; }
-    [data-bs-theme='dark'] .eui-type-select { background: #3b4252 !important; color: #d8dee9 !important; border-color: #434c5e !important; }
+    [data-eui-theme='dark'] .eui-type-select { background: #3b4252 !important; color: #d8dee9 !important; border-color: #434c5e !important; }
     .eui-special-select { appearance: auto; -webkit-appearance: auto; }
-    [data-bs-theme='dark'] .eui-special-select { background: #3b4252 !important; color: #d8dee9 !important; border-color: #434c5e !important; }
+    [data-eui-theme='dark'] .eui-special-select { background: #3b4252 !important; color: #d8dee9 !important; border-color: #434c5e !important; }
     .col-sm-4 { min-width: 500px; }
     #shiny-notification-panel { width: 450px; }
     .shiny-notification { font-size: 0.85em; word-wrap: break-word; overflow-wrap: break-word; }
@@ -60,15 +63,15 @@ fluidPage(
     .shiny-input-radiogroup input[type='radio'] { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; border: 3px solid #2e3440; border-radius: 50%; margin-right: 5px; vertical-align: middle; cursor: pointer; position: relative; }
     .shiny-input-radiogroup input[type='radio']:checked { border-color: #2e3440; }
     .shiny-input-radiogroup input[type='radio']:checked::after { content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: #2e3440; }
-    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio'] { border-color: #d8dee9; }
-    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked { border-color: #d8dee9; }
-    [data-bs-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked::after { background: #d8dee9; }
-    [data-bs-theme='dark'] .modal .btn-outline-primary { color: #88c0d0; border-color: #88c0d0; }
-    [data-bs-theme='dark'] .modal .btn-outline-primary:hover { background: #88c0d0; color: #2e3440; }
-    [data-bs-theme='dark'] .modal .btn-outline-secondary { color: #81a1c1; border-color: #81a1c1; }
-    [data-bs-theme='dark'] .modal .btn-outline-secondary:hover { background: #81a1c1; color: #2e3440; }
-    [data-bs-theme='dark'] .modal .btn-outline-danger { color: #bf616a; border-color: #bf616a; }
-    [data-bs-theme='dark'] .modal .btn-outline-danger:hover { background: #bf616a; color: #eceff4; }
+    [data-eui-theme='dark'] .shiny-input-radiogroup input[type='radio'] { border-color: #d8dee9; }
+    [data-eui-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked { border-color: #d8dee9; }
+    [data-eui-theme='dark'] .shiny-input-radiogroup input[type='radio']:checked::after { background: #d8dee9; }
+    [data-eui-theme='dark'] .modal .btn-outline-primary { color: #88c0d0; border-color: #88c0d0; }
+    [data-eui-theme='dark'] .modal .btn-outline-primary:hover { background: #88c0d0; color: #2e3440; }
+    [data-eui-theme='dark'] .modal .btn-outline-secondary { color: #81a1c1; border-color: #81a1c1; }
+    [data-eui-theme='dark'] .modal .btn-outline-secondary:hover { background: #81a1c1; color: #2e3440; }
+    [data-eui-theme='dark'] .modal .btn-outline-danger { color: #bf616a; border-color: #bf616a; }
+    [data-eui-theme='dark'] .modal .btn-outline-danger:hover { background: #bf616a; color: #eceff4; }
   "))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -126,6 +129,7 @@ fluidPage(
 
     function toggleTheme() {
       euiCurrentMode = (euiCurrentMode === 'dark') ? 'light' : 'dark';
+      document.body.setAttribute('data-eui-theme', euiCurrentMode);
       Shiny.setInputValue('dark_mode', euiCurrentMode, {priority: 'event'});
       var btn = document.getElementById('eui-theme-toggle');
       if (btn) btn.innerHTML = (euiCurrentMode === 'dark') ? '\\u2600' : '\\u263E';
@@ -137,10 +141,12 @@ fluidPage(
       try { saved = localStorage.getItem('earthUI_theme'); } catch(e) {}
       if (saved === 'dark') {
         euiCurrentMode = 'dark';
+        document.body.setAttribute('data-eui-theme', 'dark');
         var btn = document.getElementById('eui-theme-toggle');
         if (btn) btn.innerHTML = '\\u2600';
         Shiny.setInputValue('dark_mode', 'dark', {priority: 'event'});
       } else {
+        document.body.setAttribute('data-eui-theme', 'light');
         Shiny.setInputValue('dark_mode', 'light', {priority: 'event'});
       }
     });
@@ -644,7 +650,12 @@ fluidPage(
 
       # --- Data Import ---
       tags$details(class = "eui-section", open = NA,
-        tags$summary(h4("1. Import Data")),
+        tags$summary(h4("1. Import Data"),
+          tags$span(class = "eui-section-info",
+                    `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                    `data-bs-content` = "Upload a CSV or Excel file. Select the locale to match your file's decimal and field separators. For Excel files, choose the sheet to import.",
+                    `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                    "?")),
         tags$div(class = "eui-locale-row", style = "display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;",
           tags$label(class = "control-label", "Choose CSV or Excel file"),
           tags$div(style = "display:flex; align-items:center; gap:6px;",
@@ -667,7 +678,12 @@ fluidPage(
       conditionalPanel(
         condition = "output.data_loaded",
         tags$details(class = "eui-section",
-          tags$summary(h4("2. Project Output Folder")),
+          tags$summary(h4("2. Project Output Folder"),
+            tags$span(class = "eui-section-info",
+                      `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                      `data-bs-content` = "All output files (Excel, RDS, logs, reports) are saved to this folder. Change it to organize outputs per project.",
+                      `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                      "?")),
           textInput("output_folder", NULL,
                     value = path.expand("~/Downloads"))
         ),
@@ -678,7 +694,12 @@ fluidPage(
       conditionalPanel(
         condition = "output.data_loaded",
         tags$details(class = "eui-section",
-          tags$summary(h4("3. Variable Configuration")),
+          tags$summary(h4("3. Variable Configuration"),
+            tags$span(class = "eui-section-info",
+                      `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                      `data-bs-content` = "Select target variable(s), then configure predictors. Include = use as predictor, Factor = treat as categorical, Linear = linear only (no hinges). Special assigns column roles for appraisal workflows (e.g. contract_date, living_area).",
+                      `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                      "?")),
           uiOutput("target_selector"),
           conditionalPanel(
             condition = "input.purpose !== 'general'",
@@ -693,7 +714,12 @@ fluidPage(
 
         # --- Earth Call Parameters ---
         tags$details(class = "eui-section",
-          tags$summary(h4("4. Earth Call Parameters")),
+          tags$summary(h4("4. Earth Call Parameters"),
+            tags$span(class = "eui-section-info",
+                      `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                      `data-bs-content` = "Fine-tune earth() model parameters. Hover the blue ? icons for individual parameter details. Use 'Earth defaults' to reset all, or 'Saved defaults' to apply your saved configuration.",
+                      `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                      "?")),
         tags$div(
           style = "margin-bottom: 4px; font-size: 0.85em;",
           radioButtons("eui_defaults_action", NULL,
@@ -988,7 +1014,7 @@ fluidPage(
                       "?")
           ),
           actionButton("run_model", "Fit Earth Model",
-                       class = "btn-success btn-lg",
+                       class = "btn-primary btn-lg",
                        style = "width: 100%; margin-top: 10px;")
         ),
 
@@ -997,17 +1023,22 @@ fluidPage(
           condition = "output.data_loaded",
           hr(),
           tags$details(class = "eui-section",
-            tags$summary(uiOutput("download_heading", inline = TRUE)),
+            tags$summary(uiOutput("download_heading", inline = TRUE),
+              tags$span(class = "eui-section-info",
+                        `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                        `data-bs-content` = "Downloads an Excel file with model predictions, residuals, CQA scores, per-variable contributions, and basis values appended to your data.",
+                        `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                        "?")),
             conditionalPanel(
               condition = "input.purpose === 'appraisal'",
               actionButton("export_data", "Download Intermediate Output (Excel)",
-                           class = "btn-success",
+                           class = "btn-primary",
                            style = "width: 100%;")
             ),
             conditionalPanel(
               condition = "input.purpose !== 'appraisal'",
               actionButton("export_data_nonadj", "Download Output (Excel)",
-                           class = "btn-success",
+                           class = "btn-primary",
                            style = "width: 100%;")
             )
           )
@@ -1017,9 +1048,15 @@ fluidPage(
         conditionalPanel(
           condition = "output.model_fitted && input.purpose === 'appraisal'",
           hr(),
-          h4("7. Calculate RCA Adjustments & Download"),
+          div(class = "eui-section-hdr",
+            h4("7. Calculate RCA Adjustments & Download", style = "display:inline;"),
+            tags$span(class = "eui-section-info",
+                      `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                      `data-bs-content` = "Calculates Residential Cost Approach adjustments. Enter the subject's CQA score to interpolate its residual, then computes per-variable and net adjustments for each comparable sale.",
+                      `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                      "?")),
           actionButton("rca_output_btn", "Calculate RCA Adjustments & Download",
-                       class = "btn-success",
+                       class = "btn-primary",
                        style = "width: 100%;")
         ),
 
@@ -1028,14 +1065,15 @@ fluidPage(
           condition = "output.model_fitted && input.purpose === 'appraisal'",
           hr(),
           tags$details(class = "eui-section",
-            tags$summary(h4("8. Generate Sales Grid & Download",
-                            style = "display:inline;")),
-            tags$p("Recommends comps with gross adjustment < 25%, ",
-                   "sorted by sale age. You can add or remove comps.",
-                   style = "font-size: 0.85em; color: var(--bs-secondary-color);"),
+            tags$summary(h4("8. Generate Sales Grid & Download"),
+              tags$span(class = "eui-section-info",
+                        `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                        `data-bs-content` = "Generates a formatted Excel sales comparison grid. Recommends comps with gross adjustments under 25%, sorted by sale age. Each sheet shows the subject and up to 3 comps with factual values, contributions, and adjustments.",
+                        `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                        "?")),
             actionButton("sales_grid_btn",
                          "Generate Sales Grid & Download",
-                         class = "btn-success",
+                         class = "btn-primary",
                          style = "width: 100%;")
           )
         ),
@@ -1045,12 +1083,17 @@ fluidPage(
           condition = "output.model_fitted",
           hr(),
           tags$details(class = "eui-section",
-            tags$summary(uiOutput("report_heading", inline = TRUE)),
+            tags$summary(uiOutput("report_heading", inline = TRUE),
+              tags$span(class = "eui-section-info",
+                        `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                        `data-bs-content` = "Generates a Quarto report (HTML, Word, or PDF) with the model equation, summary statistics, variable importance, g-function plots, diagnostics, and correlation matrix.",
+                        `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                        "?")),
             selectInput("export_format", "Format",
                         choices = c("HTML" = "html", "Word" = "docx",
                                     "PDF" = "pdf")),
             actionButton("export_report_btn", "Download Report",
-                         class = "btn-success",
+                         class = "btn-primary",
                          style = "width: 100%;")
           )
         )
