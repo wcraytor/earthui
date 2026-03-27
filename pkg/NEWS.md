@@ -1,3 +1,52 @@
+# earthUI 0.6.0
+
+## Nord Theme Overhaul
+
+* Navbar, sidebar, and all UI elements now use Bootstrap CSS variables
+  (`var(--bs-body-bg)`, `var(--bs-body-color)`, `var(--bs-border-color)`)
+  instead of hardcoded colors, so light and dark modes adapt correctly.
+* Theme toggle button redesigned as a circular icon matching the glmnetUI
+  and mgcvUI style.
+* Custom `data-eui-theme` attribute replaces `data-bs-theme` to avoid
+  conflicts with Bootstrap 5's built-in color mode system.
+* Consistent Nord palette usage across earthUI, glmnetUI, and mgcvUI.
+
+## Predictor Settings Table
+
+* Column headers "Include", "Factor", and "Linear" now render vertically
+  (rotated text), saving horizontal space.
+* Checkbox columns grouped together (Include, Factor, Linear) with the
+  Special dropdown moved after them.
+* Header row uses `position: sticky` with a solid theme-aware background
+  so it stays fixed while scrolling the variable list.
+* Shows "Select a target variable above to configure predictors." when no
+  target is selected, instead of an empty bordered bar.
+
+## Data Tab Fix
+
+* Appraisal mode data preview now shows all columns on initial load when
+  no target or predictors are selected yet. Previously only the "row"
+  column was visible.
+
+## Section Info Icons
+
+* Blue "?" info icons added to section headers (Sections 1-4, 6-9)
+  with Bootstrap popovers describing each section's purpose.
+* Info icons are right-justified within the sidebar using absolute
+  positioning. Popovers open to the left to avoid overflow.
+
+## Purpose Mode Improvements
+
+* Switching purpose (General / Appraisal / Market) now clears all model
+  results, RCA state, and report assets to prevent stale data.
+* Purpose radio selection saved back to localStorage for persistence.
+
+## Button Styling
+
+* Buttons updated to use Frost-palette classes (`btn-primary`,
+  `btn-outline-secondary`) instead of Aurora classes (`btn-success`,
+  `btn-danger`) per the shared UI conventions.
+
 # earthUI 0.2.0
 
 ## 3D Interaction Plot Fix
