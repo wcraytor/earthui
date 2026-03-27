@@ -275,6 +275,7 @@ fluidPage(
       if (hasError) {
         clearInterval(window.euiTimerInterval);
         $('#eui-fitting-close').show();
+        $('#eui-fitting-backdrop').fadeOut(300, function(){ $(this).remove(); });
       } else {
         addCheck('run_model');
         $log.append($('<div style=\"color:#88c0d0;margin-top:2px;\">').text('Now completing the tabs.'));
@@ -294,7 +295,10 @@ fluidPage(
             var elapsed = $('#eui-timer').text();
             $log.append($('<div style=\"color:#a3be8c;font-weight:bold;margin-top:2px;\">').text('Tabs complete. (' + elapsed + ')'));
             $log.scrollTop($log[0].scrollHeight);
-            $('#eui-fitting-close').show();
+            // Auto-dismiss the modal + backdrop after a brief pause
+            setTimeout(function() {
+              $('#eui-fitting-modal, #eui-fitting-backdrop').fadeOut(300, function(){ $(this).remove(); });
+            }, 1500);
           }
         }, 300);
       }
