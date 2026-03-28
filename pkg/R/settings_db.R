@@ -7,7 +7,11 @@
 # --- Path to the settings database file ---
 settings_db_path_ <- function() {
   dir <- tools::R_user_dir("earthUI", "data")
-  if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
+  if (!dir.exists(dir)) {
+    tryCatch(dir.create(dir, recursive = TRUE), error = function(e) {
+      message("earthUI: cannot create settings directory: ", e$message)
+    })
+  }
   file.path(dir, "settings.sqlite")
 }
 
@@ -20,7 +24,15 @@ settings_db_connect_ <- function() {
   }
 
   db_path <- settings_db_path_()
-  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  con <- tryCatch(
+    DBI::dbConnect(RSQLite::SQLite(), db_path),
+    error = function(e) {
+      message("earthUI: settings database unavailable (", e$message,
+              "). Settings will not persist.")
+      NULL
+    }
+  )
+  if (is.null(con)) return(NULL)
 
   DBI::dbExecute(con, "
     CREATE TABLE IF NOT EXISTS file_settings (

@@ -1,13 +1,27 @@
 library(earthUI)
 
+# Allow uploads up to 3 GB
+options(shiny.maxRequestSize = 3 * 1024^3)
+
 # Load Roboto Condensed for R graphics (ggplot2 + base R)
-if (requireNamespace("sysfonts", quietly = TRUE) &&
-    requireNamespace("showtext", quietly = TRUE)) {
-  sysfonts::font_add_google("Roboto Condensed", "Roboto Condensed")
-  showtext::showtext_auto()
-  ggplot2::theme_set(
-    ggplot2::theme_minimal(base_family = "Roboto Condensed")
-  )
+# Wrapped in tryCatch: font_add_google needs network access and can fail
+# on offline machines, firewalled servers, or minimal Docker containers.
+font_loaded <- tryCatch({
+  if (requireNamespace("sysfonts", quietly = TRUE) &&
+      requireNamespace("showtext", quietly = TRUE)) {
+    sysfonts::font_add_google("Roboto Condensed", "Roboto Condensed")
+    showtext::showtext_auto()
+    TRUE
+  } else {
+    FALSE
+  }
+}, error = function(e) {
+  message("earthUI: could not load Roboto Condensed font: ", e$message,
+          ". Using system sans-serif.")
+  FALSE
+})
+if (font_loaded) {
+  ggplot2::theme_set(ggplot2::theme_minimal(base_family = "Roboto Condensed"))
 } else {
   ggplot2::theme_set(ggplot2::theme_minimal(base_family = "sans"))
 }

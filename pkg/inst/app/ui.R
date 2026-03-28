@@ -150,10 +150,66 @@ fluidPage(
         Shiny.setInputValue('dark_mode', 'light', {priority: 'event'});
       }
 
+      // --- Global purpose tracking ---
+      window.euiCurrentPurpose = 'general';
+      window.euiPurposeSwitching = false;
+
+      // Migrate old localStorage keys (without purpose suffix) to new format
+      (function() {
+        try {
+          var prefixes = ['earthUI_settings_', 'earthUI_vars_', 'earthUI_interactions_',
+                          'earthUI_wp_', 'earthUI_blk1_'];
+          var purposes = ['general', 'appraisal', 'market'];
+          var keys = [];
+          for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
+
+          // First pass: build a map of filename -> purpose from settings keys
+          var filePurpose = {};
+          keys.forEach(function(key) {
+            if (!key || key.indexOf('earthUI_settings_') !== 0) return;
+            var rest = key.substring('earthUI_settings_'.length);
+            var hasPurpose = false;
+            for (var q = 0; q < purposes.length; q++) {
+              if (rest.match(new RegExp('_' + purposes[q] + '$'))) { hasPurpose = true; break; }
+            }
+            if (hasPurpose) return;
+            // Old-format settings key: detect purpose from JSON
+            try {
+              var s = JSON.parse(localStorage.getItem(key));
+              if (s && s.purpose) filePurpose[rest] = s.purpose;
+            } catch(e2) {}
+          });
+
+          // Second pass: migrate all old keys using the detected purpose
+          keys.forEach(function(key) {
+            if (!key) return;
+            for (var p = 0; p < prefixes.length; p++) {
+              var prefix = prefixes[p];
+              if (key.indexOf(prefix) !== 0) continue;
+              var rest = key.substring(prefix.length);
+              // Skip if already has a purpose suffix
+              var hasPurpose = false;
+              for (var q = 0; q < purposes.length; q++) {
+                if (rest.match(new RegExp('_' + purposes[q] + '$'))) { hasPurpose = true; break; }
+              }
+              if (hasPurpose) break;
+              // Use purpose detected from companion settings key, or 'general'
+              var purpose = filePurpose[rest] || 'general';
+              var newKey = key + '_' + purpose;
+              if (!localStorage.getItem(newKey)) {
+                localStorage.setItem(newKey, localStorage.getItem(key));
+              }
+              break;
+            }
+          });
+        } catch(e) {}
+      })();
+
       // Restore last-used purpose
       var lastPurpose = null;
       try { lastPurpose = localStorage.getItem('earthUI_last_purpose'); } catch(e) {}
       if (lastPurpose) {
+        window.euiCurrentPurpose = lastPurpose;
         var radio = $(\"input[name='purpose'][value='\" + lastPurpose + \"']\");
         if (radio.length) {
           radio.prop('checked', true).trigger('change');
@@ -162,6 +218,13 @@ fluidPage(
     });
   ")),
   tags$script(HTML("
+    // --- Per-purpose localStorage key helper ---
+    // All file-specific keys use this to append _<purpose>
+    window.euiPurposeKey = function(prefix, filename) {
+      var p = window.euiCurrentPurpose || 'general';
+      return prefix + filename + '_' + p;
+    };
+
     // --- Checkmark helper ---
     function addCheck(btnId) {
       var $btn = $('#' + btnId);
@@ -182,10 +245,24 @@ fluidPage(
       $('.eui-check').remove();
     }
 
-    // Clear all checkmarks when purpose changes & persist selection
+    // Purpose switch orchestration
     $(document).on('change', 'input[name=purpose]', function() {
+      var newPurpose = $(this).val();
+      var oldPurpose = window.euiCurrentPurpose || 'general';
+      if (newPurpose === oldPurpose) {
+        // Still remove checks on same-purpose trigger (e.g. restore on connect)
+        removeAllChecks();
+        return;
+      }
+
+      window.euiPurposeSwitching = true;
       removeAllChecks();
-      try { localStorage.setItem('earthUI_last_purpose', $(this).val()); } catch(e) {}
+
+      // Update global purpose
+      window.euiCurrentPurpose = newPurpose;
+      try { localStorage.setItem('earthUI_last_purpose', newPurpose); } catch(e) {}
+
+      window.euiPurposeSwitching = false;
     });
 
     Shiny.addCustomMessageHandler('fitting_start', function(msg) {
@@ -420,7 +497,7 @@ fluidPage(
     });
     Shiny.addCustomMessageHandler('save_wp_weights', function(msg) {
       try {
-        localStorage.setItem('earthUI_wp_' + msg.filename, JSON.stringify(msg.weights));
+        localStorage.setItem(window.euiPurposeKey('earthUI_wp_', msg.filename), JSON.stringify(msg.weights));
       } catch(e) {}
     });
     // Restore wp weights when target selectize changes
@@ -428,7 +505,7 @@ fluidPage(
       setTimeout(function() {
         var fn = window.euiCurrentFilename || 'default';
         try {
-          var saved = JSON.parse(localStorage.getItem('earthUI_wp_' + fn));
+          var saved = JSON.parse(localStorage.getItem(window.euiPurposeKey('earthUI_wp_', fn)));
           if (saved && Object.keys(saved).length > 0) {
             Shiny.setInputValue('wp_weights_restored', saved, {priority: 'event'});
           }
@@ -442,14 +519,15 @@ fluidPage(
     Shiny.addCustomMessageHandler('restore_all_settings', function(msg) {
       var fn = msg.filename;
       window.euiCurrentFilename = fn;
+      var purpose = msg.purpose || window.euiCurrentPurpose || 'general';
       if (msg.settings && Object.keys(msg.settings).length > 0) {
-        try { localStorage.setItem('earthUI_settings_' + fn, JSON.stringify(msg.settings)); } catch(e) {}
+        try { localStorage.setItem('earthUI_settings_' + fn + '_' + purpose, JSON.stringify(msg.settings)); } catch(e) {}
       }
       if (msg.variables && Object.keys(msg.variables).length > 0) {
-        try { localStorage.setItem('earthUI_vars_' + fn, JSON.stringify(msg.variables)); } catch(e) {}
+        try { localStorage.setItem('earthUI_vars_' + fn + '_' + purpose, JSON.stringify(msg.variables)); } catch(e) {}
       }
       if (msg.interactions && Object.keys(msg.interactions).length > 0) {
-        try { localStorage.setItem('earthUI_interactions_' + fn, JSON.stringify(msg.interactions)); } catch(e) {}
+        try { localStorage.setItem('earthUI_interactions_' + fn + '_' + purpose, JSON.stringify(msg.interactions)); } catch(e) {}
       }
 
       // If apply flag set, push settings directly into Shiny inputs
@@ -480,10 +558,6 @@ fluidPage(
              'output_folder','random_seed'].forEach(function(id) {
               if (s[id] !== undefined) $('#' + id).val(s[id]).trigger('change');
             });
-            // Radio button inputs
-            if (s['purpose'] !== undefined) {
-              $('input[name=purpose][value=' + s['purpose'] + ']').prop('checked', true).trigger('change');
-            }
             // Checkbox inputs
             ['stratify','keepxy','scale_y','auto_linpreds','use_beta_cache',
              'force_xtx_prune','get_leverages','force_weights',
@@ -507,9 +581,9 @@ fluidPage(
             // Get column names from the table
             var $rows = $('#variable_table .eui-var-cb');
             // Simpler: trigger restore by re-reading localStorage
-            var storageKey = 'earthUI_vars_' + fn;
+            var varsKey = window.euiPurposeKey('earthUI_vars_', fn);
             var saved = null;
-            try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
+            try { saved = JSON.parse(localStorage.getItem(varsKey)); } catch(e) {}
             if (saved) {
               var n = $('[id^=eui_inc_]').length;
               for (var i = 1; i <= n; i++) {
@@ -534,9 +608,9 @@ fluidPage(
           }
           // Apply interaction matrix
           if (msg.interactions) {
-            var storageKey2 = 'earthUI_interactions_' + fn;
+            var interKey = window.euiPurposeKey('earthUI_interactions_', fn);
             var saved2 = null;
-            try { saved2 = JSON.parse(localStorage.getItem(storageKey2)); } catch(e) {}
+            try { saved2 = JSON.parse(localStorage.getItem(interKey)); } catch(e) {}
             if (saved2) {
               for (var key in saved2) {
                 var $cb = $('#allowed_' + key);
@@ -552,12 +626,14 @@ fluidPage(
     // Debounced save-to-server: collect localStorage and send to R/SQLite
     window.euiSaveTimer = null;
     window.euiSaveToServer = function(fn) {
+      if (window.euiPurposeSwitching) return;
       clearTimeout(window.euiSaveTimer);
       window.euiSaveTimer = setTimeout(function() {
-        var payload = { filename: fn, settings: null, variables: null, interactions: null };
-        try { payload.settings     = localStorage.getItem('earthUI_settings_' + fn); } catch(e) {}
-        try { payload.variables    = localStorage.getItem('earthUI_vars_' + fn); } catch(e) {}
-        try { payload.interactions = localStorage.getItem('earthUI_interactions_' + fn); } catch(e) {}
+        var purpose = window.euiCurrentPurpose || 'general';
+        var payload = { filename: fn, purpose: purpose, settings: null, variables: null, interactions: null };
+        try { payload.settings     = localStorage.getItem(window.euiPurposeKey('earthUI_settings_', fn)); } catch(e) {}
+        try { payload.variables    = localStorage.getItem(window.euiPurposeKey('earthUI_vars_', fn)); } catch(e) {}
+        try { payload.interactions = localStorage.getItem(window.euiPurposeKey('earthUI_interactions_', fn)); } catch(e) {}
         Shiny.setInputValue('eui_save_trigger', payload, {priority: 'deferred'});
       }, 2000);
     };
@@ -590,8 +666,6 @@ fluidPage(
       for (var id in numerics) {
         $('#' + id).val(numerics[id]).trigger('change');
       }
-      // Reset purpose radio to General
-      $('input[name=purpose][value=general]').prop('checked', true).trigger('change');
       // Checkbox inputs
       var checks = {
         keepxy: false, stratify: true, scale_y: true, auto_linpreds: true,
@@ -625,20 +699,20 @@ fluidPage(
     // Pre-seed sale_age as included in localStorage when computed
     Shiny.addCustomMessageHandler('sale_age_added', function(msg) {
       var fn = msg.filename || 'default';
-      var storageKey = 'earthUI_vars_' + fn;
+      var varsKey = window.euiPurposeKey('earthUI_vars_', fn);
       var saved = {};
-      try { saved = JSON.parse(localStorage.getItem(storageKey)) || {}; } catch(e) {}
+      try { saved = JSON.parse(localStorage.getItem(varsKey)) || {}; } catch(e) {}
       saved['sale_age'] = { inc: true, fac: false, lin: false, type: 'integer', special: 'no' };
-      try { localStorage.setItem(storageKey, JSON.stringify(saved)); } catch(e) {}
+      try { localStorage.setItem(varsKey, JSON.stringify(saved)); } catch(e) {}
     });
 
     // Collect current settings from localStorage and save as defaults
     Shiny.addCustomMessageHandler('collect_and_save_defaults', function(msg) {
       var fn = msg.filename;
       var payload = { filename: '__defaults__', settings: null, variables: null, interactions: null };
-      try { payload.settings     = localStorage.getItem('earthUI_settings_' + fn); } catch(e) {}
-      try { payload.variables    = localStorage.getItem('earthUI_vars_' + fn); } catch(e) {}
-      try { payload.interactions = localStorage.getItem('earthUI_interactions_' + fn); } catch(e) {}
+      try { payload.settings     = localStorage.getItem(window.euiPurposeKey('earthUI_settings_', fn)); } catch(e) {}
+      try { payload.variables    = localStorage.getItem(window.euiPurposeKey('earthUI_vars_', fn)); } catch(e) {}
+      try { payload.interactions = localStorage.getItem(window.euiPurposeKey('earthUI_interactions_', fn)); } catch(e) {}
       Shiny.setInputValue('eui_save_trigger', payload, {priority: 'deferred'});
     });
 
@@ -1105,8 +1179,16 @@ fluidPage(
                         `data-bs-placement` = "left", onclick = "event.stopPropagation();",
                         "?")),
             selectInput("export_format", "Format",
-                        choices = c("HTML" = "html", "Word" = "docx",
-                                    "PDF" = "pdf")),
+                        choices = {
+                          has_pandoc <- tryCatch(rmarkdown::pandoc_available(),
+                                                error = function(e) FALSE)
+                          fmts <- c("Word" = "docx")
+                          if (has_pandoc) fmts <- c("HTML" = "html", fmts)
+                          if (has_pandoc && earthUI:::has_latex_()) {
+                            fmts <- c(fmts, "PDF" = "pdf")
+                          }
+                          fmts
+                        }),
             actionButton("export_report_btn", "Download Report",
                          class = "btn-primary",
                          style = "width: 100%;")

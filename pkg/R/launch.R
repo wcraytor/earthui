@@ -17,6 +17,10 @@
 #'   launch()
 #' }
 launch <- function(port = 7878L, ...) {
+  if (getRversion() < "4.1.0") {
+    stop("earthUI requires R >= 4.1.0 (you have ", getRversion(), "). ",
+         "Please update R from https://cran.r-project.org/", call. = FALSE)
+  }
   for (pkg in c("bslib", "DT", "jsonlite")) {
     if (!requireNamespace(pkg, quietly = TRUE)) {
       stop("Package '", pkg, "' is required for the Shiny app. ",

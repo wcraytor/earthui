@@ -1,3 +1,15 @@
+#' Check if a LaTeX installation is available
+#' @return Logical TRUE if pdflatex, xelatex, lualatex, or TinyTeX is found.
+#' @noRd
+has_latex_ <- function() {
+  nzchar(Sys.which("pdflatex")) ||
+    nzchar(Sys.which("xelatex")) ||
+    nzchar(Sys.which("lualatex")) ||
+    (requireNamespace("tinytex", quietly = TRUE) &&
+       tryCatch(tinytex::is_tinytex(), error = function(e) FALSE))
+}
+
+
 #' Prepare report assets
 #'
 #' Pre-generates all plots and data for the earth model report. Returns the

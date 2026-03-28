@@ -1,3 +1,29 @@
+# earthUI 0.7.0
+
+## Per-Purpose Settings
+
+* Switching purpose (General / Appraisal / Market) now fully clears all
+  state: imported data, model results, tabs, variable configuration, and
+  earth parameters. The app resets to a clean default state.
+* Settings are now stored per purpose. localStorage keys include a purpose
+  suffix (`_general`, `_appraisal`, `_market`), so each purpose maintains
+  independent variable configuration, earth parameters, and interaction
+  matrices for each imported file.
+* SQLite backup keys encode purpose (`filename||purpose`), so settings
+  persist across browser sessions per purpose+file combination.
+* When a file is imported after a purpose switch, previously saved settings
+  for that file+purpose combination are automatically restored.
+* Backward-compatible migration detects old-format localStorage keys
+  (without purpose suffix) and copies them to the correct purpose-suffixed
+  key on first load.
+
+## Fitting Modal Auto-Dismiss
+
+* The fitting modal and backdrop now auto-dismiss 1.5 seconds after tabs
+  finish rendering, preventing the overlay from blocking sidebar sections.
+* On error, the backdrop is removed immediately while the modal stays
+  visible with the close button so the user can read the error.
+
 # earthUI 0.6.0
 
 ## Nord Theme Overhaul

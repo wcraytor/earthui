@@ -150,7 +150,8 @@ function(input, output, session) {
     rca_df = NULL,             # RCA export data for histogram plots
     rca_targets = NULL,        # target variable names for RCA plots
     sg_recommended = NULL,     # recommended comps for sales grid
-    sg_others = NULL           # other comps for sales grid
+    sg_others = NULL,          # other comps for sales grid
+    current_purpose = "general"   # track current purpose for settings keying
   )
 
   # Track user's explicit varmod.method changes
@@ -236,16 +237,20 @@ function(input, output, session) {
     rv$file_path <- input$file_input$datapath
     rv$file_name <- input$file_input$name
 
-    # Restore saved settings from SQLite into localStorage
-    saved <- earthUI:::settings_db_read_(settings_con, rv$file_name)
+    # Restore saved settings from SQLite into localStorage (purpose-aware)
+    purpose <- input$purpose %||% "general"
+    db_key <- paste0(rv$file_name, "||", purpose)
+    saved <- earthUI:::settings_db_read_(settings_con, db_key)
     if (!is.null(saved)) {
       session$sendCustomMessage("restore_all_settings", list(
         filename     = rv$file_name,
+        purpose      = purpose,
         settings     = saved$settings,
         variables    = saved$variables,
         interactions = saved$interactions
       ))
-      message("earthUI: restored settings from SQLite for: ", rv$file_name)
+      message("earthUI: restored settings from SQLite for: ", rv$file_name,
+              " (", purpose, ")")
     }
 
     if (ext %in% c("xlsx", "xls")) {
@@ -336,15 +341,32 @@ function(input, output, session) {
     session$sendCustomMessage("eui_rca_ready", list(ready = ready))
   })
 
-  # When the purpose radio changes, clear all result / RCA / sales-grid state
+  # When the purpose radio changes: clear ALL state (data, results, tabs).
+  # User re-imports a file; file+purpose settings restore from localStorage.
 
   observeEvent(input$purpose, {
+    rv$current_purpose <- input$purpose
+
+    # Clear imported data
+    rv$data      <- NULL
+    rv$file_name <- NULL
+    rv$file_ext  <- NULL
+    rv$file_path <- NULL
+    rv$sheets    <- NULL
+
+    # Clear all result / RCA / sales-grid state
     rv$result       <- NULL
     rv$rca_df       <- NULL
     rv$rca_targets  <- NULL
     rv$sg_recommended <- NULL
     rv$sg_others    <- NULL
     rv$trace_lines  <- character(0)
+    rv$wp_weights   <- NULL
+    rv$subset_conditions <- list()
+
+    # Clear tabs
+    session$sendCustomMessage("eui_tabs_ready", list(ready = FALSE))
+
     # Kill any in-flight report asset process and clean up its temp dir
     if (!is.null(rv_report$assets_proc) &&
         inherits(rv_report$assets_proc, "r_process") &&
@@ -356,6 +378,8 @@ function(input, output, session) {
       unlink(rv_report$assets_dir, recursive = TRUE)
       rv_report$assets_dir <- NULL
     }
+
+    message("earthUI: purpose switched to '", input$purpose, "' — all data cleared")
   }, ignoreInit = TRUE)
 
   # Update weights dropdown with numeric column names when data loads
@@ -687,10 +711,13 @@ function(input, output, session) {
   observeEvent(input$eui_save_trigger, {
     payload <- input$eui_save_trigger
     req(payload$filename)
+    # Encode purpose in the SQLite key: "filename||purpose"
+    purpose <- if (!is.null(payload$purpose)) payload$purpose else "general"
+    db_key <- paste0(payload$filename, "||", purpose)
     tryCatch({
       earthUI:::settings_db_write_(
         settings_con,
-        filename     = payload$filename,
+        filename     = db_key,
         settings     = if (!is.null(payload$settings))     payload$settings     else "{}",
         variables    = if (!is.null(payload$variables))    payload$variables    else "{}",
         interactions = if (!is.null(payload$interactions)) payload$interactions else "{}"
@@ -877,13 +904,17 @@ function(input, output, session) {
   # --- Variable Configuration ---
   output$target_selector <- renderUI({
     req(rv$data)
+    # Depend on purpose so this re-renders and restores per-purpose settings
+    purpose <- input$purpose
     storage_key <- if (is.null(rv$file_name)) "default" else rv$file_name
 
     # JavaScript: persist target variable + advanced parameters in localStorage
     js <- tags$script(HTML(sprintf("
       (function() {
         var storageKeyRaw = %s;
-        var storageKey = 'earthUI_settings_' + storageKeyRaw;
+        function getSettingsKey() {
+          return window.euiPurposeKey('earthUI_settings_', storageKeyRaw);
+        }
         var selectIds = ['target', 'weights_col',
                          'degree', 'pmethod', 'glm_family', 'trace',
                          'varmod_method'];
@@ -895,12 +926,12 @@ function(input, output, session) {
         var checkboxIds = ['stratify', 'keepxy', 'scale_y', 'auto_linpreds',
                            'use_beta_cache', 'force_xtx_prune', 'get_leverages',
                            'force_weights', 'skip_subject_row'];
-        var radioIds = ['purpose'];
+        var radioIds = [];
         var dateIds = ['effective_date'];
         var allIds = selectIds.concat(numericIds).concat(checkboxIds).concat(radioIds).concat(dateIds);
 
         var saved = null;
-        try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
+        try { saved = JSON.parse(localStorage.getItem(getSettingsKey())); } catch(e) {}
 
         function restoreSettings() {
           if (!saved) return;
@@ -952,6 +983,7 @@ function(input, output, session) {
         }
 
         function saveSettings() {
+          if (window.euiPurposeSwitching) return;
           var state = {};
           selectIds.forEach(function(id) {
             var el = document.getElementById(id);
@@ -970,7 +1002,7 @@ function(input, output, session) {
             var $inp = $('#' + id + ' input');
             state[id] = $inp.length ? $inp.val() : $('#' + id).val();
           });
-          try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
+          try { localStorage.setItem(getSettingsKey(), JSON.stringify(state)); } catch(e) {}
         }
 
         // Restore after selectize initializes (retry until target AND degree are ready)
@@ -988,7 +1020,7 @@ function(input, output, session) {
             window.euiCurrentFilename = storageKeyRaw;
             setTimeout(function() {
               try {
-                var wpSaved = JSON.parse(localStorage.getItem('earthUI_wp_' + storageKeyRaw));
+                var wpSaved = JSON.parse(localStorage.getItem(window.euiPurposeKey('earthUI_wp_', storageKeyRaw)));
                 if (wpSaved && Object.keys(wpSaved).length > 0) {
                   Shiny.setInputValue('wp_weights_restored', wpSaved, {priority: 'event'});
                 }
@@ -1168,7 +1200,9 @@ function(input, output, session) {
         var cols = %s;
         var n = %d;
         var storageKeyRaw = %s;
-        var storageKey = 'earthUI_vars_' + storageKeyRaw;
+        function getVarsKey() {
+          return window.euiPurposeKey('earthUI_vars_', storageKeyRaw);
+        }
         var detectedTypes = %s;
         var appraiser = %s;
 
@@ -1208,12 +1242,13 @@ function(input, output, session) {
             }
             state[cols[i-1]] = entry;
           }
-          try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
+          if (window.euiPurposeSwitching) return;
+          try { localStorage.setItem(getVarsKey(), JSON.stringify(state)); } catch(e) {}
         }
 
         function restoreState() {
           var saved = null;
-          try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
+          try { saved = JSON.parse(localStorage.getItem(getVarsKey())); } catch(e) {}
           if (saved) {
             for (var i = 1; i <= n; i++) {
               var s = saved[cols[i-1]];
@@ -1353,21 +1388,25 @@ function(input, output, session) {
     js <- tags$script(HTML(sprintf("
       (function() {
         var n = %d;
-        var storageKey = 'earthUI_interactions_' + %s;
+        var interStorageKeyRaw = %s;
+        function getInterKey() {
+          return window.euiPurposeKey('earthUI_interactions_', interStorageKeyRaw);
+        }
 
         function saveState() {
+          if (window.euiPurposeSwitching) return;
           var state = {};
           for (var i = 1; i < n; i++) {
             for (var j = i + 1; j <= n; j++) {
               state[i + '_' + j] = $('#allowed_' + i + '_' + j).is(':checked');
             }
           }
-          try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch(e) {}
+          try { localStorage.setItem(getInterKey(), JSON.stringify(state)); } catch(e) {}
         }
 
         function restoreState() {
           var saved = null;
-          try { saved = JSON.parse(localStorage.getItem(storageKey)); } catch(e) {}
+          try { saved = JSON.parse(localStorage.getItem(getInterKey())); } catch(e) {}
           if (!saved) return;
           for (var i = 1; i < n; i++) {
             for (var j = i + 1; j <= n; j++) {
@@ -1427,10 +1466,13 @@ function(input, output, session) {
 
         // --- Block Degree 1: right-click variable name to toggle ---
         var preds = %s;
-        var blk1Key = 'earthUI_blk1_' + %s;
+        var blk1KeyRaw = %s;
+        function getBlk1Key() {
+          return window.euiPurposeKey('earthUI_blk1_', blk1KeyRaw);
+        }
         var blk1 = {};
         // Restore saved block-degree-1 state
-        try { var saved = JSON.parse(localStorage.getItem(blk1Key)); if (saved) blk1 = saved; } catch(e) {}
+        try { var saved = JSON.parse(localStorage.getItem(getBlk1Key())); if (saved) blk1 = saved; } catch(e) {}
 
         function updateBlk1Labels() {
           $('.eui-matrix-varlabel').each(function() {
@@ -1452,7 +1494,7 @@ function(input, output, session) {
           var blocked = [];
           for (var v in blk1) { if (blk1[v]) blocked.push(v); }
           Shiny.setInputValue('block_degree1', blocked.length > 0 ? blocked : null);
-          try { localStorage.setItem(blk1Key, JSON.stringify(blk1)); } catch(e) {}
+          try { localStorage.setItem(getBlk1Key(), JSON.stringify(blk1)); } catch(e) {}
         }
 
         updateBlk1Labels();

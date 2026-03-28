@@ -505,3 +505,52 @@ California.  All identification information has been altered or removed.
 8. Download intermediate output (Step 6), review the CQA ranking
 9. Compute RCA adjustments (Step 7) with a CQA score of ~5.00
 10. Generate the Sales Comparison Grid (Step 8)
+
+## System Requirements & Troubleshooting
+
+### Supported Platforms
+
+earthUI runs on **macOS**, **Windows**, and **Linux**. RStudio Desktop
+(2023.06+) is strongly recommended — it bundles **pandoc** needed for
+reports.
+
+### Optional Dependencies
+
+- **LaTeX** (TinyTeX, MiKTeX, or MacTeX): PDF report generation only. If
+  not detected, the PDF option is automatically hidden. Install with:
+  `tinytex::install_tinytex()`
+- **sysfonts + showtext**: Roboto Condensed font for plots. Falls back to
+  system sans-serif automatically if unavailable or offline.
+
+### Platform Notes
+
+**macOS**: Fewest issues. Install TinyTeX for PDF:
+`tinytex::install_tinytex()`
+
+**Windows**: Works well with RStudio. Corporate/locked-down machines may
+have temp directory restrictions — the app will warn in the console but
+continue without settings persistence.
+
+**Linux**: May need system libraries:
+`sudo apt install libcurl4-openssl-dev libssl-dev libxml2-dev
+libsqlite3-dev libfontconfig1-dev`
+
+### Graceful Degradation
+
+| Missing Component | Behavior |
+|---|---|
+| No LaTeX | PDF option hidden. HTML and Word still available. |
+| No internet / fonts fail | System sans-serif used. Console message logged. |
+| No RSQLite / read-only filesystem | Settings don't persist. App runs normally. |
+| Temp directory not writable | Report generation fails with clear error. |
+
+### Troubleshooting
+
+**"PDF option not available"**: Run `tinytex::install_tinytex()` in R,
+restart app.
+
+**"Settings will not persist"**: Check permissions on the user data
+directory.
+
+**Port 7878 already in use**: Run `lsof -ti:7878 | xargs kill`
+(macOS/Linux).
