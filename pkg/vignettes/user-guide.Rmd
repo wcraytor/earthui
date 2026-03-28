@@ -34,6 +34,10 @@ lets you choose one of three modes:
 - **Market Area Analysis** --- For analyzing groups of properties with optional
   subject row exclusion.
 
+Switching purpose clears all state (imported data, results, settings). When
+you re-import a file, previously saved settings for that file and purpose
+combination are automatically restored.
+
 ### Getting Started
 
 ```{r eval=FALSE}
@@ -79,8 +83,8 @@ Changing an override only affects that one setting.
 Click **Save as my default** to store your locale preferences globally. These
 defaults apply to all future sessions regardless of which data file you load.
 Per-file settings (target, predictors, parameters) are saved separately in
-the browser's local storage, but locale defaults persist across all files via
-an SQLite database.
+the browser's local storage, keyed by both filename and purpose mode. Locale
+defaults persist across all files via an SQLite database.
 
 ## MLS Input Data Requirements
 

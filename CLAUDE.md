@@ -322,5 +322,13 @@ These conventions apply consistently across all three sibling apps:
 - **Purpose persistence**: Last-used purpose is saved to localStorage
   (`earthUI_last_purpose`) on change and restored on `shiny:connected`.
   Each app uses its own key so they persist independently.
+- **Per-purpose settings**: Switching purpose clears ALL state (data,
+  results, tabs, variable configuration, earth parameters). Settings are
+  stored per purpose+file: localStorage keys use `_<purpose>` suffix
+  (e.g., `earthUI_settings_file.csv_appraisal`), SQLite keys use
+  `filename||purpose`. When a file is re-imported after a purpose switch,
+  saved settings for that file+purpose combination are automatically
+  restored. `purpose` is NOT saved inside settings — it is the key
+  dimension (`radioIds` is empty in the settings JS).
 - **sales_grid.R exception**: Excel export colors follow third-party
   conventions, not the Nord palette.

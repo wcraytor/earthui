@@ -238,6 +238,8 @@ When you launch earthUI, a **Purpose** radio button at the top of the sidebar le
 
 In all three modes, the core modeling engine is identical --- you are always fitting an Earth (MARS) model. The purpose setting controls which additional tools and interface elements are available.
 
+**Switching purposes clears all state.** When you change the purpose radio, earthUI resets to a clean default state: imported data, model results, tabs, variable configuration, and earth parameters are all cleared. You must re-import your file after switching. Previously saved settings for that file and purpose combination will then be automatically restored from your last session.
+
 ## Real Estate--Specific Features
 
 When either **For Appraisal** or **Market Area Analysis** is selected, earthUI activates several features designed for real estate analysis:
@@ -442,7 +444,7 @@ Earth Output & Raw text output from `earth::summary()`, including the pruning pa
 
 ## Settings Persistence
 
-earthUI automatically saves your configuration to the browser's local storage, keyed by the input filename. When you reload the same file, all settings are restored: target selection, predictor checkboxes, data types, earth parameters, and response weights. A **Reset to Defaults** button clears all saved settings.
+earthUI automatically saves your configuration to the browser's local storage, keyed by both the input filename and the current purpose mode. When you reload the same file under the same purpose, all settings are restored: target selection, predictor checkboxes, data types, earth parameters, and response weights. This means the same file can have different configurations for General, Appraisal, and Market modes. Settings are also backed up to an SQLite database so they persist across browser sessions. A **Reset to Defaults** button clears all saved settings for the current purpose.
 
 ## Dark Mode
 
