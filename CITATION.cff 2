@@ -1,0 +1,55 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "earthUI: Interactive Shiny GUI for the earth Package"
+version: 0.5.0
+license: AGPL-3.0-or-later
+url: "https://github.com/wcraytor/earthUI"
+repository-code: "https://github.com/wcraytor/earthUI"
+authors:
+  - family-names: Craytor
+    given-names: William
+    email: bcraytor@proton.me
+    orcid: "https://orcid.org/0000-0003-2219-9156"
+date-released: "2026-03-22"
+abstract: >-
+  Provides a Shiny-based graphical user interface for the earth package,
+  enabling interactive building and exploration of Multivariate Adaptive
+  Regression Splines (MARS) models. Features include data import from CSV
+  and Excel files, automatic detection of categorical variables, interactive
+  control of interaction terms via an allowed matrix, comprehensive model
+  diagnostics with variable importance and partial dependence plots, and
+  publication-quality report generation via Quarto.
+keywords:
+  - mars
+  - earth
+  - regression-splines
+  - shiny
+  - r
+  - multivariate-adaptive-regression-splines
+references:
+  - type: software
+    title: "earth: Multivariate Adaptive Regression Splines"
+    authors:
+      - family-names: Milborrow
+        given-names: Stephen
+    url: "https://CRAN.R-project.org/package=earth"
+  - type: article
+    title: "Multivariate Adaptive Regression Splines"
+    authors:
+      - family-names: Friedman
+        given-names: Jerome H.
+    journal: "The Annals of Statistics"
+    year: 1991
+    volume: 19
+    issue: 1
+    start: 1
+    end: 67
+  - type: article
+    title: "Residual Constraint Approach (RCA)"
+    authors:
+      - family-names: Craytor
+        given-names: William
+    year: 2025
+    doi: "10.5281/zenodo.14787917"
+    url: "https://doi.org/10.5281/zenodo.14787917"
