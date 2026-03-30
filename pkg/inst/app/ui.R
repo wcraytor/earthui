@@ -355,29 +355,23 @@ fluidPage(
         $('#eui-fitting-backdrop').fadeOut(300, function(){ $(this).remove(); });
       } else {
         addCheck('run_model');
-        $log.append($('<div style=\"color:#88c0d0;margin-top:2px;\">').text('Now completing the tabs.'));
+        clearInterval(window.euiTimerInterval);
+        window.euiTimerInterval = null;
+        var $log = $('#eui-trace-log');
+        $log.append($('<div style=\"color:#88c0d0;margin-top:4px;\">').text('You may close this dialog. Tabs will render as you click them.'));
         $log.scrollTop($log[0].scrollHeight);
-        var tabPollCount = 0;
-        window.euiFittingTabsPoll = setInterval(function() {
-          tabPollCount++;
-          var $active = $('.tab-pane.active');
-          var still = $active.find('.eui-tab-content .recalculating').length;
-          var contentVisible = $active.find('.eui-tab-content:visible').length > 0;
-          // Complete when tabs are done, or after 30s safety timeout
-          if ((contentVisible && still === 0) || tabPollCount > 100) {
-            clearInterval(window.euiFittingTabsPoll);
-            window.euiFittingTabsPoll = null;
-            clearInterval(window.euiTimerInterval);
-            window.euiTimerInterval = null;
-            var elapsed = $('#eui-timer').text();
-            $log.append($('<div style=\"color:#a3be8c;font-weight:bold;margin-top:2px;\">').text('Tabs complete. (' + elapsed + ')'));
-            $log.scrollTop($log[0].scrollHeight);
-            // Auto-dismiss the modal + backdrop after a brief pause
+        // Show close button and remove backdrop immediately — tabs render on demand
+        $('#eui-fitting-close').show();
+        $('#eui-fitting-backdrop').fadeOut(300, function(){ $(this).remove(); });
+        // Auto-dismiss modal once all outputs finish rendering
+        var dismissPoll = setInterval(function() {
+          if ($('.recalculating').length === 0) {
+            clearInterval(dismissPoll);
             setTimeout(function() {
               $('#eui-fitting-modal, #eui-fitting-backdrop').fadeOut(300, function(){ $(this).remove(); });
-            }, 1500);
+            }, 500);
           }
-        }, 300);
+        }, 500);
       }
     });
 
@@ -397,8 +391,7 @@ fluidPage(
     Shiny.addCustomMessageHandler('eui_tabs_ready', function(msg) {
       clearInterval(window.euiTabsReadyPoll);
       if (msg.ready) {
-        // Show content ONLY in the active tab so Shiny renders just that one.
-        // Inactive tabs stay hidden (suspended) until clicked.
+        // Show content in active tab so Shiny renders it on demand.
         var $active = $('.tab-pane.active');
         $active.find('.eui-tab-content').show();
         // Poll until active tab finishes, then hide its waiting message
@@ -411,9 +404,11 @@ fluidPage(
         }, 300);
         // When user clicks a different tab, show its content and hide waiting
         $(document).off('shown.bs.tab.eui').on('shown.bs.tab.eui', function(e) {
-          var $pane = $($(e.target).attr('href'));
-          $pane.find('.eui-tab-content').show();
-          $pane.find('.eui-tab-waiting').hide();
+          var $pane = $($(e.target).attr('href') || $(e.target).data('bs-target'));
+          if ($pane.length) {
+            $pane.find('.eui-tab-content').show();
+            $pane.find('.eui-tab-waiting').hide();
+          }
         });
       } else {
         $(document).off('shown.bs.tab.eui');

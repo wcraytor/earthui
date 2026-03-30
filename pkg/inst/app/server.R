@@ -2208,10 +2208,36 @@ function(input, output, session) {
   # Do NOT use uiOutput wrappers (suspended in inactive tabs, never update).
   # Do NOT use conditionalPanel (causes all tabs to render simultaneously).
 
+  # --- Cached computations (avoid duplicate work across tab outputs) ---
+  cached_summary_ <- reactive({
+    req(rv$result)
+    format_summary(rv$result)
+  })
+  cached_equation_ <- reactive({
+    req(rv$result)
+    format_model_equation(rv$result)
+  })
+  cached_g_functions_ <- reactive({
+    req(rv$result)
+    list_g_functions(rv$result)
+  })
+  cached_importance_ <- reactive({
+    req(rv$result)
+    format_variable_importance(rv$result)
+  })
+  cached_fitted_ <- reactive({
+    req(rv$result)
+    stats::fitted(rv$result$model)
+  })
+  cached_residuals_ <- reactive({
+    req(rv$result)
+    stats::residuals(rv$result$model)
+  })
+
   # --- Results: Summary ---
   output$summary_metrics <- renderUI({
     req(rv$result)
-    s <- format_summary(rv$result)
+    s <- cached_summary_()
 
     if (isTRUE(s$multi)) {
       # Per-response metrics cards
@@ -2318,7 +2344,7 @@ function(input, output, session) {
   # --- Results: Model Equation ---
   output$model_equation <- renderUI({
     req(rv$result)
-    eq <- format_model_equation(rv$result)
+    eq <- cached_equation_()
     if (inherits(eq, "earthUI_equation_multi")) {
       # Show one equation per response with a heading
       eq_blocks <- lapply(seq_along(eq$targets), function(i) {
@@ -2336,7 +2362,7 @@ function(input, output, session) {
 
   output$summary_table <- DT::renderDataTable({
     req(rv$result)
-    s <- format_summary(rv$result)
+    s <- cached_summary_()
     dt <- DT::datatable(s$coefficients, options = list(pageLength = 20),
                         rownames = FALSE, class = "compact stripe")
     numeric_cols <- names(s$coefficients)[vapply(s$coefficients, is.numeric, logical(1))]
@@ -2371,7 +2397,7 @@ function(input, output, session) {
 
   output$importance_table <- DT::renderDataTable({
     req(rv$result)
-    imp_df <- format_variable_importance(rv$result)
+    imp_df <- cached_importance_()
     dt <- DT::datatable(imp_df, options = list(pageLength = 20),
                         rownames = FALSE, class = "compact stripe")
     numeric_cols <- names(imp_df)[vapply(imp_df, is.numeric, logical(1))]
@@ -2382,7 +2408,7 @@ function(input, output, session) {
   # --- Results: Contribution (g-function plots) ---
   output$contrib_g_selector <- renderUI({
     req(rv$result)
-    gf <- list_g_functions(rv$result)
+    gf <- cached_g_functions_()
     if (nrow(gf) == 0L) return(p("No g-functions in model."))
 
     # Build display labels: "1: sq_ft_total" or "6: sq_ft_total x beds [3D]"
@@ -2399,7 +2425,7 @@ function(input, output, session) {
 
   output$contrib_plot_container <- renderUI({
     req(rv$result, input$contrib_g_index)
-    gf <- list_g_functions(rv$result)
+    gf <- cached_g_functions_()
     idx <- as.integer(input$contrib_g_index)
     if (idx < 1L || idx > nrow(gf)) return(NULL)
 
@@ -3638,4 +3664,5 @@ function(input, output, session) {
       showNotification(msg, type = "error", duration = 15)
     })
   })
+
 }
