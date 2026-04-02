@@ -1186,12 +1186,15 @@ fluidPage(
                         choices = {
                           has_quarto <- requireNamespace("quarto", quietly = TRUE) &&
                             tryCatch(nzchar(quarto::quarto_path()), error = function(e) FALSE)
-                          fmts <- c("Word" = "docx")
-                          if (has_quarto) fmts <- c("HTML" = "html", fmts)
-                          if (has_quarto && earthUI:::has_latex_()) {
-                            fmts <- c(fmts, "PDF" = "pdf")
+                          if (has_quarto) {
+                            fmts <- c("HTML" = "html", "Word" = "docx")
+                            if (earthUI:::has_latex_()) {
+                              fmts <- c(fmts, "PDF" = "pdf")
+                            }
+                            fmts
+                          } else {
+                            c("Quarto required" = "none")
                           }
-                          fmts
                         }),
             actionButton("export_report_btn", "Download Report",
                          class = "btn-primary",
