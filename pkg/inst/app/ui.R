@@ -1184,11 +1184,11 @@ fluidPage(
                         "?")),
             selectInput("export_format", "Format",
                         choices = {
-                          has_pandoc <- tryCatch(rmarkdown::pandoc_available(),
-                                                error = function(e) FALSE)
+                          has_quarto <- requireNamespace("quarto", quietly = TRUE) &&
+                            tryCatch(nzchar(quarto::quarto_path()), error = function(e) FALSE)
                           fmts <- c("Word" = "docx")
-                          if (has_pandoc) fmts <- c("HTML" = "html", fmts)
-                          if (has_pandoc && earthUI:::has_latex_()) {
+                          if (has_quarto) fmts <- c("HTML" = "html", fmts)
+                          if (has_quarto && earthUI:::has_latex_()) {
                             fmts <- c(fmts, "PDF" = "pdf")
                           }
                           fmts
