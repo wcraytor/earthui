@@ -167,7 +167,8 @@ The sidebar is organized into numbered sections:
 1. **Import Data** --- CSV or Excel file upload
 2. **Project Output Folder** --- where downloads are saved
 3. **Variable Configuration** --- target, predictors, data types, special columns
-4. **Earth Call Parameters** --- degree, penalty, pruning, CV, subset filters
+4. **Earth Call Parameters** --- degree, penalty, pruning, CV, subset filters.
+   Recommended values are displayed below key parameters (see below).
 5. **Fit Earth Model** --- green button to run the model
 6. **Download Output** --- Excel file with predictions and diagnostics
 7. **Calculate RCA Adjustments** (appraisal only)
@@ -258,6 +259,57 @@ func <- build_allowed_function(mat, block_degree1 = "sale_age")
 result <- fit_earth(df, "sale_price", predictors,
                     degree = 2L, allowed_func = func)
 ```
+
+## Recommended Parameter Values
+
+earthUI displays recommended values in blue text below key parameters in
+Section 4. These update reactively as you load data and select predictors,
+based on the number of fitting rows (*n*) and predictors (*p*).
+
+### Summary Table
+
+| Parameter | Formula | n=200, p=10 | n=1500, p=10 |
+|:----------|:--------|------------:|-------------:|
+| **nk** | min(100, max(21, 2p+1, n/10)) | 21 | 100 |
+| **minspan** | min(16, 5 + n/50) | 9 | 16 |
+| **endspan** | min(16, 5 + n/28) | 12 | 16 |
+| **penalty** | 3 if degree>1, else 2 | 2 | 2 |
+| **pmethod** | backward | backward | backward |
+| **nprune** | leave empty | NULL | NULL |
+| **nfold** | min(15, max(10, n/100)) | 10 | 15 |
+| **ncross** | max(3, 100/n) | 3 | 3 |
+| **varmod.method** | lm | lm | lm |
+| **newvar.penalty** | 0.1 if collinear predictors | 0.1 | 0.1 |
+
+### Key Rationale
+
+- **nk**: Earth's default (`max(21, 2p+1)`) does not account for dataset
+  size. For large datasets, `n/10` provides enough forward-pass capacity
+  for the greedy search to explore all predictors with multiple knots.
+- **minspan / endspan**: Earth's auto-calculation scales as log(n*p),
+  which grows too slowly for large *n*. The linear formulas target
+  approximately 100 candidate knot locations per continuous predictor,
+  preventing the forward pass from fitting noise. Endspan is set slightly
+  larger for additional boundary protection.
+- **pmethod = backward**: GCV-based pruning is deterministic --- no
+  dependence on random seeds, which is critical for reproducibility.
+- **nfold / ncross**: With `pmethod = backward`, CV only provides the
+  diagnostic CVR^2^ and residuals for the variance model. The formulas
+  balance accuracy with computational cost.
+- **newvar.penalty = 0.1**: When predictors are correlated (e.g., living
+  area with bedroom count), a small penalty biases the forward pass toward
+  reusing existing predictors, producing simpler and more interpretable
+  models.
+
+### Earth Output File
+
+After every fit, earthUI writes `<filename>_earth_output_<timestamp>.txt`
+to the output folder containing the model, summary statistics, variance
+model, and trace log --- useful for comparing parameter configurations
+across runs.
+
+See the earthUI User Guide, Chapter 7 for detailed derivations and
+additional scaling tables.
 
 ## Downloading Data (Step 6)
 

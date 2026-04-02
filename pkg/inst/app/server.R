@@ -1,5 +1,16 @@
 function(input, output, session) {
 
+  # --- Plot dimension helper (clientData width/height, fixed res=96) ---
+  plot_dims_ <- function(id) {
+    full_id <- if (!is.null(session$ns)) session$ns(id) else id
+    w_key <- paste0("output_", full_id, "_width")
+    h_key <- paste0("output_", full_id, "_height")
+    list(
+      width  = function() session$clientData[[w_key]],
+      height = function() session$clientData[[h_key]]
+    )
+  }
+
   # --- SQLite settings database ---
   settings_con <- earthUI:::settings_db_connect_()
   session$onSessionEnded(function() {
@@ -89,6 +100,47 @@ function(input, output, session) {
       writeLines(c(paste("earthUI fitting log:", Sys.time()), "", lines), log_path)
     }, error = function(e) {
       message("earthUI: failed to write log: ", e$message)
+    })
+  }
+
+  # --- Write earth output (model, summary, variance model) to text file ---
+  write_earth_output_ <- function(result, output_folder, file_name) {
+    tryCatch({
+      folder <- if (is.null(output_folder) || !nzchar(output_folder)) {
+        path.expand("~/Downloads")
+      } else {
+        output_folder
+      }
+      if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
+      base <- tools::file_path_sans_ext(file_name %||% "earthui")
+      out_path <- file.path(folder, paste0(base, "_earth_output_",
+                            format(Sys.time(), "%Y%m%d_%H%M%S"), ".txt"))
+      model <- result$model
+      lines <- utils::capture.output({
+        cat(sprintf("earthUI output: %s\n", Sys.time()))
+        cat(sprintf("Timing: %.2f seconds\n", result$elapsed))
+        if (!is.null(result$seed))
+          cat(sprintf("Random Seed: %d\n", result$seed))
+        cat("\n== Model ==\n\n")
+        print(model)
+        cat("\n\n== Summary ==\n\n")
+        print(summary(model))
+        if (!is.null(model$varmod)) {
+          cat("\n\n== Variance Model ==\n\n")
+          print(model$varmod)
+        }
+        if (length(result$trace_output) > 0L) {
+          trace_lines <- result$trace_output
+          trace_lines <- trace_lines[nzchar(trimws(trace_lines))]
+          if (length(trace_lines) > 0L) {
+            cat("\n\n== Trace Log ==\n\n")
+            cat(paste(trace_lines, collapse = "\n"), "\n")
+          }
+        }
+      })
+      writeLines(lines, out_path)
+    }, error = function(e) {
+      message("earthUI: failed to write earth output: ", e$message)
     })
   }
 
@@ -1331,6 +1383,85 @@ function(input, output, session) {
     tagList(header, rows, js)
   })
 
+  # --- Recommended parameter values (Section 4) ---
+  # Helper: styling for recommendation labels (Nord Frost #81A1C1)
+  rec_style_ <- "font-size: 0.78em; color: #81A1C1; margin-top: -8px; margin-bottom: 6px; padding-left: 2px;"
+
+  # Reactive: effective n (rows used for fitting)
+  fit_n_ <- reactive({
+    req(rv$data)
+    n <- nrow(rv$data)
+    skip <- input$purpose == "appraisal" ||
+      (input$purpose != "appraisal" && isTRUE(input$skip_subject_row))
+    if (skip && n >= 2L) n - 1L else n
+  })
+
+  # Reactive: number of selected predictors
+  fit_p_ <- reactive({
+    p <- length(input$predictors)
+    if (p < 1L) NULL else p
+  })
+
+  output$rec_penalty <- renderUI({
+    d <- as.integer(input$degree)
+    val <- if (!is.null(d) && d > 1L) 3 else 2
+    tags$div(style = rec_style_, paste0("Recommended: ", val,
+      " (", if (val == 3) "degree > 1" else "degree = 1", ")"))
+  })
+
+  output$rec_nk <- renderUI({
+    n <- fit_n_()
+    p <- fit_p_()
+    req(n, p)
+    val <- min(100L, max(21L, 2L * p + 1L, as.integer(floor(n / 10))))
+    tags$div(style = rec_style_, paste0("Recommended: ", val,
+      " = min(100, max(21, 2\u00D7", p, "+1, \u230A", n, "/10\u230B))"))
+  })
+
+  output$rec_minspan <- renderUI({
+    n <- fit_n_()
+    req(n)
+    val <- min(16L, as.integer(floor(5 + n / 50)))
+    tags$div(style = rec_style_, paste0("Recommended: ", val,
+      " = min(16, \u230A5 + ", n, "/50\u230B)"))
+  })
+
+  output$rec_endspan <- renderUI({
+    n <- fit_n_()
+    req(n)
+    val <- min(16L, as.integer(floor(5 + n / 28)))
+    tags$div(style = rec_style_, paste0("Recommended: ", val,
+      " = min(16, \u230A5 + ", n, "/28\u230B)"))
+  })
+
+  output$rec_pmethod <- renderUI({
+    tags$div(style = rec_style_, "Recommended: backward (deterministic, GCV-based)")
+  })
+
+  output$rec_nprune <- renderUI({
+    tags$div(style = rec_style_, "Recommended: leave empty (let GCV decide)")
+  })
+
+  output$rec_nfold <- renderUI({
+    n <- fit_n_()
+    req(n)
+    val <- min(15L, max(10L, as.integer(round(n / 100))))
+    tags$div(style = rec_style_, paste0("Recommended: ", val,
+      " = min(15, max(10, \u230A", n, "/100\u230B))"))
+  })
+
+  output$rec_ncross <- renderUI({
+    n <- fit_n_()
+    req(n)
+    val <- max(3L, as.integer(ceiling(100 / n)))
+    tags$div(style = rec_style_, paste0("Recommended: ", val,
+      " = max(3, \u2308100/", n, "\u2309)"))
+  })
+
+  output$rec_varmod <- renderUI({
+    tags$div(style = rec_style_, "Recommended: lm (prediction intervals via linear variance model)")
+  })
+
   # --- Allowed Interaction Matrix ---
   output$allowed_matrix_ui <- renderUI({
     req(input$predictors)
@@ -2006,6 +2137,7 @@ function(input, output, session) {
             fname <- rv$file_name
             session$onFlushed(function() {
               write_fit_log_(folder, traces, fname)
+              write_earth_output_(res, folder, fname)
             }, once = TRUE)
             if (.Platform$OS.type == "unix") {
               parallel::mcparallel({
@@ -2097,6 +2229,7 @@ function(input, output, session) {
             fname <- rv$file_name
             session$onFlushed(function() {
               write_fit_log_(folder, traces, fname)
+              write_earth_output_(res, folder, fname)
               auto_export_for_mgcv_(res, folder, fname)
             }, once = TRUE)
           })
@@ -2390,10 +2523,11 @@ function(input, output, session) {
   })
 
   # --- Results: Variable Importance ---
+  d_ <- plot_dims_("importance_plot")
   output$importance_plot <- renderPlot({
     req(rv$result)
     plot_variable_importance(rv$result)
-  })
+  }, width = d_$width, height = d_$height, res = 96)
 
   output$importance_table <- DT::renderDataTable({
     req(rv$result)
@@ -2440,6 +2574,7 @@ function(input, output, session) {
     }
   })
 
+  d_ <- plot_dims_("contrib_plot_2d")
   output$contrib_plot_2d <- renderPlot({
     req(rv$result, input$contrib_g_index)
     ri <- if (length(rv$result$target) > 1L && !is.null(input$contrib_response)) {
@@ -2456,7 +2591,7 @@ function(input, output, session) {
         text(0.5, 0.5, paste("Error:", e$message), cex = 1.2)
       }
     )
-  })
+  }, width = d_$width, height = d_$height, res = 96)
 
   if (requireNamespace("plotly", quietly = TRUE)) {
     output$contrib_plot_3d <- plotly::renderPlotly({
@@ -2478,6 +2613,7 @@ function(input, output, session) {
     })
   }
 
+  d_ <- plot_dims_("contrib_plot_contour")
   output$contrib_plot_contour <- renderPlot({
     req(rv$result, input$contrib_g_index)
     ri <- if (length(rv$result$target) > 1L && !is.null(input$contrib_response)) {
@@ -2494,7 +2630,7 @@ function(input, output, session) {
         text(0.5, 0.5, paste("Error:", e$message), cex = 1.2)
       }
     )
-  })
+  }, width = d_$width, height = d_$height, res = 96)
 
   # --- Results: Correlation Matrix ---
   output$correlation_plot_ui <- renderUI({
@@ -2502,6 +2638,7 @@ function(input, output, session) {
     plotOutput("correlation_plot", height = "800px", width = "800px")
   })
 
+  d_ <- plot_dims_("correlation_plot")
   output$correlation_plot <- renderPlot({
     req(rv$result)
     tryCatch(
@@ -2512,9 +2649,10 @@ function(input, output, session) {
         text(0.5, 0.5, paste("Error:", e$message), cex = 1.2)
       }
     )
-  }, res = 120)
+  }, width = d_$width, height = d_$height, res = 96)
 
   # --- Results: Diagnostics ---
+  d_ <- plot_dims_("residuals_plot")
   output$residuals_plot <- renderPlot({
     req(rv$result)
     ri <- if (length(rv$result$target) > 1L && !is.null(input$diag_response)) {
@@ -2523,8 +2661,9 @@ function(input, output, session) {
       NULL
     }
     plot_residuals(rv$result, response_idx = ri)
-  })
+  }, width = d_$width, height = d_$height, res = 96)
 
+  d_ <- plot_dims_("qq_plot")
   output$qq_plot <- renderPlot({
     req(rv$result)
     ri <- if (length(rv$result$target) > 1L && !is.null(input$diag_response)) {
@@ -2533,8 +2672,9 @@ function(input, output, session) {
       NULL
     }
     plot_qq(rv$result, response_idx = ri)
-  })
+  }, width = d_$width, height = d_$height, res = 96)
 
+  d_ <- plot_dims_("actual_vs_predicted_plot")
   output$actual_vs_predicted_plot <- renderPlot({
     req(rv$result)
     ri <- if (length(rv$result$target) > 1L && !is.null(input$diag_response)) {
@@ -2543,7 +2683,7 @@ function(input, output, session) {
       NULL
     }
     plot_actual_vs_predicted(rv$result, response_idx = ri)
-  })
+  }, width = d_$width, height = d_$height, res = 96)
 
   # --- Results: ANOVA ---
   output$anova_table <- DT::renderDataTable({
@@ -2584,6 +2724,7 @@ function(input, output, session) {
         local({
           col_name <- pc$col
           plot_label <- pc$label
+          d_ <- plot_dims_(plot_id)
           output[[plot_id]] <- renderPlot({
             vals <- rv$rca_df[[col_name]]
             vals <- vals[!is.na(vals) & is.finite(vals)]
@@ -2616,7 +2757,7 @@ function(input, output, session) {
                              col = c("#E74C3C", "#2ECC71", NA),
                              lwd = c(2, 2, NA), lty = c(2, 2, NA),
                              bty = "n", cex = 1.1)
-          }, res = 120)
+          }, width = d_$width, height = d_$height, res = 96)
         })
         plot_tags <- c(plot_tags, list(
           plotOutput(plot_id, height = "350px"),

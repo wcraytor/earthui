@@ -881,11 +881,13 @@ fluidPage(
         param_with_help(
           numericInput("penalty", "GCV penalty per knot (penalty)", value = 2, min = -1, step = 0.5),
           "GCV penalty per knot. Default is 3 if degree>1, else 2. Use 0 to penalize only terms. Use -1 for no penalty (GCV = RSS/n)."),
+        uiOutput("rec_penalty"),
 
         # 10. nk
         param_with_help(
           numericInput("nk", "Max terms before pruning (nk)", value = NA, min = 1, step = 1),
           "Maximum number of model terms before pruning. Default = 3 x number of selected predictors."),
+        uiOutput("rec_nk"),
 
         # 11. thresh
         param_with_help(
@@ -896,11 +898,13 @@ fluidPage(
         param_with_help(
           numericInput("minspan", "Min span (minspan)", value = 0, step = 1),
           "Minimum observations between knots. 0 = auto-calculated. Negative values specify max knots per predictor (e.g., -3 = three evenly spaced knots)."),
+        uiOutput("rec_minspan"),
 
         # 13. endspan
         param_with_help(
           numericInput("endspan", "End span (endspan)", value = 0, min = 0, step = 1),
           "Minimum observations before first and after last knot. 0 = auto-calculated. Be wary of reducing this for predictions near data limits."),
+        uiOutput("rec_endspan"),
 
         # 14. newvar.penalty
         param_with_help(
@@ -984,10 +988,12 @@ fluidPage(
                           choices = c("backward", "none", "exhaustive", "forward", "seqrep", "cv"),
                           selected = "backward"),
               "Pruning method. Default 'backward'. Use 'cv' with nfold to select terms by cross-validation. Use 'none' to retain all forward pass terms."),
+            uiOutput("rec_pmethod"),
             # 20. nprune
             param_with_help(
               numericInput("nprune", "Max terms after pruning (nprune)", value = NA, min = 1, step = 1),
-              "Maximum terms (including intercept) in pruned model. Default NULL = all terms from forward pass, after pruning.")
+              "Maximum terms (including intercept) in pruned model. Default NULL = all terms from forward pass, after pruning."),
+            uiOutput("rec_nprune")
           )
         ),
 
@@ -1000,10 +1006,12 @@ fluidPage(
             param_with_help(
               numericInput("nfold_override", "CV folds (nfold)", value = 10, min = 0, step = 1),
               "Number of CV folds. Default 10. Auto-set to 10 when degree >= 2. Use trace=0.5 to trace CV."),
+            uiOutput("rec_nfold"),
             # 22. ncross
             param_with_help(
               numericInput("ncross", "ncross", value = 20, min = 1, step = 1),
               "Number of cross-validations (each has nfold folds). Default 20. Use higher values with variance models."),
+            uiOutput("rec_ncross"),
             # 23. stratify
             param_with_help(
               checkboxInput("stratify", "Stratify CV samples (stratify)", value = TRUE),
@@ -1023,6 +1031,7 @@ fluidPage(
                                       "power", "power0", "x.lm", "x.rlm", "x.earth", "x.gam"),
                           selected = "lm"),
               "Variance model method. Requires nfold and ncross. Use trace=0.3 to trace. 'lm','rlm','earth','gam' regress on predicted response; 'x.*' variants regress on predictors."),
+            uiOutput("rec_varmod"),
             # 25. varmod.exponent
             param_with_help(
               numericInput("varmod_exponent", "varmod.exponent", value = 1, min = 0, step = 0.1),

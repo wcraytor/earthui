@@ -85,6 +85,29 @@ result <- fit_earth(
   interactions.
 - When `degree >= 2`, cross-validation (10-fold) is automatically enabled.
 
+**Recommended parameter values:**
+
+earthUI displays recommended values below key parameters in the sidebar.
+These update reactively based on the number of fitting rows (*n*) and
+selected predictors (*p*). Key recommendations:
+
+| Parameter | Formula | Example (n=200, p=10) |
+|:----------|:--------|----------------------:|
+| **nk** | `min(100, max(21, 2*p+1, floor(n/10)))` | 21 |
+| **minspan** | `min(16, floor(5 + n/50))` | 9 |
+| **endspan** | `min(16, floor(5 + n/28))` | 12 |
+| **penalty** | `if (degree > 1) 3 else 2` | 2 |
+| **pmethod** | backward | backward |
+| **nprune** | leave empty (let GCV decide) | NULL |
+| **nfold** | `min(15, max(10, round(n/100)))` | 10 |
+| **ncross** | `max(3, ceiling(100/n))` | 3 |
+| **varmod.method** | lm | lm |
+| **newvar.penalty** | 0.1 (if collinear predictors) | 0.1 |
+
+The formulas are derived from Friedman's MARS paper, earth's C source code,
+and empirical testing. See the earthUI User Guide, Chapter 7 for detailed
+explanations and scaling tables.
+
 ### 4. Examine Results
 
 ```{r}

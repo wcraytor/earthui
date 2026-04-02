@@ -794,6 +794,101 @@ The **subset** text input accepts an R expression that filters which rows are us
 \small\textit{\textbf{Tip:} Use parentheses to group OR conditions when combining with AND. Without parentheses, \texttt{A \& B | C} is evaluated as \texttt{(A \& B) | C}, which may not be what you intend.}
 \end{tcolorbox}
 
+## Recommended Parameter Values
+
+earthUI displays a recommended value below key parameters in Section 4. These recommendations update reactively based on the number of fitting rows ($n$) and selected predictors ($p$). The formulas are derived from Friedman's MARS paper, earth's internal algorithms, and empirical testing.
+
+### Forward Pass Parameters
+
+**nk** (max terms before pruning):
+
+$$\text{nk} = \min\!\bigl(100,\; \max(21,\; 2p + 1,\; \lfloor n/10 \rfloor)\bigr)$$
+
+| $n$ | $p{=}5$ | $p{=}10$ |
+|----:|--------:|---------:|
+| 30 | 21 | 21 |
+| 50 | 21 | 21 |
+| 100 | 21 | 21 |
+| 200 | 21 | 21 |
+| 500 | 50 | 50 |
+| 1000 | 100 | 100 |
+| 1500 | 100 | 100 |
+
+Earth's default, $\min(200, \max(20, 2p)) + 1$, does not account for dataset size and can be too small for large datasets, constraining the forward pass before it explores all predictors adequately. The $\lfloor n/10 \rfloor$ term allows approximately one term per 10 observations --- a standard rule of thumb for avoiding overparameterization. The cap of 100 prevents diminishing returns.
+
+**minspan** (minimum observations between knots):
+
+$$\text{minspan} = \min\!\bigl(16,\; \lfloor 5 + n/50 \rfloor\bigr)$$
+
+**endspan** (minimum observations from data boundaries):
+
+$$\text{endspan} = \min\!\bigl(16,\; \lfloor 5 + n/28 \rfloor\bigr)$$
+
+| $n$ | minspan | endspan |
+|----:|--------:|--------:|
+| 30 | 5 | 6 |
+| 50 | 6 | 6 |
+| 100 | 7 | 8 |
+| 200 | 9 | 12 |
+| 300 | 11 | 15 |
+| 500 | 15 | 16 |
+| 1500 | 16 | 16 |
+
+Earth's auto-calculated minspan uses Friedman's equation 43: $\lfloor(-\ln(-\ln 0.95) + \ln(p \cdot n)) / (2.5 \ln 2)\rfloor$, which scales as $\ln(np)$ and grows too slowly for large datasets. At $n{=}1500$ it yields only ${\approx}7$, giving roughly 245 candidate knot locations per continuous predictor --- too many, allowing the forward pass to fit noise. The recommended formula targets approximately 100 candidates per predictor for large $n$, while deferring to earth's auto-calculation for small $n$ (where it is well-tested). Endspan is set slightly larger than minspan to provide additional boundary protection, which helps when data has thin tails (common in real estate).
+
+**penalty** (GCV penalty per knot):
+
+$$\text{penalty} = \begin{cases} 3 & \text{if degree} > 1 \\ 2 & \text{if degree} = 1 \end{cases}$$
+
+This is earth's own default --- 2 for additive models, 3 for interaction models (the higher penalty compensates for the larger search space).
+
+**newvar.penalty** (penalty for introducing a new predictor):
+
+Recommended: **0.1** when predictors are correlated (e.g., living area with bedroom count, bathroom count, lot size). This biases the forward pass toward reusing predictors already in the model rather than introducing correlated alternatives. The mechanism: each new predictor's RSS improvement is multiplied by $1/(1 + \text{penalty})$. With $\text{newvar.penalty} = 0.1$, a new variable must improve RSS by at least 10\% more than another knot on an existing variable. This produces simpler models with fewer predictors without affecting final coefficient estimates (the penalty is removed after selection). Leave at 0 if predictors are not correlated.
+
+### Pruning Parameters
+
+**pmethod**: Recommended: **backward**. The default GCV-based backward pruning is deterministic --- the same data always produces the same model, with no dependence on random seeds. This is important for reproducibility, especially in appraisal work. The `cv` method uses cross-validation for pruning which introduces seed dependence.
+
+**nprune**: Recommended: **leave empty** (NULL). Let GCV select the optimal number of terms. Setting nprune imposes a hard cap that overrides GCV's judgment.
+
+### Cross-Validation Parameters
+
+**nfold** (CV folds):
+
+$$\text{nfold} = \min\!\bigl(15,\; \max(10,\; \lfloor n/100 \rfloor)\bigr)$$
+
+| $n$ | nfold |
+|----:|------:|
+| 30 | 10 |
+| 100 | 10 |
+| 500 | 10 |
+| 1000 | 10 |
+| 1500 | 15 |
+
+With `pmethod = "backward"`, cross-validation does not affect the model --- it only computes the diagnostic CVR\textsuperscript{2} and provides residuals for the variance model. The floor of 10 and cap of 15 reflect this: enough folds for a stable diagnostic without unnecessary computation.
+
+**ncross** (CV repetitions):
+
+$$\text{ncross} = \max\!\bigl(3,\; \lceil 100/n \rceil\bigr)$$
+
+| $n$ | ncross | total residuals |
+|----:|-------:|----------------:|
+| 30 | 4 | 120 |
+| 50 | 3 | 150 |
+| 100 | 3 | 300 |
+| 1500 | 3 | 4500 |
+
+The variance model (`varmod.method = "lm"`) fits on the cross-validation residuals. The formula targets at least 100 total residuals ($n \times \text{ncross}$) for a stable variance estimate, with a floor of 3 (required by earth when a variance model is enabled).
+
+### Variance Model
+
+**varmod.method**: Recommended: **lm**. This fits prediction intervals using a linear regression of absolute CV residuals on the predicted response. It requires `nfold > 0` and `ncross >= 3`.
+
+### Earth Output File
+
+After every successful fit, earthUI writes `<filename>_earth_output_<timestamp>.txt` to the output folder. This file contains the model terms, summary statistics (R\textsuperscript{2}, GRSq, CVRSq), variance model details, and trace log. One file is created per fit, providing a cumulative record for comparing parameter configurations.
+
 ## Settings Defaults
 
 A radio button at the top of Section 4 controls which defaults are loaded:
