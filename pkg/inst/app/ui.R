@@ -1184,9 +1184,11 @@ fluidPage(
                         "?")),
             selectInput("export_format", "Format",
                         choices = {
-                          has_quarto <- requireNamespace("quarto", quietly = TRUE) &&
-                            tryCatch(nzchar(quarto::quarto_path()), error = function(e) FALSE)
-                          if (has_quarto) {
+                          has_quarto <- tryCatch({
+                            requireNamespace("quarto", quietly = TRUE) &&
+                              isTRUE(nzchar(quarto::quarto_path()))
+                          }, error = function(e) FALSE)
+                          if (isTRUE(has_quarto)) {
                             fmts <- c("HTML" = "html", "Word" = "docx")
                             if (earthUI:::has_latex_()) {
                               fmts <- c(fmts, "PDF" = "pdf")
