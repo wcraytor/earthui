@@ -2607,10 +2607,16 @@ function(input, output, session) {
         error = function(e) {
           message("earthUI: g-function 3D plot error: ", e$message)
           plotly::plot_ly() |>
-            plotly::layout(title = paste("Error:", e$message))
+            plotly::add_annotations(
+              text = paste("3D plot error:", e$message),
+              x = 0.5, y = 0.5, showarrow = FALSE,
+              xref = "paper", yref = "paper"
+            )
         }
       )
     })
+  } else {
+    message("earthUI: plotly not available, 3D plots will use 2D fallback")
   }
 
   d_ <- plot_dims_("contrib_plot_contour")
@@ -3429,8 +3435,8 @@ function(input, output, session) {
       title = "RCA Raw Output — Subject CQA Score",
       radioButtons("rca_cqa_type", "Score type:",
                    choices = cqa_choices, selected = "cqa", inline = TRUE),
-      numericInput("rca_cqa_value", "CQA score for subject (0.00–9.99):",
-                   value = 5.00, min = 0, max = 9.99, step = 0.01),
+      textInput("rca_cqa_value", "CQA score for subject (0.00\u20139.99):",
+                value = "5.00", placeholder = "e.g. 5.00"),
       footer = tagList(
         modalButton("Cancel"),
         actionButton("export_rca", "Generate", class = "btn-primary")
@@ -3440,7 +3446,9 @@ function(input, output, session) {
   })
 
   # RCA download handler
-  observeEvent(input$export_rca, {
+  observeEvent(input$export_rca, ignoreInit = TRUE, {
+      message("earthUI RCA: Generate button clicked, purpose=", input$purpose,
+              ", data=", !is.null(rv$data), ", result=", !is.null(rv$result))
       req(rv$data, rv$result, input$purpose == "appraisal", nrow(rv$data) >= 2L)
       removeModal()
 
@@ -3532,7 +3540,12 @@ function(input, output, session) {
 
       # --- Step A: Interpolate subject residual from user CQA ---
       use_sf <- (input$rca_cqa_type == "cqa_sf" && !is.null(la_col))
-      user_cqa <- input$rca_cqa_value
+      user_cqa <- as.numeric(input$rca_cqa_value)
+      if (is.na(user_cqa) || user_cqa < 0 || user_cqa > 9.99) {
+        showNotification("CQA score must be a number between 0.00 and 9.99.",
+                         type = "error", duration = 8)
+        return()
+      }
 
       if (use_sf) {
         comp_cqa_vals  <- export_df[["cqa_sf"]][-1L]
