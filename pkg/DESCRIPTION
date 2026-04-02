@@ -16,30 +16,30 @@ BugReports: https://github.com/wcraytor/earthUI/issues
 Depends:
     R (>= 4.1.0)
 Imports:
-    earth (>= 5.3.0),
-    ggplot2,
-    readxl,
-    shiny,
-    stats,
-    tools,
-    utils
-Suggests:
     bslib,
     callr,
     DBI,
     DT,
+    earth (>= 5.3.0),
+    ggplot2,
     jsonlite,
     knitr,
+    openxlsx,
     plotly,
-    quarto,
+    readxl,
     rmarkdown,
     RSQLite,
+    shiny,
+    stats,
+    tools,
+    utils,
+    writexl
+Suggests:
+    quarto,
     showtext,
     sysfonts,
     testthat (>= 3.0.0),
-    tinytex,
-    openxlsx,
-    writexl
+    tinytex
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
