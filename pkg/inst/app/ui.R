@@ -1190,6 +1190,11 @@ fluidPage(
                           }
                           fmts
                         }),
+            if (!earthUI:::has_latex_()) {
+              tags$p(style = "font-size: 0.78em; color: #81A1C1; margin-top: -8px; margin-bottom: 6px;",
+                "PDF requires LaTeX. Install with: ",
+                tags$code("tinytex::install_tinytex()"))
+            },
             actionButton("export_report_btn", "Download Report",
                          class = "btn-primary",
                          style = "width: 100%;")

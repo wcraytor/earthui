@@ -284,6 +284,29 @@ render_report <- function(earth_result, output_format = "html",
     else Sys.setenv(QUARTO_R = old_quarto_r)
   }, add = TRUE)
 
+  # On Windows, Quarto CLI may not be on PATH. Search common locations.
+  if (.Platform$OS.type == "windows" && !nzchar(Sys.which("quarto"))) {
+    quarto_search <- c(
+      file.path(Sys.getenv("LOCALAPPDATA"), "Programs", "Quarto", "bin"),
+      file.path(Sys.getenv("ProgramFiles"), "Quarto", "bin"),
+      file.path(Sys.getenv("USERPROFILE"), "AppData", "Local", "Programs",
+                "Quarto", "bin"),
+      "C:/Program Files/Quarto/bin"
+    )
+    for (qdir in quarto_search) {
+      qexe <- file.path(qdir, "quarto.exe")
+      if (file.exists(qexe)) {
+        old_path <- Sys.getenv("PATH")
+        Sys.setenv(PATH = paste(normalizePath(qdir, winslash = "/"),
+                                old_path, sep = ";"))
+        Sys.setenv(QUARTO_PATH = normalizePath(qexe, winslash = "/"))
+        on.exit(Sys.setenv(PATH = old_path), add = TRUE)
+        message("earthUI: found Quarto at ", qexe)
+        break
+      }
+    }
+  }
+
   tryCatch(
     quarto::quarto_render(
       input = tmp_qmd,
