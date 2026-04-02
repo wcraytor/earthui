@@ -2601,9 +2601,25 @@ function(input, output, session) {
       } else {
         NULL
       }
-      tryCatch(
-        plot_g_function(rv$result, as.integer(input$contrib_g_index),
-                        response_idx = ri),
+      tryCatch({
+        p <- plot_g_function(rv$result, as.integer(input$contrib_g_index),
+                             response_idx = ri)
+        # If plot_g_function returned a ggplot (2D fallback from 3D), convert
+        # safely — suppress geom_label warnings that plotly doesn't support.
+        if (ggplot2::is.ggplot(p)) {
+          tryCatch(
+            plotly::ggplotly(p),
+            error = function(e2) {
+              message("earthUI: ggplotly conversion error: ", e2$message)
+              # Strip geom_label layers and retry
+              p$layers <- Filter(function(l) !inherits(l$geom, "GeomLabel"), p$layers)
+              plotly::ggplotly(p)
+            }
+          )
+        } else {
+          p
+        }
+      },
         error = function(e) {
           message("earthUI: g-function 3D plot error: ", e$message)
           plotly::plot_ly() |>
@@ -3437,16 +3453,24 @@ function(input, output, session) {
                    choices = cqa_choices, selected = "cqa", inline = TRUE),
       textInput("rca_cqa_value", "CQA score for subject (0.00\u20139.99):",
                 value = "5.00", placeholder = "e.g. 5.00"),
+      tags$script(HTML("
+        $(document).off('click.eui_rca').on('click.eui_rca', '#export_rca', function() {
+          Shiny.setInputValue('export_rca_trigger', Math.random());
+        });
+      ")),
       footer = tagList(
         modalButton("Cancel"),
-        actionButton("export_rca", "Generate", class = "btn-primary")
+        tags$button(id = "export_rca", type = "button",
+                    class = "btn btn-primary action-button",
+                    "Generate")
       ),
       size = "s"
     ))
   })
 
-  # RCA download handler
-  observeEvent(input$export_rca, ignoreInit = TRUE, {
+  # RCA download handler — triggered via JS setInputValue for reliable
+  # cross-platform firing (actionButton in modals can fail on Windows)
+  observeEvent(input$export_rca_trigger, ignoreInit = TRUE, ignoreNULL = TRUE, {
       message("earthUI RCA: Generate button clicked, purpose=", input$purpose,
               ", data=", !is.null(rv$data), ", result=", !is.null(rv$result))
       req(rv$data, rv$result, input$purpose == "appraisal", nrow(rv$data) >= 2L)

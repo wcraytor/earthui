@@ -1237,7 +1237,16 @@ plot_g_3d_ <- function(earth_result, grp, response_idx = NULL) {
   numeric_vars <- grp$base_vars[!grp$base_vars %in% earth_result$categoricals]
   numeric_vars <- numeric_vars[numeric_vars %in% names(data)]
   if (length(numeric_vars) < 2L) {
-    return(plot_g_2d_(earth_result, grp, response_idx = ri))
+    # Return a 2D ggplot; replace geom_label with geom_text so plotly's
+    # renderPlotly auto-conversion doesn't fail (geom_label not supported).
+    p <- plot_g_2d_(earth_result, grp, response_idx = ri)
+    p$layers <- lapply(p$layers, function(layer) {
+      if (inherits(layer$geom, "GeomLabel")) {
+        layer$geom <- ggplot2::GeomText
+      }
+      layer
+    })
+    return(p)
   }
 
   var1 <- numeric_vars[1]
