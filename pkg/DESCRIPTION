@@ -30,6 +30,7 @@ Imports:
     rmarkdown,
     RSQLite,
     shiny,
+    shinyFiles,
     stats,
     tools,
     utils,

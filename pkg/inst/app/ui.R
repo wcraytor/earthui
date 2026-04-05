@@ -768,8 +768,15 @@ fluidPage(
                       `data-bs-content` = "All output files (Excel, RDS, logs, reports) are saved to this folder. Change it to organize outputs per project.",
                       `data-bs-placement` = "left", onclick = "event.stopPropagation();",
                       "?")),
-          textInput("output_folder", NULL,
-                    value = path.expand("~/Downloads"))
+          tags$div(style = "display:flex; gap:6px; align-items:flex-end;",
+            tags$div(style = "flex:1;",
+              textInput("output_folder", NULL,
+                        value = path.expand("~/Downloads"))),
+            shinyFiles::shinyDirButton("output_folder_browse",
+                                       "Browse\u2026", "Select Output Folder",
+                                       class = "btn btn-outline-secondary btn-sm",
+                                       style = "margin-bottom:15px;")
+          )
         ),
         hr()
       ),

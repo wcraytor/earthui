@@ -206,6 +206,18 @@ function(input, output, session) {
     current_purpose = "general"   # track current purpose for settings keying
   )
 
+  # --- Output folder directory browser ---
+  volumes <- c(Home = path.expand("~"), shinyFiles::getVolumes()())
+  shinyFiles::shinyDirChoose(input, "output_folder_browse",
+                             roots = volumes, session = session,
+                             restrictions = system.file(package = "base"))
+  observeEvent(input$output_folder_browse, {
+    dir_info <- shinyFiles::parseDirPath(volumes, input$output_folder_browse)
+    if (length(dir_info) > 0 && nzchar(dir_info)) {
+      updateTextInput(session, "output_folder", value = as.character(dir_info))
+    }
+  })
+
   # Track user's explicit varmod.method changes
   observeEvent(input$varmod_method, {
     # Only record if single target (multi-target forces "none" in the UI)
