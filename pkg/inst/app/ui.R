@@ -72,6 +72,9 @@ fluidPage(
     [data-eui-theme='dark'] .modal .btn-outline-secondary:hover { background: #81a1c1; color: #2e3440; }
     [data-eui-theme='dark'] .modal .btn-outline-danger { color: #bf616a; border-color: #bf616a; }
     [data-eui-theme='dark'] .modal .btn-outline-danger:hover { background: #bf616a; color: #eceff4; }
+    .eui-tab-elapsed { color: #81a1c1; font-size: 0.95em; }
+    .eui-spinner-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #81a1c1; animation: eui-pulse 1.2s ease-in-out infinite; vertical-align: middle; }
+    @keyframes eui-pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
   "))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
@@ -384,24 +387,68 @@ fluidPage(
     });
 
     // Toggle tab waiting messages vs content.
-    // When ready=false: show waiting, hide content.
-    // When ready=true: show content immediately (so Shiny can render the
-    // outputs — hidden divs cause suspension). Keep waiting visible as
-    // overlay until outputs finish recalculating, then hide it.
-    Shiny.addCustomMessageHandler('eui_tabs_ready', function(msg) {
+    // State tracked in window.euiModelReady so the watchdog can enforce it.
+    // When ready=false: show waiting (static text), hide content, hide timer.
+    // When ready=true: show content + animated timer while outputs recalculate,
+    //   then hide waiting. Timer shows elapsed seconds so users know it's alive.
+    window.euiModelReady = false;
+    window.euiTabsReadyPoll = null;
+    window.euiTabsTimer = null;
+    window.euiTabsTimerStart = null;
+
+    function euiUpdateTimerText() {
+      if (!window.euiTabsTimerStart) return;
+      var s = Math.floor((Date.now() - window.euiTabsTimerStart) / 1000);
+      var m = Math.floor(s / 60);
+      var label = m > 0 ? m + 'm ' + (s % 60) + 's' : s + 's';
+      $('.eui-tab-timer-text').text('Processing... ' + label);
+    }
+
+    function euiResetToWaiting() {
+      // Restore all tabs to the "no model" waiting state
+      $(document).off('shown.bs.tab.eui');
       clearInterval(window.euiTabsReadyPoll);
+      clearInterval(window.euiTabsTimer);
+      window.euiTabsReadyPoll = null;
+      window.euiTabsTimer = null;
+      window.euiTabsTimerStart = null;
+      $('.eui-tab-waiting').show();
+      $('.eui-tab-content').hide();
+      $('.eui-tab-elapsed').hide();
+      $('.eui-tab-waiting-msg').text('Waiting for processing to complete.');
+    }
+
+    Shiny.addCustomMessageHandler('eui_tabs_ready', function(msg) {
+      window.euiModelReady = msg.ready;
       if (msg.ready) {
-        // Show content in active tab so Shiny renders it on demand.
+        // --- Model is ready: show content, start timer ---
+        clearInterval(window.euiTabsReadyPoll);
+        clearInterval(window.euiTabsTimer);
+
+        // Start elapsed timer on all visible waiting messages
+        window.euiTabsTimerStart = Date.now();
+        $('.eui-tab-elapsed').show();
+        euiUpdateTimerText();
+        window.euiTabsTimer = setInterval(euiUpdateTimerText, 1000);
+
+        // Show content in active tab so Shiny renders it on demand
         var $active = $('.tab-pane.active');
         $active.find('.eui-tab-content').show();
-        // Poll until active tab finishes, then hide its waiting message
+
+        // Poll until active tab finishes recalculating, then hide its waiting
         window.euiTabsReadyPoll = setInterval(function() {
-          var still = $active.find('.eui-tab-content .recalculating').length;
+          // Re-query active tab each cycle (user may have switched)
+          var $cur = $('.tab-pane.active');
+          var still = $cur.find('.eui-tab-content .recalculating').length;
           if (still === 0) {
             clearInterval(window.euiTabsReadyPoll);
-            $active.find('.eui-tab-waiting').hide();
+            clearInterval(window.euiTabsTimer);
+            window.euiTabsReadyPoll = null;
+            window.euiTabsTimer = null;
+            $cur.find('.eui-tab-waiting').hide();
           }
         }, 300);
+
         // When user clicks a different tab, show its content and hide waiting
         $(document).off('shown.bs.tab.eui').on('shown.bs.tab.eui', function(e) {
           var $pane = $($(e.target).attr('href') || $(e.target).data('bs-target'));
@@ -411,12 +458,12 @@ fluidPage(
           }
         });
       } else {
-        $(document).off('shown.bs.tab.eui');
-        $('.eui-tab-waiting').show();
-        $('.eui-tab-content').hide();
+        // --- No model: reset to static waiting state ---
+        euiResetToWaiting();
       }
     });
-    // RCA tab has its own toggle
+
+    // RCA tab has its own toggle (independent of general tabs)
     Shiny.addCustomMessageHandler('eui_rca_ready', function(msg) {
       if (msg.ready) {
         $('.eui-rca-waiting').hide();
@@ -426,6 +473,29 @@ fluidPage(
         $('.eui-rca-content').hide();
       }
     });
+
+    // Watchdog: every 2 seconds, enforce correct visibility state.
+    // This is a safety net that catches any edge case where messages
+    // get hidden incorrectly (e.g. race conditions, JS timing issues).
+    setInterval(function() {
+      if (!window.euiModelReady) {
+        // No model — all waiting must be visible, all content hidden
+        var $waiting = $('.eui-tab-waiting');
+        var $content = $('.eui-tab-content');
+        $waiting.each(function() {
+          if ($(this).css('display') === 'none') {
+            $(this).show();
+          }
+        });
+        $content.each(function() {
+          if ($(this).css('display') !== 'none') {
+            $(this).hide();
+          }
+        });
+        // Timer should be hidden when no model
+        $('.eui-tab-elapsed').hide();
+      }
+    }, 2000);
 
 
     // --- Report rendering modal ---
@@ -1248,14 +1318,20 @@ fluidPage(
           # has a specific message about step 7.
           tabPanel("Equation", br(),
             div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
-                h4(class = "text-muted", "Waiting for processing to complete.")),
+                h4(class = "text-muted eui-tab-waiting-msg", "Waiting for processing to complete."),
+                div(class = "eui-tab-elapsed", style = "display:none; margin-top:12px;",
+                    tags$span(class = "eui-spinner-dot"), " ",
+                    tags$span(class = "eui-tab-timer-text", "Processing..."))),
             div(class = "eui-tab-content", style = "display:none;",
                 div(style = "overflow-x: auto; padding: 10px 10px 10px 0;",
                     uiOutput("model_equation")))
           ),
           tabPanel("Summary", br(),
             div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
-                h4(class = "text-muted", "Waiting for processing to complete.")),
+                h4(class = "text-muted eui-tab-waiting-msg", "Waiting for processing to complete."),
+                div(class = "eui-tab-elapsed", style = "display:none; margin-top:12px;",
+                    tags$span(class = "eui-spinner-dot"), " ",
+                    tags$span(class = "eui-tab-timer-text", "Processing..."))),
             div(class = "eui-tab-content", style = "display:none;",
                 uiOutput("summary_metrics"),
                 h5("Coefficients & Basis Functions"),
@@ -1263,7 +1339,10 @@ fluidPage(
           ),
           tabPanel("Variable Importance", br(),
             div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
-                h4(class = "text-muted", "Waiting for processing to complete.")),
+                h4(class = "text-muted eui-tab-waiting-msg", "Waiting for processing to complete."),
+                div(class = "eui-tab-elapsed", style = "display:none; margin-top:12px;",
+                    tags$span(class = "eui-spinner-dot"), " ",
+                    tags$span(class = "eui-tab-timer-text", "Processing..."))),
             div(class = "eui-tab-content", style = "display:none;",
                 plotOutput("importance_plot", height = "400px"),
                 br(),
@@ -1271,7 +1350,10 @@ fluidPage(
           ),
           tabPanel("Contribution", br(),
             div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
-                h4(class = "text-muted", "Waiting for processing to complete.")),
+                h4(class = "text-muted eui-tab-waiting-msg", "Waiting for processing to complete."),
+                div(class = "eui-tab-elapsed", style = "display:none; margin-top:12px;",
+                    tags$span(class = "eui-spinner-dot"), " ",
+                    tags$span(class = "eui-tab-timer-text", "Processing..."))),
             div(class = "eui-tab-content", style = "display:none;",
                 uiOutput("response_selector_contrib"),
                 uiOutput("contrib_g_selector"),
@@ -1279,13 +1361,19 @@ fluidPage(
           ),
           tabPanel("Correlation", br(),
             div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
-                h4(class = "text-muted", "Waiting for processing to complete.")),
+                h4(class = "text-muted eui-tab-waiting-msg", "Waiting for processing to complete."),
+                div(class = "eui-tab-elapsed", style = "display:none; margin-top:12px;",
+                    tags$span(class = "eui-spinner-dot"), " ",
+                    tags$span(class = "eui-tab-timer-text", "Processing..."))),
             div(class = "eui-tab-content", style = "display:none;",
                 uiOutput("correlation_plot_ui"))
           ),
           tabPanel("Diagnostics", br(),
             div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
-                h4(class = "text-muted", "Waiting for processing to complete.")),
+                h4(class = "text-muted eui-tab-waiting-msg", "Waiting for processing to complete."),
+                div(class = "eui-tab-elapsed", style = "display:none; margin-top:12px;",
+                    tags$span(class = "eui-spinner-dot"), " ",
+                    tags$span(class = "eui-tab-timer-text", "Processing..."))),
             div(class = "eui-tab-content", style = "display:none;",
                 uiOutput("response_selector_diag"),
                 fluidRow(
@@ -1299,19 +1387,28 @@ fluidPage(
             div(class = "eui-tab-waiting eui-rca-waiting",
                 style = "text-align: center; padding: 60px 20px;",
                 h4(class = "text-muted",
-                   "7. Calculate RCA Adjustments & Download must first be initiated and completed.")),
+                   "7. Calculate RCA Adjustments & Download must first be initiated and completed."),
+                div(class = "eui-tab-elapsed", style = "display:none; margin-top:12px;",
+                    tags$span(class = "eui-spinner-dot"), " ",
+                    tags$span(class = "eui-tab-timer-text", "Processing..."))),
             div(class = "eui-tab-content eui-rca-content", style = "display:none;",
                 uiOutput("rca_plots_ui"))
           ),
           tabPanel("ANOVA", br(),
             div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
-                h4(class = "text-muted", "Waiting for processing to complete.")),
+                h4(class = "text-muted eui-tab-waiting-msg", "Waiting for processing to complete."),
+                div(class = "eui-tab-elapsed", style = "display:none; margin-top:12px;",
+                    tags$span(class = "eui-spinner-dot"), " ",
+                    tags$span(class = "eui-tab-timer-text", "Processing..."))),
             div(class = "eui-tab-content", style = "display:none;",
                 DT::dataTableOutput("anova_table"))
           ),
           tabPanel("Earth Output", br(),
             div(class = "eui-tab-waiting", style = "text-align: center; padding: 60px 20px;",
-                h4(class = "text-muted", "Waiting for processing to complete.")),
+                h4(class = "text-muted eui-tab-waiting-msg", "Waiting for processing to complete."),
+                div(class = "eui-tab-elapsed", style = "display:none; margin-top:12px;",
+                    tags$span(class = "eui-spinner-dot"), " ",
+                    tags$span(class = "eui-tab-timer-text", "Processing..."))),
             div(class = "eui-tab-content", style = "display:none;",
                 div(style = "overflow-x: auto;",
                     verbatimTextOutput("earth_output")))

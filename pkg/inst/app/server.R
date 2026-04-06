@@ -208,6 +208,17 @@ function(input, output, session) {
 
   # --- Output folder directory browser ---
   volumes <- c(Home = path.expand("~"), shinyFiles::getVolumes()())
+  # Add /Volumes on macOS so external/NVMe drives appear
+  if (.Platform$OS.type == "unix" && dir.exists("/Volumes")) {
+    volumes <- c(volumes, Volumes = "/Volumes")
+  }
+  # Add /media and /mnt on Linux for mounted drives
+  if (.Platform$OS.type == "unix" && dir.exists("/media")) {
+    volumes <- c(volumes, Media = "/media")
+  }
+  if (.Platform$OS.type == "unix" && dir.exists("/mnt")) {
+    volumes <- c(volumes, Mounts = "/mnt")
+  }
   shinyFiles::shinyDirChoose(input, "output_folder_browse",
                              roots = volumes, session = session,
                              restrictions = system.file(package = "base"))
