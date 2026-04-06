@@ -17,6 +17,10 @@ For PDF reports, a LaTeX distribution is also required:
 
 install.packages("tinytex")
 tinytex::install_tinytex()
+On Linux, the Roboto Condensed font must be installed as a system font for PDF rendering:
+
+sudo apt install -y fonts-roboto fonts-lmodern   # Ubuntu/Debian
+fc-cache -fv
 Quick Start
 library(earthUI)
 launch()
