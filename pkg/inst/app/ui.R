@@ -405,7 +405,7 @@ fluidPage(
     }
 
     function euiResetToWaiting() {
-      // Restore all tabs to the "no model" waiting state
+      // Restore all tabs to the pre-fit waiting state
       $(document).off('shown.bs.tab.eui');
       clearInterval(window.euiTabsReadyPoll);
       clearInterval(window.euiTabsTimer);
@@ -425,36 +425,48 @@ fluidPage(
         clearInterval(window.euiTabsReadyPoll);
         clearInterval(window.euiTabsTimer);
 
-        // Start elapsed timer on all visible waiting messages
-        window.euiTabsTimerStart = Date.now();
-        $('.eui-tab-elapsed').show();
-        euiUpdateTimerText();
-        window.euiTabsTimer = setInterval(euiUpdateTimerText, 1000);
-
         // Show content in active tab so Shiny renders it on demand
         var $active = $('.tab-pane.active');
         $active.find('.eui-tab-content').show();
+        $active.find('.eui-tab-elapsed').show();
 
-        // Poll until active tab finishes recalculating, then hide its waiting
+        // Start elapsed timer
+        window.euiTabsTimerStart = Date.now();
+        euiUpdateTimerText();
+        window.euiTabsTimer = setInterval(euiUpdateTimerText, 1000);
+
+        // Continuous poll: checks active tab each cycle.
+        // Hides waiting only when that tab finishes rendering.
+        // Runs until euiResetToWaiting() is called (new fit or purpose switch).
         window.euiTabsReadyPoll = setInterval(function() {
-          // Re-query active tab each cycle (user may have switched)
           var $cur = $('.tab-pane.active');
           var still = $cur.find('.eui-tab-content .recalculating').length;
           if (still === 0) {
-            clearInterval(window.euiTabsReadyPoll);
-            clearInterval(window.euiTabsTimer);
-            window.euiTabsReadyPoll = null;
-            window.euiTabsTimer = null;
             $cur.find('.eui-tab-waiting').hide();
           }
         }, 300);
 
-        // When user clicks a different tab, show its content and hide waiting
+        // When user clicks a different tab, show its content for Shiny rendering.
+        // If still recalculating, keep waiting + timer visible until poll clears it.
         $(document).off('shown.bs.tab.eui').on('shown.bs.tab.eui', function(e) {
           var $pane = $($(e.target).attr('href') || $(e.target).data('bs-target'));
           if ($pane.length) {
             $pane.find('.eui-tab-content').show();
-            $pane.find('.eui-tab-waiting').hide();
+            // Check if this tab is still rendering
+            var still = $pane.find('.eui-tab-content .recalculating').length;
+            if (still > 0) {
+              // Still rendering: show waiting + reset timer for this tab
+              $pane.find('.eui-tab-waiting').show();
+              $pane.find('.eui-tab-elapsed').show();
+              window.euiTabsTimerStart = Date.now();
+              euiUpdateTimerText();
+              if (!window.euiTabsTimer) {
+                window.euiTabsTimer = setInterval(euiUpdateTimerText, 1000);
+              }
+            } else {
+              // Already rendered: hide waiting immediately
+              $pane.find('.eui-tab-waiting').hide();
+            }
           }
         });
       } else {
@@ -1218,16 +1230,17 @@ fluidPage(
         conditionalPanel(
           condition = "output.model_fitted && input.purpose === 'appraisal'",
           hr(),
-          div(class = "eui-section-hdr",
-            h4("7. Calculate RCA Adjustments & Download", style = "display:inline;"),
-            tags$span(class = "eui-section-info",
-                      `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
-                      `data-bs-content` = "Calculates Residential Cost Approach adjustments. Enter the subject's CQA score to interpolate its residual, then computes per-variable and net adjustments for each comparable sale.",
-                      `data-bs-placement` = "left", onclick = "event.stopPropagation();",
-                      "?")),
-          actionButton("rca_output_btn", "Calculate RCA Adjustments & Download",
-                       class = "btn-primary",
-                       style = "width: 100%;")
+          tags$details(class = "eui-section",
+            tags$summary(h4("7. Calculate RCA Adjustments & Download"),
+              tags$span(class = "eui-section-info",
+                        `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                        `data-bs-content` = "Calculates Residential Cost Approach adjustments. Enter the subject's CQA score to interpolate its residual, then computes per-variable and net adjustments for each comparable sale.",
+                        `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                        "?")),
+            actionButton("rca_output_btn", "Calculate RCA Adjustments & Download",
+                         class = "btn-primary",
+                         style = "width: 100%;")
+          )
         ),
 
         # --- 8. Generate Sales Grid & Download (Appraisal only) ---
