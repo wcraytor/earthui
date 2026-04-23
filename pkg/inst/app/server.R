@@ -85,101 +85,6 @@ function(input, output, session) {
     )
   })
 
-  # --- Write fitting log to output folder ---
-  write_fit_log_ <- function(output_folder, lines, file_name) {
-    tryCatch({
-      folder <- if (is.null(output_folder) || !nzchar(output_folder)) {
-        path.expand("~/Downloads")
-      } else {
-        output_folder
-      }
-      if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
-      base <- tools::file_path_sans_ext(file_name %||% "earthui")
-      log_path <- file.path(folder, paste0(base, "_earth_log_",
-                            format(Sys.time(), "%Y%m%d_%H%M%S"), ".txt"))
-      writeLines(c(paste("earthUI fitting log:", Sys.time()), "", lines), log_path)
-    }, error = function(e) {
-      message("earthUI: failed to write log: ", e$message)
-    })
-  }
-
-  # --- Write earth output (model, summary, variance model) to text file ---
-  write_earth_output_ <- function(result, output_folder, file_name) {
-    tryCatch({
-      folder <- if (is.null(output_folder) || !nzchar(output_folder)) {
-        path.expand("~/Downloads")
-      } else {
-        output_folder
-      }
-      if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
-      base <- tools::file_path_sans_ext(file_name %||% "earthui")
-      out_path <- file.path(folder, paste0(base, "_earth_output_",
-                            format(Sys.time(), "%Y%m%d_%H%M%S"), ".txt"))
-      model <- result$model
-      lines <- utils::capture.output({
-        cat(sprintf("earthUI output: %s\n", Sys.time()))
-        cat(sprintf("Timing: %.2f seconds\n", result$elapsed))
-        if (!is.null(result$seed))
-          cat(sprintf("Random Seed: %d\n", result$seed))
-        cat("\n== Model ==\n\n")
-        print(model)
-        cat("\n\n== Summary ==\n\n")
-        print(summary(model))
-        if (!is.null(model$varmod)) {
-          cat("\n\n== Variance Model ==\n\n")
-          print(model$varmod)
-        }
-        if (length(result$trace_output) > 0L) {
-          trace_lines <- result$trace_output
-          trace_lines <- trace_lines[nzchar(trimws(trace_lines))]
-          if (length(trace_lines) > 0L) {
-            cat("\n\n== Trace Log ==\n\n")
-            cat(paste(trace_lines, collapse = "\n"), "\n")
-          }
-        }
-      })
-      writeLines(lines, out_path)
-    }, error = function(e) {
-      message("earthUI: failed to write earth output: ", e$message)
-    })
-  }
-
-  # --- Auto-export earth result for mgcvUI (degree <= 2) ---
-  auto_export_for_mgcv_ <- function(result, output_folder, file_name) {
-    tryCatch({
-      deg <- result$degree %||% 1L
-      if (deg > 2L) return(invisible(NULL))
-      folder <- if (is.null(output_folder) || !nzchar(output_folder)) {
-        path.expand("~/Downloads")
-      } else {
-        output_folder
-      }
-      if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
-      base <- tools::file_path_sans_ext(file_name %||% "earth")
-      out_path <- file.path(folder, paste0(base, "_earthUI_result_",
-                            format(Sys.time(), "%Y%m%d_%H%M%S"), ".rds"))
-      saveRDS(result, out_path)
-      # Verify the file is readable and contains a valid earthUI_result
-      verify <- tryCatch({
-        obj <- readRDS(out_path)
-        if (!inherits(obj, "earthUI_result")) stop("not an earthUI_result")
-        if (is.null(obj$model)) stop("model is NULL")
-        stats::predict(obj$model, newdata = obj$data[1L, , drop = FALSE])
-        TRUE
-      }, error = function(e) {
-        message("earthUI: RDS verification FAILED: ", e$message,
-                " — deleting corrupt file")
-        unlink(out_path)
-        FALSE
-      })
-      if (verify) {
-        message("earthUI: auto-exported result for mgcvUI to ", out_path)
-      }
-    }, error = function(e) {
-      message("earthUI: auto-export for mgcvUI failed: ", e$message)
-    })
-  }
-
   # Seed history per file (last 5, most recent first)
   rv_seed_history <- reactiveVal(integer(0))
 
@@ -1924,38 +1829,18 @@ function(input, output, session) {
             type = "message", duration = 6
           )
         } else {
-
-        # Parse effective_date
-        eff_date <- as.POSIXct(as.character(input$effective_date))
-
-        # Parse contract date values
-        contract_vals <- rv$data[[contract_col]]
-        if (inherits(contract_vals, "POSIXct")) {
-          contract_posix <- contract_vals
-        } else if (inherits(contract_vals, "Date")) {
-          contract_posix <- as.POSIXct(contract_vals)
-        } else if (is.character(contract_vals)) {
-          contract_posix <- suppressWarnings(as.POSIXct(contract_vals))
-          if (all(is.na(contract_posix[!is.na(contract_vals)]))) {
+        sale_age <- tryCatch(
+          compute_sale_age(rv$data[[contract_col]], input$effective_date),
+          error = function(e) {
             showNotification(
-              paste0("Cannot parse '", contract_col, "' as dates for sale_age calculation."),
+              paste0("Column '", contract_col, "': ", e$message),
               type = "error", duration = 10
             )
-            return()
+            NULL
           }
-        } else if (is.numeric(contract_vals)) {
-          # Excel serial date number -> Date -> POSIXct
-          contract_posix <- as.POSIXct(as.Date(contract_vals, origin = "1899-12-30"))
-        } else {
-          showNotification(
-            paste0("Column '", contract_col, "' cannot be interpreted as dates for sale_age."),
-            type = "error", duration = 10
-          )
-          return()
-        }
+        )
+        if (is.null(sale_age)) return()
 
-        # Calculate sale_age in integer days
-        sale_age <- as.integer(difftime(eff_date, contract_posix, units = "days"))
         rv$data[["sale_age"]] <- sale_age
         rv$col_types[["sale_age"]] <- "integer"
 
@@ -2147,8 +2032,8 @@ function(input, output, session) {
             list(text = sprintf("Done in %.1fs",
                                 elapsed)))
           # Defer file I/O so tab content renders first.
-          # write_fit_log_ in onFlushed (fast).
-          # auto_export_for_mgcv_ (saveRDS) must not block tab rendering:
+          # write_fit_log in onFlushed (fast).
+          # auto_export_for_mgcv (saveRDS) must not block tab rendering:
           #   Unix/macOS: parallel::mcparallel() forks without serialization
           #   Windows: later::later() delays until tabs render, then blocks briefly
           # Must NOT use callr::r_bg — double-serialization corrupts the object.
@@ -2159,16 +2044,16 @@ function(input, output, session) {
             folder <- input$output_folder
             fname <- rv$file_name
             session$onFlushed(function() {
-              write_fit_log_(folder, traces, fname)
-              write_earth_output_(res, folder, fname)
+              write_fit_log(folder, traces, fname)
+              write_earth_output(res, folder, fname)
             }, once = TRUE)
             if (.Platform$OS.type == "unix") {
               parallel::mcparallel({
-                auto_export_for_mgcv_(res, folder, fname)
+                auto_export_for_mgcv(res, folder, fname)
               })
             } else {
               later::later(function() {
-                auto_export_for_mgcv_(res, folder, fname)
+                auto_export_for_mgcv(res, folder, fname)
               }, delay = 10)
             }
           })
@@ -2178,7 +2063,7 @@ function(input, output, session) {
             list(text = "Error"))
           showNotification(paste("Model error:", e$message),
                            type = "error", duration = 10)
-          write_fit_log_(input$output_folder, c(paste("ERROR:", e$message)), rv$file_name)
+          write_fit_log(input$output_folder, c(paste("ERROR:", e$message)), rv$file_name)
         })
       })
     }
@@ -2251,9 +2136,9 @@ function(input, output, session) {
             folder <- input$output_folder
             fname <- rv$file_name
             session$onFlushed(function() {
-              write_fit_log_(folder, traces, fname)
-              write_earth_output_(res, folder, fname)
-              auto_export_for_mgcv_(res, folder, fname)
+              write_fit_log(folder, traces, fname)
+              write_earth_output(res, folder, fname)
+              auto_export_for_mgcv(res, folder, fname)
             }, once = TRUE)
           })
         }, error = function(e) {
@@ -2274,7 +2159,7 @@ function(input, output, session) {
                            type = "error", duration = 15)
           # Write log file on error
           log_lines <- c(rv$trace_lines, paste("ERROR:", err_msg))
-          write_fit_log_(input$output_folder, log_lines, rv$file_name)
+          write_fit_log(input$output_folder, log_lines, rv$file_name)
         })
 
         rv$fitting <- FALSE
@@ -2290,7 +2175,7 @@ function(input, output, session) {
       proc$kill()
       rv$trace_lines <- c(rv$trace_lines, "Aborted by user.")
       eui_log_$err("5. Fit Earth Model", "Aborted by user")
-      write_fit_log_(input$output_folder, rv$trace_lines, rv$file_name)
+      write_fit_log(input$output_folder, rv$trace_lines, rv$file_name)
     }
     rv$fitting <- FALSE
     rv$bg_proc <- NULL
@@ -2991,11 +2876,6 @@ function(input, output, session) {
       return()
     }
 
-    # Compute gross_adj_pct for all weight > 0 rows (exclude subject row 1)
-    has_gross_pct <- "gross_adjustments" %in% colnames(rca) &&
-                     "sale_price" %in% colnames(rca)
-    wt_col <- if ("weight" %in% colnames(rca)) rca[["weight"]] else rep(1, n_total)
-
     # Find the sale_age column from specials or default to "sale_age"
     sg_specials <- input$col_specials
     sa_col_name <- "sale_age"
@@ -3005,51 +2885,9 @@ function(input, output, session) {
       }
     }
 
-    # Build comp info table (rows 2..n_total with weight > 0)
-    comp_info <- data.frame(
-      row       = 2:n_total,
-      id        = if ("id" %in% colnames(rca)) rca[["id"]][2:n_total] else 2:n_total,
-      address   = if ("street_address" %in% colnames(rca)) {
-                    rca[["street_address"]][2:n_total]
-                  } else rep("", n_total - 1),
-      sale_price = if ("sale_price" %in% colnames(rca)) {
-                     rca[["sale_price"]][2:n_total]
-                   } else rep(NA, n_total - 1),
-      sale_age  = if (sa_col_name %in% colnames(rca)) {
-                    rca[[sa_col_name]][2:n_total]
-                  } else rep(NA, n_total - 1),
-      weight    = wt_col[2:n_total],
-      gross_adj = if ("gross_adjustments" %in% colnames(rca)) {
-                    rca[["gross_adjustments"]][2:n_total]
-                  } else rep(0, n_total - 1),
-      stringsAsFactors = FALSE
-    )
-
-    # Compute gross_adj_pct
-    comp_info$gross_adj_pct <- ifelse(
-      !is.na(comp_info$sale_price) & comp_info$sale_price != 0,
-      abs(comp_info$gross_adj / comp_info$sale_price),
-      NA
-    )
-
-    # Filter: weight > 0 only
-    eligible <- comp_info[!is.na(comp_info$weight) & comp_info$weight > 0, ]
-
-    # Sort all eligible by gross_adj_pct ascending
-    eligible <- eligible[order(eligible$gross_adj_pct, na.last = TRUE), ]
-
-    # Recommended: gross_adj_pct < 0.25, then sort by sale_age ascending
-    recommended <- eligible[!is.na(eligible$gross_adj_pct) &
-                            eligible$gross_adj_pct < 0.25, ]
-    recommended <- recommended[order(recommended$sale_age, na.last = TRUE), ]
-
-    # Cap at 30
-    if (nrow(recommended) > 30) recommended <- recommended[1:30, ]
-
-    # Others not recommended (for "add more" section)
-    others <- eligible[is.na(eligible$gross_adj_pct) |
-                       eligible$gross_adj_pct >= 0.25, ]
-    others <- others[order(others$gross_adj_pct, na.last = TRUE), ]
+    sel <- select_sales_grid_comps(rca, sale_age_col = sa_col_name)
+    recommended <- sel$recommended
+    others      <- sel$others
 
     # Store for the confirm handler
     rv$sg_recommended <- recommended
@@ -3268,155 +3106,25 @@ function(input, output, session) {
         return()
       }
 
-      export_df <- rv$data
-
-      # --- Append model columns if a model is fitted ---
-      if (!is.null(rv$result)) {
-        model   <- rv$result$model
-        targets <- rv$result$target
-        eq      <- format_model_equation(rv$result)
-
-        # Find living_area column from specials
-        la_col <- NULL
-        specials <- input$col_specials
-        if (!is.null(specials)) {
-          for (nm in names(specials)) {
-            if (specials[[nm]] == "living_area" && nm %in% names(export_df)) {
-              la_col <- nm
-              break
-            }
-          }
-        }
-
-        multi <- length(targets) > 1L
-
-        # Align factor levels in export_df with training data so predict() works
-        # for rows with unseen levels, predictions will be NA
-        train_df <- rv$result$data
-        pred_df  <- export_df
-        for (col in names(train_df)) {
-          if (is.factor(train_df[[col]]) && col %in% names(pred_df)) {
-            pred_df[[col]] <- factor(pred_df[[col]],
-                                     levels = levels(train_df[[col]]))
-          }
-        }
-        pred_mat <- stats::predict(model, newdata = pred_df)
-
-        for (ri in seq_along(targets)) {
-          tgt <- targets[ri]
-          suffix <- if (multi) paste0("_", ri) else ""
-
-          # Get equation groups for this response
-          if (multi) {
-            eq_ri <- eq$equations[[ri]]
-          } else {
-            eq_ri <- eq
-          }
-          groups <- eq_ri$groups
-
-          # --- est_<target> from predict() ---
-          actual <- export_df[[tgt]]
-          # In appraisal mode, subject (row 1) has no real sale price
-          if (input$purpose == "appraisal" && nrow(export_df) >= 1L) {
-            actual[1L] <- NA_real_
-          }
-          predicted <- if (multi) as.numeric(pred_mat[, ri]) else as.numeric(pred_mat)
-
-          est_col <- paste0("est_", tgt)
-          export_df[[est_col]] <- round(predicted, 1)
-
-          # residual = actual - predicted (from model)
-          resid_col <- paste0("residual", suffix)
-          export_df[[resid_col]] <- round(actual - predicted, 1)
-
-          # CQA: % of comps with smaller signed residual / 10
-          # Large positive residual = high CQA (~10), large negative = low CQA (~0)
-          resid_vals <- export_df[[resid_col]]
-          n_valid <- sum(!is.na(resid_vals))
-          cqa_col <- paste0("cqa", suffix)
-          cqa_vals <- vapply(resid_vals, function(r) {
-            if (is.na(r)) return(NA_real_)
-            sum(resid_vals < r, na.rm = TRUE) / n_valid * 10
-          }, numeric(1))
-          export_df[[cqa_col]] <- round(cqa_vals, 2)
-
-          # residual_sf = residual / living_area
-          if (!is.null(la_col)) {
-            la <- export_df[[la_col]]
-            resid_sf_col <- paste0("residual_sf", suffix)
-            export_df[[resid_sf_col]] <- round(export_df[[resid_col]] / la, 1)
-
-            # CQA_SF: % of comps with smaller signed residual_sf / 10
-            resid_sf_vals <- export_df[[resid_sf_col]]
-            n_valid_sf <- sum(!is.na(resid_sf_vals))
-            cqa_sf_col <- paste0("cqa_sf", suffix)
-            cqa_sf_vals <- vapply(resid_sf_vals, function(r) {
-              if (is.na(r)) return(NA_real_)
-              sum(resid_sf_vals < r, na.rm = TRUE) / n_valid_sf * 10
-            }, numeric(1))
-            export_df[[cqa_sf_col]] <- round(cqa_sf_vals, 2)
-          }
-
-          # --- Per-g-function contributions ---
-          intercept_group <- NULL
-          contrib_groups  <- list()
-          for (grp in groups) {
-            if (grp$degree == 0L) {
-              intercept_group <- grp
-            } else {
-              contrib_groups <- c(contrib_groups, list(grp))
-            }
-          }
-
-          # Basis (intercept) contribution — constant for all rows
-          basis_val <- if (!is.null(intercept_group)) {
-            intercept_group$terms[[1]]$coefficient
-          } else {
-            0
-          }
-
-          contrib_total <- rep(basis_val, nrow(export_df))
-          for (grp in contrib_groups) {
-            col_label <- gsub(" ", "_", grp$label)
-            col_name  <- paste0(col_label, "_contribution", suffix)
-            contrib   <- earthUI:::eval_g_function_(model, grp, pred_df,
-                                                     response_idx = if (multi) ri else NULL)
-            export_df[[col_name]] <- round(contrib, 1)
-            contrib_total <- contrib_total + contrib
-          }
-
-          export_df[[paste0("basis", suffix)]] <- round(basis_val, 1)
-
-          # calc_residual = actual - (basis + all contributions)
-          calc_resid_col <- paste0("calc_residual", suffix)
-          export_df[[calc_resid_col]] <- round(actual - contrib_total, 1)
-
-        }
-      }
-
-      # Sort by residual_sf (or residual) descending for appraisal/market
-      if (input$purpose %in% c("appraisal", "market") && !is.null(rv$result)) {
-        has_subject <- (input$purpose == "appraisal") ||
-                       (input$purpose == "market" && isTRUE(input$skip_subject_row))
-        sort_col <- if ("residual_sf" %in% names(export_df)) "residual_sf" else "residual"
-        if (sort_col %in% names(export_df)) {
-          if (has_subject && nrow(export_df) >= 2L) {
-            comps <- export_df[2:nrow(export_df), , drop = FALSE]
-            comps <- comps[order(comps[[sort_col]], decreasing = TRUE, na.last = TRUE), , drop = FALSE]
-            export_df <- rbind(export_df[1L, , drop = FALSE], comps)
-          } else {
-            export_df <- export_df[order(export_df[[sort_col]], decreasing = TRUE, na.last = TRUE), , drop = FALSE]
+      # Find living_area column from specials
+      la_col <- NULL
+      specials <- input$col_specials
+      if (!is.null(specials)) {
+        for (nm in names(specials)) {
+          if (specials[[nm]] == "living_area" && nm %in% names(rv$data)) {
+            la_col <- nm
+            break
           }
         }
       }
 
-      # Move ranking columns to the left: residual_sf, cqa_sf, residual, cqa
-      rank_cols <- c("residual_sf", "cqa_sf", "residual", "cqa")
-      rank_cols <- rank_cols[rank_cols %in% names(export_df)]
-      if (length(rank_cols) > 0L) {
-        other_cols <- setdiff(names(export_df), rank_cols)
-        export_df <- export_df[, c(rank_cols, other_cols), drop = FALSE]
-      }
+      export_df <- compute_intermediate_output(
+        data             = rv$data,
+        result           = rv$result,
+        purpose          = input$purpose,
+        skip_subject_row = isTRUE(input$skip_subject_row),
+        living_area_col  = la_col
+      )
 
       # Write with openxlsx for cell formatting
       wb <- openxlsx::createWorkbook()
@@ -3513,15 +3221,6 @@ function(input, output, session) {
 
     tryCatch({
 
-      model   <- rv$result$model
-      targets <- rv$result$target
-      tgt     <- targets[1L]
-      eq      <- format_model_equation(rv$result)
-      eq_ri   <- if (length(targets) > 1L) eq$equations[[1L]] else eq
-      groups  <- eq_ri$groups
-      multi   <- length(targets) > 1L
-      ri      <- 1L
-
       # Find living_area column
       la_col <- NULL
       specials <- input$col_specials
@@ -3534,112 +3233,6 @@ function(input, output, session) {
         }
       }
 
-      export_df <- rv$data
-
-      # Align factor levels with training data
-      train_df <- rv$result$data
-      pred_df  <- export_df
-      for (col in names(train_df)) {
-        if (is.factor(train_df[[col]]) && col %in% names(pred_df)) {
-          pred_df[[col]] <- factor(pred_df[[col]],
-                                   levels = levels(train_df[[col]]))
-        }
-      }
-
-      # --- Predict on all rows ---
-      pred_mat <- stats::predict(model, newdata = pred_df)
-      predicted <- if (multi) as.numeric(pred_mat[, ri]) else as.numeric(pred_mat)
-      export_df[[paste0("est_", tgt)]] <- round(predicted, 1)
-
-      # Actual sale prices (subject = NA)
-      actual <- export_df[[tgt]]
-      actual[1L] <- NA_real_
-
-      # Residuals for comps
-      residuals_val <- actual - predicted
-      export_df[["residual"]] <- round(residuals_val, 1)
-
-      # Per-SF residuals
-      if (!is.null(la_col)) {
-        la <- export_df[[la_col]]
-        export_df[["residual_sf"]] <- round(residuals_val / la, 1)
-      }
-
-      # CQA scores (comps only, subject = NA)
-      comp_resid <- residuals_val[-1L]
-      n_comps <- sum(!is.na(comp_resid))
-      cqa_all <- vapply(residuals_val, function(r) {
-        if (is.na(r)) return(NA_real_)
-        sum(comp_resid < r, na.rm = TRUE) / n_comps * 10
-      }, numeric(1))
-      export_df[["cqa"]] <- round(cqa_all, 2)
-
-      if (!is.null(la_col)) {
-        resid_sf_vals <- export_df[["residual_sf"]]
-        comp_resid_sf <- resid_sf_vals[-1L]
-        n_comps_sf <- sum(!is.na(comp_resid_sf))
-        cqa_sf_all <- vapply(resid_sf_vals, function(r) {
-          if (is.na(r)) return(NA_real_)
-          sum(comp_resid_sf < r, na.rm = TRUE) / n_comps_sf * 10
-        }, numeric(1))
-        export_df[["cqa_sf"]] <- round(cqa_sf_all, 2)
-      }
-
-      # --- Step A: Interpolate subject residual from user CQA ---
-      use_sf <- (input$rca_cqa_type == "cqa_sf" && !is.null(la_col))
-      user_cqa <- as.numeric(input$rca_cqa_value)
-      if (is.na(user_cqa) || user_cqa < 0 || user_cqa > 9.99) {
-        showNotification("CQA score must be a number between 0.00 and 9.99.",
-                         type = "error", duration = 8)
-        return()
-      }
-
-      if (use_sf) {
-        comp_cqa_vals  <- export_df[["cqa_sf"]][-1L]
-        comp_resid_for_interp <- export_df[["residual_sf"]][-1L]
-      } else {
-        comp_cqa_vals  <- export_df[["cqa"]][-1L]
-        comp_resid_for_interp <- export_df[["residual"]][-1L]
-      }
-
-      # Remove NAs, sort by CQA ascending for interpolation
-      valid <- !is.na(comp_cqa_vals) & !is.na(comp_resid_for_interp)
-      cqa_sorted   <- comp_cqa_vals[valid]
-      resid_sorted <- comp_resid_for_interp[valid]
-      ord <- order(cqa_sorted)
-      cqa_sorted   <- cqa_sorted[ord]
-      resid_sorted <- resid_sorted[ord]
-
-      # Linear interpolation
-      subject_resid <- stats::approx(cqa_sorted, resid_sorted,
-                                     xout = user_cqa, rule = 2)$y
-
-      if (use_sf) {
-        # Convert per-SF residual back to total residual
-        subject_la <- export_df[[la_col]][1L]
-        subject_resid_total <- subject_resid * subject_la
-      } else {
-        subject_resid_total <- subject_resid
-      }
-
-      subject_est <- predicted[1L] + subject_resid_total
-      actual[1L] <- subject_est
-      residuals_val[1L] <- subject_resid_total
-      export_df[["residual"]][1L]           <- round(subject_resid_total, 1)
-      export_df[[paste0("est_", tgt)]][1L]  <- round(predicted[1L], 1)
-      export_df[["subject_value"]]          <- NA_real_
-      export_df[["subject_value"]][1L]      <- round(subject_est, 1)
-      export_df[["subject_cqa"]]            <- NA_real_
-      export_df[["subject_cqa"]][1L]        <- user_cqa
-
-      if (use_sf && !is.null(la_col)) {
-        export_df[["residual_sf"]][1L] <- round(subject_resid, 1)
-      }
-
-      # For weight-0 rows (rows 2+): use subject_value (est + subject residual)
-      # so the last 4 RCA columns can be computed.
-      # Sale price is left as-is; subject_value holds the conclusion.
-      zero_wt <- integer(0)
       # Resolve weight column: special type "weight" first, then weights_col
       rca_wt_col <- NULL
       if (!is.null(input$col_specials)) {
@@ -3651,210 +3244,19 @@ function(input, output, session) {
           input$weights_col != "null") {
         rca_wt_col <- input$weights_col
       }
-      if (!is.null(rca_wt_col) && rca_wt_col %in% names(export_df)) {
-        wvals <- export_df[[rca_wt_col]]
-        message("earthUI RCA: weight col class=", class(wvals),
-                ", unique vals=", paste(head(sort(unique(wvals)), 10), collapse=","),
-                ", n_zero=", sum(wvals == 0, na.rm = TRUE),
-                ", n_na=", sum(is.na(wvals)))
-        zero_wt <- which(wvals == 0)
-      }
-      if (length(zero_wt) > 0L) {
-        sv <- predicted[zero_wt] + subject_resid_total
-        export_df[["subject_value"]][zero_wt] <- round(sv, 1)
-        actual[zero_wt] <- sv
-        residuals_val <- actual - predicted
-        export_df[["residual"]][zero_wt] <- round(residuals_val[zero_wt], 1)
-        if (!is.null(la_col)) {
-          la <- export_df[[la_col]]
-          export_df[["residual_sf"]][zero_wt] <- round(residuals_val[zero_wt] / la[zero_wt], 1)
-        }
-      }
 
-      # --- Step B: Per-g-function contributions and adjustments ---
-      intercept_group <- NULL
-      contrib_groups  <- list()
-      for (grp in groups) {
-        if (grp$degree == 0L) {
-          intercept_group <- grp
-        } else {
-          contrib_groups <- c(contrib_groups, list(grp))
-        }
-      }
-
-      basis_val <- if (!is.null(intercept_group)) {
-        intercept_group$terms[[1]]$coefficient
-      } else {
-        0
-      }
-      export_df[["basis"]] <- round(basis_val, 1)
-
-      # Compute contributions for all rows, then adjustments = subject - comp
-      adj_sum    <- rep(0, nrow(export_df))
-      gross_sum  <- rep(0, nrow(export_df))
-      contrib_labels <- character(0)
-
-      for (grp in contrib_groups) {
-        col_label <- gsub(" ", "_", grp$label)
-        contrib_col <- paste0(col_label, "_contribution")
-        adj_col     <- paste0(col_label, "_adjustment")
-
-        contrib <- earthUI:::eval_g_function_(model, grp, pred_df,
-                                               response_idx = if (multi) ri else NULL)
-        export_df[[contrib_col]] <- round(contrib, 1)
-
-        # Adjustment = subject contribution - comp contribution
-        subject_contrib <- contrib[1L]
-        adjustment <- subject_contrib - contrib
-        export_df[[adj_col]] <- round(adjustment, 1)
-
-        adj_sum   <- adj_sum + adjustment
-        gross_sum <- gross_sum + abs(adjustment)
-        contrib_labels <- c(contrib_labels, col_label)
-      }
-
-      # residual_adjustment = subject residual - comp residual
-      resid_adj <- subject_resid_total - residuals_val
-      export_df[["residual_adjustment"]] <- round(resid_adj, 1)
-      adj_sum   <- adj_sum + resid_adj
-      gross_sum <- gross_sum + abs(resid_adj)
-
-      # adjusted_sale_price = sale_price + net_adjustments
-      # Use 'actual' which has imputed prices for weight-0 rows
-      export_df[["net_adjustments"]]      <- round(adj_sum, 1)
-      export_df[["gross_adjustments"]]    <- round(gross_sum, 1)
-
-      # Percentage columns (adjustment / comparable sale price)
-      export_df[["residual_pct"]]   <- round(resid_adj / actual, 4)
-      export_df[["net_adj_pct"]]    <- round(adj_sum / actual, 4)
-      export_df[["gross_adj_pct"]]  <- round(gross_sum / actual, 4)
-
-      export_df[["adjusted_sale_price"]]  <- round(actual + adj_sum, 1)
-
-      # --- Additional targets (e.g., rent) for weight-0 rows only ---
-      message("earthUI RCA: multi=", multi, ", length(targets)=", length(targets),
-              ", length(zero_wt)=", length(zero_wt),
-              ", weights_col=", input$weights_col %||% "NULL")
-      if (multi && length(zero_wt) > 0L) {
-        for (ri2 in 2:length(targets)) {
-          tgt2 <- targets[ri2]
-          eq_ri2 <- eq$equations[[ri2]]
-          groups2 <- eq_ri2$groups
-
-          # Column name prefix for this target (e.g., "rent")
-          tp <- tgt2
-
-          # Predictions for this target (all rows)
-          predicted2 <- as.numeric(pred_mat[, ri2])
-          export_df[[paste0("est_", tp)]] <- round(predicted2, 1)
-
-          # Residuals for comps with weight > 0 (for CQA interpolation)
-          actual2 <- export_df[[tgt2]]
-          actual2[1L] <- NA_real_
-          resid2 <- actual2 - predicted2
-
-          # CQA on this target (comps with weight > 0 only)
-          comp_resid2 <- resid2[-1L]
-          comp_resid2_valid <- comp_resid2[!is.na(comp_resid2)]
-          n_comps2 <- length(comp_resid2_valid)
-          cqa2 <- vapply(resid2, function(r) {
-            if (is.na(r)) return(NA_real_)
-            sum(comp_resid2_valid < r, na.rm = TRUE) / n_comps2 * 10
-          }, numeric(1))
-
-          # Interpolate subject residual for this target using same CQA score
-          if (use_sf) {
-            resid2_sf <- resid2 / la
-            comp_cqa2 <- cqa2[-1L]
-            comp_resid2_interp <- resid2_sf[-1L]
-          } else {
-            comp_cqa2 <- cqa2[-1L]
-            comp_resid2_interp <- resid2[-1L]
-          }
-          valid2 <- !is.na(comp_cqa2) & !is.na(comp_resid2_interp)
-          cqa2_sorted <- comp_cqa2[valid2]
-          resid2_sorted <- comp_resid2_interp[valid2]
-          ord2 <- order(cqa2_sorted)
-          cqa2_sorted <- cqa2_sorted[ord2]
-          resid2_sorted <- resid2_sorted[ord2]
-
-          subj_resid2 <- stats::approx(cqa2_sorted, resid2_sorted,
-                                        xout = user_cqa, rule = 2)$y
-          if (use_sf) {
-            subj_resid2_total <- subj_resid2 * export_df[[la_col]][1L]
-          } else {
-            subj_resid2_total <- subj_resid2
-          }
-
-          # Subject value for this target
-          subj_est2 <- predicted2[1L] + subj_resid2_total
-          sv_col <- paste0("subject_", tp, "_value")
-          export_df[[sv_col]] <- NA_real_
-          export_df[[sv_col]][1L] <- round(subj_est2, 1)
-
-          # Weight-0 rows: impute actual from est + subject residual
-          sv2 <- predicted2[zero_wt] + subj_resid2_total
-          export_df[[sv_col]][zero_wt] <- round(sv2, 1)
-          actual2[1L] <- subj_est2
-          actual2[zero_wt] <- sv2
-          resid2 <- actual2 - predicted2
-
-          export_df[[paste0(tp, "_residual")]] <- round(resid2, 1)
-
-          # Per-g-function contributions and adjustments for this target
-          intercept2 <- NULL
-          contrib_groups2 <- list()
-          for (grp in groups2) {
-            if (grp$degree == 0L) {
-              intercept2 <- grp
-            } else {
-              contrib_groups2 <- c(contrib_groups2, list(grp))
-            }
-          }
-
-          basis2 <- if (!is.null(intercept2)) intercept2$terms[[1]]$coefficient else 0
-          export_df[[paste0(tp, "_basis")]] <- round(basis2, 1)
-
-          adj_sum2 <- rep(0, nrow(export_df))
-          gross_sum2 <- rep(0, nrow(export_df))
-
-          for (grp in contrib_groups2) {
-            col_label <- gsub(" ", "_", grp$label)
-            contrib_col2 <- paste0(tp, "_", col_label, "_contribution")
-            adj_col2 <- paste0(tp, "_", col_label, "_adjustment")
-
-            contrib2 <- earthUI:::eval_g_function_(model, grp, pred_df,
-                                                     response_idx = ri2)
-            export_df[[contrib_col2]] <- round(contrib2, 1)
-
-            subj_contrib2 <- contrib2[1L]
-            adj2 <- subj_contrib2 - contrib2
-            export_df[[adj_col2]] <- round(adj2, 1)
-
-            adj_sum2 <- adj_sum2 + adj2
-            gross_sum2 <- gross_sum2 + abs(adj2)
-          }
-
-          resid_adj2 <- subj_resid2_total - resid2
-          export_df[[paste0(tp, "_residual_adjustment")]] <- round(resid_adj2, 1)
-          adj_sum2 <- adj_sum2 + resid_adj2
-          gross_sum2 <- gross_sum2 + abs(resid_adj2)
-
-          export_df[[paste0(tp, "_net_adjustments")]]   <- round(adj_sum2, 1)
-          export_df[[paste0(tp, "_gross_adjustments")]]  <- round(gross_sum2, 1)
-
-          # Percentage columns for additional targets
-          export_df[[paste0(tp, "_residual_pct")]]  <- round(resid_adj2 / actual2, 4)
-          export_df[[paste0(tp, "_net_adj_pct")]]    <- round(adj_sum2 / actual2, 4)
-          export_df[[paste0(tp, "_gross_adj_pct")]]  <- round(gross_sum2 / actual2, 4)
-
-          export_df[[paste0("adjusted_", tp)]] <- round(actual2 + adj_sum2, 1)
-        }
-      }
+      export_df <- compute_rca_adjustments(
+        data            = rv$data,
+        result          = rv$result,
+        user_cqa        = input$rca_cqa_value,
+        cqa_type        = input$rca_cqa_type,
+        living_area_col = la_col,
+        weight_col      = rca_wt_col
+      )
 
       writexl::write_xlsx(export_df, file)
       rv$rca_df <- export_df
-      rv$rca_targets <- targets
+      rv$rca_targets <- rv$result$target
       session$sendCustomMessage("download_check", list(id = "rca_output_btn"))
       eui_log_$end("7. Calculate RCA Adjustments & Download")
       showNotification(paste0("RCA output saved to: ", file),
