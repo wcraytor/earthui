@@ -36,15 +36,30 @@ params:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
+# Resolve assets path: explicit param wins; else fall back to a sibling
+# `report_data.rds` (so a self-contained bundle is renderable directly
+# via `quarto render` / `quarto preview` without external arguments).
+.data_file <- if (nzchar(params$data_file) && file.exists(params$data_file)) {
+                params$data_file
+              } else if (file.exists("report_data.rds")) {
+                "report_data.rds"
+              } else {
+                ""
+              }
+
 # Load pre-generated assets if available, otherwise fall back to computing
-if (nzchar(params$data_file) && file.exists(params$data_file)) {
-  .assets <- readRDS(params$data_file)
+if (nzchar(.data_file)) {
+  .assets <- readRDS(.data_file)
   result <- .assets$result
   summary_info <- .assets$summary_info
   gf <- .assets$gf
   multi <- .assets$multi
   targets <- .assets$targets
-  .plots_dir <- file.path(dirname(params$data_file), "plots")
+  .plots_dir <- file.path(dirname(.data_file), "plots")
+  if (.plots_dir == "./plots" || !nzchar(dirname(.data_file)) ||
+      identical(dirname(.data_file), ".")) {
+    .plots_dir <- "plots"
+  }
   .has_assets <- dir.exists(.plots_dir) &&
     length(list.files(.plots_dir)) > 0L
 } else if (nzchar(params$result_file) && file.exists(params$result_file)) {

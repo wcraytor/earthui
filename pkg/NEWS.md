@@ -1,3 +1,95 @@
+# earthUI 0.8.0
+
+## Project model (regProj)
+
+* New first-class **project** concept replaces the old per-file workflow.
+  A project is a stable, named entity at a fixed location in the regProj
+  tree (`<root>/<purpose>/<flat_segment>/<os>_in/...` and
+  `<os>_out_<method>/...`), holding all input files, outputs, and
+  settings together. Files within a project travel as a unit.
+* Top-of-sidebar Project picker with sort (Recent / A-Z) and a New
+  Project wizard that captures purpose, country, and admin-level
+  cascade with country-specific terminology.
+* Path layout is **flat**: `<purpose>/<country>_<state>_<county>_<city>_<project>/<os>_in/<file>`.
+  All admin levels concatenated into one segment via `_`. Reduces depth
+  from 13 to 8 directories under the regProj root. Encoded by
+  `regproj_flat_segment()`, decoded by `regproj_parse_flat()`.
+* Cross-OS multi-leaf scaffold: every project gets `mac_in`, `mac_out_*`,
+  `ubuntu_in`, `ubuntu_out_*`, `win11_in`, `win11_out_*` siblings.
+* Active-project model drives output paths automatically. The legacy
+  Output Folder field and Project Location cascade are gone — output
+  folder is set from the active project at session time.
+* Section "Import Data" reads from the active project's `<os>_in/`;
+  files added manually are picked up via Refresh.
+
+## Geo data + variable-depth admin schema
+
+* New `geo.sqlite` (in regProj root) replaces the old
+  `.regproj-index.json`. Two tables: `countries` and `admin_entries`
+  with variable depth via `(country, level, parent_codes)` index.
+  Supports any number of admin levels per country.
+* Comprehensive shipped data:
+  * **US**: 51 states, 3,076 counties, ~21,000 incorporated places (Census).
+  * **GB / DE / IT / FR / SE**: full GeoNames-derived state / county /
+    city data (~45,000 entries combined).
+  * **SG**: 1-level (planning area) data for Singapore.
+* Total ~70,000 admin entries shipped; users can add more via the
+  cascade's "create new" path. `regproj_index_get/put` API unchanged
+  for callers, just SQLite-backed now.
+* DE specifically uses `admin3_code` (Kreis) instead of GeoNames'
+  `admin2_code` (Regierungsbezirk), matching how German appraisers
+  think about administrative geography.
+
+## Per-project settings (`projects.sqlite`)
+
+* New `projects.sqlite` in regProj root replaces the user-level
+  `settings.sqlite` for project model settings. Keyed by
+  `(flat_segment, file_basename)`, separate JSON columns for earth,
+  glmnet, and mgcv settings/variables/interactions.
+* Public API: `get_project_settings()` and `set_project_settings()` —
+  read/write project settings programmatically without launching the
+  Shiny UI. Designed for ValEngr integration and batch automation.
+* Settings now travel with the regProj tree (sync, backup, share with
+  colleagues — all settings come too). User-level `settings.sqlite`
+  retained only for locale defaults.
+
+## Quarto report split: Generate + Convert
+
+* **Section 9 — "Generate Quarto Report"**: writes a self-contained
+  `.qmd` bundle (source + plot assets + reference.docx) under
+  `<project>/mac_out_earth/<base>_qmd/`. No Quarto rendering happens
+  at this step.
+* **Section 10 — "Convert Quarto Report"**: file picker + format
+  checkboxes (HTML / Word / PDF). Renders any `.qmd` file (not just
+  earthUI-generated) to selected formats. Useful for combining
+  reports across projects via Quarto's `{{< include >}}`.
+* New exports: `generate_quarto_report()`, `convert_quarto_file()`.
+* `report_data.rds` is now a lean ~hundreds-of-KB asset (down from
+  hundreds of MB) — the bulky earth model object is no longer saved
+  since the qmd reads pre-generated plots from disk.
+* Quarto `.qmd` template now self-renders against a sibling
+  `report_data.rds` when no `params` are passed, so
+  `quarto preview Appraisal_1.qmd` works standalone.
+
+## Settings tab
+
+* New "regProj Root Folder" config in the Settings dropdown — set the
+  location of the regProj tree per machine. Persisted in the per-OS
+  prefs file at `R_user_dir("earthUI", "config")/prefs.json`.
+* Resolution order: `REGPROJ_ROOT` env var → prefs file →
+  per-OS default (`~/regProj` Mac/Linux, `C:/regProj` Win).
+
+## Other
+
+* Server startup extends `PATH` with `/usr/local/bin`, `/opt/homebrew/bin`,
+  and TinyTeX bin paths so Quarto / pandoc / latex are findable from
+  the Shiny session even when launched from a stripped-PATH context.
+* Per-session DB connections (one geo, one projects) — eliminates
+  per-render connection overhead.
+* Sales Comparison Grid now exported as `build_sales_grid()` from
+  the package (extracted from the old inst/app/sales_grid.R).
+  Available to batch scripts and ValEngr.
+
 # earthUI 0.7.0
 
 ## Per-Purpose Settings

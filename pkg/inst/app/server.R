@@ -1,5 +1,21 @@
 function(input, output, session) {
 
+  # --- Ensure standard Mac/Homebrew binary locations are on PATH so the
+  # quarto / pandoc / latex CLIs are findable from this R process even when
+  # the launcher (RStudio, launchd, etc.) stripped them from PATH. ---
+  local({
+    cur <- strsplit(Sys.getenv("PATH"), ":", fixed = TRUE)[[1L]]
+    extra <- c("/usr/local/bin", "/opt/homebrew/bin",
+               file.path(Sys.getenv("HOME"), ".TinyTeX", "bin", "x86_64-darwin"),
+               file.path(Sys.getenv("HOME"), ".TinyTeX", "bin", "universal-darwin"),
+               file.path(Sys.getenv("HOME"), "bin"))
+    extra <- extra[dir.exists(extra) & !extra %in% cur]
+    if (length(extra) > 0L) {
+      Sys.setenv(PATH = paste(c(cur, extra), collapse = ":"))
+      message("earthUI: extended PATH with ", paste(extra, collapse = ", "))
+    }
+  })
+
   # --- Plot dimension helper (clientData width/height, fixed res=96) ---
   plot_dims_ <- function(id) {
     full_id <- if (!is.null(session$ns)) session$ns(id) else id
@@ -108,8 +124,22 @@ function(input, output, session) {
     rca_targets = NULL,        # target variable names for RCA plots
     sg_recommended = NULL,     # recommended comps for sales grid
     sg_others = NULL,          # other comps for sales grid
-    current_purpose = "general"   # track current purpose for settings keying
+    current_purpose = "general",   # track current purpose for settings keying
+    active_project = NULL,         # active regProj project (1-row data.frame) or NULL
+    project_sort = "recent",       # "recent" or "alpha"
+    project_refresh_token = 0L     # bump to force re-walk of regProj tree
   )
+
+  # --- Geo DB connection (per-session, not per-render) ---
+  geo_con_ <- tryCatch(regproj_geo_db_connect(),
+                       error = function(e) NULL)
+  # Projects DB connection (per-session) for per-file settings.
+  projects_con_ <- tryCatch(regproj_projects_db_connect(),
+                            error = function(e) NULL)
+  session$onSessionEnded(function() {
+    if (!is.null(geo_con_))      try(DBI::dbDisconnect(geo_con_),      silent = TRUE)
+    if (!is.null(projects_con_)) try(DBI::dbDisconnect(projects_con_), silent = TRUE)
+  })
 
   # --- Output folder directory browser ---
   volumes <- c(Home = path.expand("~"), shinyFiles::getVolumes()())
@@ -131,6 +161,524 @@ function(input, output, session) {
     dir_info <- shinyFiles::parseDirPath(volumes, input$output_folder_browse)
     if (length(dir_info) > 0 && nzchar(dir_info)) {
       updateTextInput(session, "output_folder", value = as.character(dir_info))
+    }
+  })
+
+  # --- regProj root folder (Settings) ---
+  # Populate the field at session start from default_regproj_root().
+  observe({
+    req(session)
+    # only set once, on first connect
+    isolate({
+      if (is.null(input$regproj_root) || !nzchar(input$regproj_root %||% "")) {
+        updateTextInput(session, "regproj_root", value = default_regproj_root())
+      }
+    })
+  })
+
+  shinyFiles::shinyDirChoose(input, "regproj_root_browse",
+                             roots = volumes, session = session,
+                             restrictions = system.file(package = "base"))
+  observeEvent(input$regproj_root_browse, {
+    dir_info <- shinyFiles::parseDirPath(volumes, input$regproj_root_browse)
+    if (length(dir_info) > 0 && nzchar(dir_info)) {
+      updateTextInput(session, "regproj_root", value = as.character(dir_info))
+    }
+  })
+
+  observeEvent(input$regproj_root_save, {
+    p <- trimws(input$regproj_root %||% "")
+    if (!nzchar(p)) {
+      showNotification("regProj root folder is empty.",
+                       type = "error", duration = 5); return()
+    }
+    p <- path.expand(p)
+    if (!dir.exists(p)) {
+      ok <- tryCatch({ dir.create(p, recursive = TRUE); TRUE },
+                     error = function(e) FALSE,
+                     warning = function(w) FALSE)
+      if (!ok || !dir.exists(p)) {
+        showNotification(sprintf("Cannot create or access: %s", p),
+                         type = "error", duration = 6); return()
+      }
+    }
+    prefs <- earthui_prefs_read()
+    prefs$regproj_root <- p
+    earthui_prefs_write(prefs)
+    rv$project_refresh_token <- rv$project_refresh_token + 1L
+    showNotification(sprintf("regProj root saved: %s", p),
+                     type = "message", duration = 5)
+  })
+
+  # --- regProj Project Location cascade (Phase B) ---
+
+  # Helper: returns TRUE if this level has shipped reference data
+  # (US state and US county currently). Such levels render as plain
+  # selectInput with no free-typing; others render as selectizeInput
+  # with create=TRUE so users can pick existing or type new.
+  level_has_shipped_ <- function(country, level_idx) {
+    country == "us" && level_idx %in% c(1L, 2L)
+  }
+
+  # Helper: build choices for a level dropdown via a single targeted
+  # query against admin_entries. Returns "Full Name (code)" -> code.
+  # Uses the per-session connection (geo_con_) and the
+  # (country, level, parent_codes) index for fast lookup.
+  build_level_choices_ <- function(country, parent_codes, level_idx) {
+    if (is.null(geo_con_)) return(character(0))
+    parent_path <- paste(parent_codes, collapse = "/")
+    res <- DBI::dbGetQuery(geo_con_,
+      "SELECT code, name FROM admin_entries
+        WHERE country = ? AND level = ? AND parent_codes = ?
+        ORDER BY name",
+      params = list(country, as.integer(level_idx), parent_path))
+    if (nrow(res) == 0L) return(character(0))
+    labels <- paste0(res$name, " (", res$code, ")")
+    setNames(res$code, labels)
+  }
+
+  # (Sidebar Project Location cascade + auto-populate observer removed
+  # in Phase E — replaced by the active-project model. The active-project
+  # observer below sets input$output_folder from the project's path.)
+
+  # --- Project picker (Phase B) ---
+
+  # Reactive list of projects on disk (re-walks when refresh_token bumps
+  # or when active_project / project_sort change).
+  projects_df_ <- reactive({
+    rv$project_refresh_token
+    regproj_list_projects(sort_by = rv$project_sort)
+  })
+
+  # Render the Project section: dropdown + sort + [+ New…] / [Close Project]
+  # / empty-state message.
+  output$regproj_project_ui <- renderUI({
+    df <- projects_df_()
+    active <- rv$active_project
+
+    # Active project banner (when one is selected)
+    if (!is.null(active)) {
+      pur_label <- switch(active$purpose,
+                          gen = "General", appr = "Appraisal",
+                          mktarea = "Market Area", active$purpose)
+      loc_friendly <- paste(pur_label, "·",
+                            toupper(active$country), "·",
+                            toupper(active$state), "·",
+                            active$county, "·", active$city)
+      return(tagList(
+        tags$div(style = "margin-bottom:4px;", strong(active$project_name)),
+        tags$div(class = "small text-muted",
+                 style = "margin-bottom:8px; word-break: break-all;",
+                 loc_friendly),
+        tags$div(style = "display:flex; gap:6px; flex-wrap: wrap;",
+          actionButton("regproj_project_close", "Close Project",
+                       class = "btn btn-outline-secondary btn-sm"),
+          actionButton("regproj_project_info", "Info",
+                       class = "btn btn-outline-secondary btn-sm"),
+          actionButton("regproj_project_new", "+ New…",
+                       class = "btn btn-outline-primary btn-sm")
+        )
+      ))
+    }
+
+    # No active project: show picker / empty-state + [+ New…]
+    if (nrow(df) == 0L) {
+      return(tagList(
+        tags$div(class = "small text-muted", style = "margin-bottom:8px;",
+                 "(no projects yet — click + New to create one)"),
+        actionButton("regproj_project_new", "+ New…",
+                     class = "btn btn-outline-primary btn-sm")
+      ))
+    }
+
+    # Build choices: "Project Name — purpose / country / .../ city" -> path
+    labels <- paste0(df$project_name, "  —  ",
+                     df$purpose, " / ", df$country, " / ", df$state,
+                     " / ", df$county, " / ", df$city)
+    choices <- setNames(df$project_path, labels)
+    tagList(
+      selectizeInput("regproj_project_pick", NULL,
+                     choices  = c("(select a project)" = "", choices),
+                     selected = "", width = "100%"),
+      tags$div(style = "display:flex; gap:6px; align-items:center;",
+        radioButtons("regproj_project_sort", NULL,
+                     choices = c("Recent" = "recent", "A-Z" = "alpha"),
+                     selected = rv$project_sort, inline = TRUE),
+        actionButton("regproj_project_new", "+ New…",
+                     class = "btn btn-outline-primary btn-sm")
+      )
+    )
+  })
+
+  # Sort toggle observer
+  observeEvent(input$regproj_project_sort, {
+    rv$project_sort <- input$regproj_project_sort
+  }, ignoreInit = TRUE)
+
+  # Picking a project from the dropdown sets it active
+  observeEvent(input$regproj_project_pick, {
+    p <- input$regproj_project_pick
+    if (is.null(p) || !nzchar(p)) return()
+    df <- projects_df_()
+    row <- df[df$project_path == p, , drop = FALSE]
+    if (nrow(row) == 1L) rv$active_project <- row
+  }, ignoreInit = TRUE)
+
+  # [Close Project] returns to the empty / picker state
+  observeEvent(input$regproj_project_close, {
+    rv$active_project <- NULL
+  })
+
+  # [+ New…] — open the New Project modal. Reset inputs first so previous
+  # state (state/county/city selections, project name, etc.) doesn't leak.
+  observeEvent(input$regproj_project_new, {
+    updateRadioButtons(session, "np_purpose", selected = "appr")
+    updateTextInput(session, "np_project_name", value = "")
+    updateSelectInput(session, "np_country", selected = "us")
+    schema <- country_schema("us")
+    for (i in seq_along(schema)) {
+      lid <- paste0("np_level_", i)
+      if (level_has_shipped_("us", i)) {
+        updateSelectInput(session, lid, selected = "")
+      } else {
+        updateSelectizeInput(session, lid, selected = "")
+      }
+    }
+    showModal(modalDialog(
+      title = "Create New Project",
+      size = "l",
+      easyClose = FALSE,
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("np_create", "Create Project", class = "btn-primary")
+      ),
+
+      tags$div(class = "small text-muted",
+               style = "margin-bottom: 12px;",
+               "Country, State, County, City, and Purpose are locked once the project is created. Project Name can be renamed later (v1.5)."),
+
+      textInput("np_project_name", "Project Name *",
+                placeholder = "lowercase, _-, max 24 chars (e.g. lakemerritt_20260424)",
+                width = "100%"),
+
+      radioButtons("np_purpose", "Purpose *",
+                   choices = c("General" = "gen",
+                               "For Appraisal" = "appr",
+                               "Market Area Analysis" = "mktarea"),
+                   selected = "appr", inline = TRUE),
+
+      hr(),
+      tags$h5("Project Location"),
+
+      uiOutput("np_country_ui"),
+      uiOutput("np_levels_ui"),
+
+      hr(),
+      tags$h5("Initial Data File", style = "margin-bottom:4px;"),
+      tags$div(class = "small text-muted", style = "margin-bottom:8px;",
+               "Optional — you can also import files later. The file is copied into the project's in/ folder; the original name is preserved."),
+      fileInput("np_data_file", NULL,
+                accept = c(".csv", ".xlsx", ".xls"),
+                width = "100%")
+    ))
+  })
+
+  # Country dropdown for the New Project modal
+  output$np_country_ui <- renderUI({
+    ref <- regproj_reference()
+    labels <- paste0(unlist(ref$countries), " (", names(ref$countries), ")")
+    choices <- setNames(names(ref$countries), labels)
+    selectInput("np_country", "Country *",
+                choices = choices, selected = "us", width = "100%")
+  })
+
+  # Dynamic admin-level cascade for the New Project modal. Mirrors the
+  # sidebar cascade but uses np_level_<n> input IDs to avoid collisions.
+  output$np_levels_ui <- renderUI({
+    cc <- input$np_country %||% "us"
+    schema <- country_schema(cc)
+    if (length(schema) == 0L) {
+      return(tags$div(class = "small text-muted",
+                      "(no admin levels for this country)"))
+    }
+
+    last_idx <- length(schema)
+    parent_codes <- character(0)
+
+    inputs <- lapply(seq_along(schema), function(i) {
+      lbl <- tools::toTitleCase(gsub("_", " ", schema[i]))
+
+      # For PARENT levels (1..N-1): read input reactively so cascading
+      # dropdowns update when the parent changes. For the LEAF level (N):
+      # do NOT read input$np_level_<N> or input$np_level_<N>_name — that
+      # would re-render the cascade on every keystroke and lose focus.
+      if (i < last_idx) {
+        sel_val <- input[[paste0("np_level_", i)]]
+        if (!is.null(sel_val) && nzchar(sel_val)) parent_codes[i] <<- sel_val
+        sel <- if (!is.null(sel_val) && nzchar(sel_val)) sel_val else NULL
+      } else {
+        sel <- NULL
+      }
+      ch <- build_level_choices_(cc, parent_codes[seq_len(i - 1L)], i)
+
+      if (level_has_shipped_(cc, i)) {
+        selectInput(paste0("np_level_", i), paste0(lbl, " *"),
+                    choices = c("(pick…)" = "", ch),
+                    selected = sel, width = "100%")
+      } else if (i == last_idx) {
+        # City leaf: selectize+create populated from cities table for the
+        # chosen county (shipped + user-added). Display "Name (code)";
+        # value is the full name. On Create we resolve name->code via the
+        # cities table, or auto-abbreviate for new typed names.
+        ch_pairs <- ch
+        choices <- if (length(ch_pairs) == 0L) {
+          c("(pick a city or type new)" = "")
+        } else {
+          labels <- names(ch_pairs)
+          names_only <- sub(" \\([^)]*\\)$", "", labels)
+          c("(pick a city or type new)" = "",
+            setNames(names_only, labels))
+        }
+        selectizeInput(paste0("np_level_", i), paste0(lbl, " *"),
+                       choices  = choices,
+                       selected = "",
+                       options  = list(create = TRUE,
+                                       placeholder = "Pick existing or type a new full name"),
+                       width    = "100%")
+      } else {
+        selectizeInput(paste0("np_level_", i), paste0(lbl, " *"),
+                       choices  = ch,
+                       selected = sel,
+                       options  = list(create = TRUE,
+                                       placeholder = "Pick existing or type a new name"),
+                       width    = "100%")
+      }
+    })
+    do.call(tagList, inputs)
+  })
+
+  # Create Project — validate everything, mkdir, write index entries,
+  # copy the data file (if any), and set as active.
+  observeEvent(input$np_create, {
+    cc <- input$np_country %||% ""
+    schema <- country_schema(cc)
+    last_idx <- length(schema)
+    proj <- trimws(input$np_project_name %||% "")
+    pur <- input$np_purpose %||% "appr"
+
+    # Field validation
+    if (!nzchar(proj) || !grepl("^[A-Za-z0-9_-]+$", proj) || nchar(proj) > 24L) {
+      showNotification("Project Name must match ^[A-Za-z0-9_-]+$ (letters, digits, _ and -) and be at most 24 chars.",
+                       type = "error", duration = 5); return()
+    }
+    if (length(schema) == 0L) {
+      showNotification("This country has no admin levels defined.",
+                       type = "error", duration = 5); return()
+    }
+
+    # Collect level codes (with city-leaf full-name → short-name handling)
+    levels <- character(length(schema))
+    parent_codes <- character(0)
+    for (i in seq_along(schema)) {
+      val <- input[[paste0("np_level_", i)]]
+      val <- if (is.null(val)) "" else trimws(as.character(val))
+
+      if (level_has_shipped_(cc, i)) {
+        if (!nzchar(val)) {
+          showNotification(sprintf("Missing %s.", schema[i]),
+                           type = "error", duration = 5); return()
+        }
+        levels[i] <- val
+      } else if (i == last_idx) {
+        # City leaf: val is the full name string (from selectize+create).
+        # Look it up by name in the cities table for this scope; if found
+        # use the existing code, else auto-derive a new code and persist.
+        full_name <- val
+        if (!nzchar(full_name)) {
+          showNotification("City is required.",
+                           type = "error", duration = 5); return()
+        }
+        scope <- paste(c(cc, parent_codes), collapse = "/")
+        existing_code <- regproj_index_get(scope, full_name)
+        if (!is.null(existing_code)) {
+          levels[i] <- existing_code
+        } else {
+          existing <- unname(unlist(build_level_choices_(cc, parent_codes, i)))
+          new_code <- city_abbreviation(full_name, existing)
+          regproj_index_put(scope, full_name, new_code)
+          levels[i] <- new_code
+        }
+      } else {
+        # Free-typed admin (selectize+create): if val is not in shipped/index,
+        # treat as new name and abbreviate
+        ch <- build_level_choices_(cc, parent_codes, i)
+        if (val %in% ch) {
+          levels[i] <- val
+        } else {
+          existing <- unname(unlist(ch))
+          code <- city_abbreviation(val, existing)
+          regproj_index_put(paste(c(cc, parent_codes), collapse = "/"),
+                            val, code)
+          levels[i] <- code
+        }
+      }
+      parent_codes[i] <- levels[i]
+    }
+
+    # Compose flat segment + project root, then uniqueness check
+    flat <- tryCatch(regproj_flat_segment(cc, levels, proj),
+                     error = function(e) {
+                       showNotification(paste("Path error:", conditionMessage(e)),
+                                        type = "error", duration = 5); NULL
+                     })
+    if (is.null(flat)) return()
+    proj_root <- file.path(default_regproj_root(), pur, flat)
+    if (dir.exists(proj_root)) {
+      showNotification(sprintf("A project named '%s' already exists in this location.", proj),
+                       type = "error", duration = 5); return()
+    }
+
+    # Create the full multi-OS directory tree as flat siblings under the
+    # project root: <project>/{mac_in, mac_out_earth, mac_out_glmnet, ...,
+    # ubuntu_in, ubuntu_out_earth, ..., win11_in, win11_out_earth, ...}.
+    # Any user on any OS can drop input files later without mkdir.
+    in_dir <- NULL
+    for (os_seg in c("mac", "ubuntu", "win11")) {
+      io_in <- regproj_path(pur, cc, levels, proj, os = os_seg,
+                            in_or_out = "in", create = TRUE)
+      for (m in c("earth", "glmnet", "mgcv", "combined")) {
+        regproj_path(pur, cc, levels, proj, os = os_seg,
+                     in_or_out = "out", method = m, create = TRUE)
+      }
+      if (os_seg == os_detect()) in_dir <- io_in
+    }
+
+    # Copy initial data file (if provided) into the current OS's in/ folder
+    fi <- input$np_data_file
+    if (!is.null(fi) && nrow(fi) >= 1L && !is.null(in_dir)) {
+      orig_name <- fi$name[1L]
+      file.copy(fi$datapath[1L], file.path(in_dir, orig_name), overwrite = FALSE)
+    }
+
+    # Refresh project list and set the new one active
+    rv$project_refresh_token <- rv$project_refresh_token + 1L
+    df <- regproj_list_projects(sort_by = rv$project_sort)
+    new_row <- df[df$project_path == proj_root, , drop = FALSE]
+    if (nrow(new_row) == 1L) rv$active_project <- new_row
+
+    removeModal()
+    showNotification(sprintf("Created project '%s' at %s", proj, proj_root),
+                     type = "message", duration = 6)
+  })
+
+  # [Info] — read-only metadata view for the active project. All fields
+  # locked in v1; project rename arrives in v1.5 (folder rename + settings
+  # DB key update).
+  observeEvent(input$regproj_project_info, {
+    p <- rv$active_project
+    if (is.null(p)) return()
+    pur_label <- switch(p$purpose,
+                        gen = "General", appr = "For Appraisal",
+                        mktarea = "Market Area Analysis", p$purpose)
+    ref <- tryCatch(regproj_reference(), error = function(e) NULL)
+    cn_name <- if (!is.null(ref)) ref$countries[[p$country]] %||% p$country
+               else p$country
+    st_name <- if (!is.null(ref) && !is.null(ref$states[[p$country]]))
+                 ref$states[[p$country]][[p$state]] %||% p$state
+               else p$state
+    county_name <- if (!is.null(ref) &&
+                       !is.null(ref$counties[[p$country]]) &&
+                       !is.null(ref$counties[[p$country]][[p$state]]))
+                     ref$counties[[p$country]][[p$state]][[p$county]] %||% p$county
+                   else p$county
+
+    row <- function(lbl, val) tags$tr(
+      tags$td(strong(paste0(lbl, ":")), style = "padding:4px 12px 4px 0; vertical-align:top;"),
+      tags$td(val, style = "padding:4px 0;")
+    )
+
+    showModal(modalDialog(
+      title = "Project Information",
+      tags$table(
+        row("Project Name", tags$code(p$project_name)),
+        row("Purpose",      pur_label),
+        row("Country",      sprintf("%s (%s)", cn_name, p$country)),
+        row("State",        sprintf("%s (%s)", st_name, p$state)),
+        row("County",       sprintf("%s (%s)", county_name, p$county)),
+        row("City",         tags$code(p$city)),
+        row("Last activity", format(p$mtime, "%Y-%m-%d %H:%M:%S")),
+        row("Path",
+            tags$code(style = "word-break:break-all; font-size:0.85em;",
+                      p$project_path))
+      ),
+      tags$div(class = "small text-muted",
+               style = "margin-top:12px;",
+               "Project metadata is locked. Folder rename support coming in v1.5."),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+
+  # Boolean output for conditionalPanel: is there an active project?
+  output$has_active_project <- reactive({ !is.null(rv$active_project) })
+  outputOptions(output, "has_active_project", suspendWhenHidden = FALSE)
+
+  # When the active project changes (open / close / switch): set the
+  # hidden Purpose radio to match the project, then reset all per-file
+  # state. The picker observer below will pick up the new project's
+  # last-used file and load it.
+  observeEvent(rv$active_project, ignoreNULL = FALSE, {
+    p <- rv$active_project
+    pur <- if (is.null(p)) "general" else
+      switch(p$purpose, gen = "general", appr = "appraisal",
+             mktarea = "market", "general")
+    updateRadioButtons(session, "purpose", selected = pur)
+
+    # Clear all per-file state on project change
+    rv$data        <- NULL
+    rv$file_name   <- NULL
+    rv$file_ext    <- NULL
+    rv$file_path   <- NULL
+    rv$sheets      <- NULL
+    rv$result      <- NULL
+    rv$rca_df      <- NULL
+    rv$rca_targets <- NULL
+    rv$sg_recommended <- NULL
+    rv$sg_others   <- NULL
+    rv$trace_lines <- character(0)
+    rv$wp_weights  <- NULL
+    rv$subset_conditions <- list()
+    session$sendCustomMessage("eui_tabs_ready", list(ready = FALSE))
+    if (!is.null(rv_report$assets_proc) &&
+        inherits(rv_report$assets_proc, "r_process") &&
+        rv_report$assets_proc$is_alive()) {
+      rv_report$assets_proc$kill()
+    }
+    rv_report$assets_proc <- NULL
+    if (!is.null(rv_report$assets_dir)) {
+      unlink(rv_report$assets_dir, recursive = TRUE)
+      rv_report$assets_dir <- NULL
+    }
+    if (is.null(p)) {
+      updateTextInput(session, "output_folder", value = "")
+      message("earthUI: project closed — all data cleared")
+    } else {
+      out_dir <- file.path(p$project_path, paste0(os_detect(), "_out_earth"))
+      if (!dir.exists(out_dir)) {
+        dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+      }
+      updateTextInput(session, "output_folder", value = out_dir)
+
+      message("earthUI: project '", p$project_name,
+              "' active — all per-file state cleared, output_folder=",
+              out_dir)
+      # Auto-load the project's last-used file (if any)
+      last <- regproj_last_file_get(p$project_path)
+      if (!is.null(last)) {
+        in_dir <- file.path(p$project_path, paste0(os_detect(), "_in"))
+        full   <- file.path(in_dir, last)
+        if (file.exists(full)) load_data_file_(full, last)
+      }
     }
   })
 
@@ -207,20 +755,32 @@ function(input, output, session) {
   })
 
   # --- Data Import ---
-  observeEvent(input$file_input, {
-    req(input$file_input)
-    message("earthUI: file upload received: ", input$file_input$name)
-    message("earthUI: datapath = ", input$file_input$datapath)
-    message("earthUI: file exists = ", file.exists(input$file_input$datapath))
-    ext <- tolower(tools::file_ext(input$file_input$name))
-    rv$file_ext <- ext
-    rv$file_path <- input$file_input$datapath
-    rv$file_name <- input$file_input$name
+  # Shared file-load helper used by both the project-bound file picker
+  # and any legacy upload paths. Reads `path` (a real on-disk file) and
+  # presents it under the user-friendly `name`.
+  load_data_file_ <- function(path, name) {
+    message("earthUI: loading file: ", name, "  <- ", path)
+    if (!file.exists(path)) {
+      showNotification(sprintf("File not found: %s", path),
+                       type = "error", duration = 6)
+      return(invisible(NULL))
+    }
+    ext <- tolower(tools::file_ext(name))
+    rv$file_ext  <- ext
+    rv$file_path <- path
+    rv$file_name <- name
 
-    # Restore saved settings from SQLite into localStorage (purpose-aware)
     purpose <- input$purpose %||% "general"
-    db_key <- paste0(rv$file_name, "||", purpose)
-    saved <- earthUI:::settings_db_read_(settings_con, db_key)
+    saved <- NULL
+    p <- rv$active_project
+    if (!is.null(p) && !is.null(projects_con_)) {
+      flat <- basename(p$project_path)
+      saved <- tryCatch(
+        earthUI:::project_file_settings_read_(projects_con_, flat, rv$file_name),
+        error = function(e) {
+          message("earthUI: project settings read error: ", e$message); NULL
+        })
+    }
     if (!is.null(saved)) {
       session$sendCustomMessage("restore_all_settings", list(
         filename     = rv$file_name,
@@ -229,22 +789,21 @@ function(input, output, session) {
         variables    = saved$variables,
         interactions = saved$interactions
       ))
-      message("earthUI: restored settings from SQLite for: ", rv$file_name,
-              " (", purpose, ")")
+      message("earthUI: restored project settings for: ", rv$file_name,
+              " (project=", basename(p$project_path), ")")
     }
 
-    if (ext %in% c("xlsx", "xls")) {
-      rv$sheets <- readxl::excel_sheets(input$file_input$datapath)
-    } else {
-      rv$sheets <- NULL
-    }
+    rv$sheets <- if (ext %in% c("xlsx", "xls")) {
+      readxl::excel_sheets(path)
+    } else NULL
+
     tryCatch({
-      rv$data <- import_data(input$file_input$datapath, sheet = 1,
-                               sep = earthUI:::locale_csv_sep_(),
-                               dec = earthUI:::locale_csv_dec_())
+      rv$data <- import_data(path, sheet = 1,
+                             sep = earthUI:::locale_csv_sep_(),
+                             dec = earthUI:::locale_csv_dec_())
       rv$categoricals <- detect_categoricals(rv$data)
-      rv$col_types <- detect_types(rv$data)
-      rv$result <- NULL
+      rv$col_types    <- detect_types(rv$data)
+      rv$result       <- NULL
       if (!is.null(rv_report$assets_proc) &&
           inherits(rv_report$assets_proc, "r_process") &&
           rv_report$assets_proc$is_alive()) {
@@ -256,12 +815,57 @@ function(input, output, session) {
         rv_report$assets_dir <- NULL
       }
       rv_seed_history(integer(0))
-      message("earthUI: import OK, ", nrow(rv$data), " rows, ", ncol(rv$data), " cols")
+      message("earthUI: import OK, ", nrow(rv$data), " rows, ",
+              ncol(rv$data), " cols")
     }, error = function(e) {
       message("earthUI: IMPORT ERROR: ", e$message)
       showNotification(paste("Import error:", e$message),
                        type = "error", duration = 15)
     })
+  }   # end load_data_file_
+
+  # --- Project-bound file picker ---
+  # Lists files in active project's <os>/in/. Refreshes on project change
+  # and on the explicit Refresh link.
+  project_in_files_ <- reactive({
+    rv$project_refresh_token  # also bumps when refresh link is clicked
+    p <- rv$active_project
+    if (is.null(p)) return(character(0))
+    regproj_in_files(p$project_path)
+  })
+
+  observeEvent(input$regproj_files_refresh, {
+    rv$project_refresh_token <- rv$project_refresh_token + 1L
+  })
+
+  output$regproj_file_picker_ui <- renderUI({
+    files <- project_in_files_()
+    p <- rv$active_project
+    last <- if (!is.null(p)) regproj_last_file_get(p$project_path) else NULL
+    if (length(files) == 0L) {
+      return(tags$div(class = "small text-muted",
+                      "(no files in this project's in/ folder yet — drop CSV/Excel files into ",
+                      tags$code(file.path(p$project_path, paste0(os_detect(), "_in"))),
+                      " and click Refresh)"))
+    }
+    sel <- if (!is.null(last) && last %in% files) last else files[[1L]]
+    selectInput("regproj_file_pick", NULL,
+                choices = files, selected = sel, width = "100%")
+  })
+
+  # Selecting a file from the picker loads it.
+  observeEvent(input$regproj_file_pick, {
+    f <- input$regproj_file_pick
+    p <- rv$active_project
+    if (is.null(p) || is.null(f) || !nzchar(f)) return()
+    in_dir <- file.path(p$project_path, paste0(os_detect(), "_in"))
+    full <- file.path(in_dir, f)
+    if (!file.exists(full)) {
+      showNotification(sprintf("File not found: %s", full),
+                       type = "error", duration = 6); return()
+    }
+    regproj_last_file_set(p$project_path, f)
+    load_data_file_(full, f)
   })
 
   output$sheet_selector <- renderUI({
@@ -321,45 +925,12 @@ function(input, output, session) {
     session$sendCustomMessage("eui_rca_ready", list(ready = ready))
   })
 
-  # When the purpose radio changes: clear ALL state (data, results, tabs).
-  # User re-imports a file; file+purpose settings restore from localStorage.
-
+  # In the project model, purpose changes only via project switching.
+  # Just track the current value; state cleanup is handled by the
+  # active_project observer below (so the load-after-switch sequence
+  # doesn't race with a wipe triggered by updateRadioButtons).
   observeEvent(input$purpose, {
     rv$current_purpose <- input$purpose
-
-    # Clear imported data
-    rv$data      <- NULL
-    rv$file_name <- NULL
-    rv$file_ext  <- NULL
-    rv$file_path <- NULL
-    rv$sheets    <- NULL
-
-    # Clear all result / RCA / sales-grid state
-    rv$result       <- NULL
-    rv$rca_df       <- NULL
-    rv$rca_targets  <- NULL
-    rv$sg_recommended <- NULL
-    rv$sg_others    <- NULL
-    rv$trace_lines  <- character(0)
-    rv$wp_weights   <- NULL
-    rv$subset_conditions <- list()
-
-    # Clear tabs
-    session$sendCustomMessage("eui_tabs_ready", list(ready = FALSE))
-
-    # Kill any in-flight report asset process and clean up its temp dir
-    if (!is.null(rv_report$assets_proc) &&
-        inherits(rv_report$assets_proc, "r_process") &&
-        rv_report$assets_proc$is_alive()) {
-      rv_report$assets_proc$kill()
-    }
-    rv_report$assets_proc <- NULL
-    if (!is.null(rv_report$assets_dir)) {
-      unlink(rv_report$assets_dir, recursive = TRUE)
-      rv_report$assets_dir <- NULL
-    }
-
-    message("earthUI: purpose switched to '", input$purpose, "' — all data cleared")
   }, ignoreInit = TRUE)
 
   # Update weights dropdown with numeric column names when data loads
@@ -380,7 +951,7 @@ function(input, output, session) {
 
   output$report_heading <- renderUI({
     n <- if (identical(input$purpose, "appraisal")) "9" else "7"
-    h4(paste0(n, ". Download Report"))
+    h4(paste0(n, ". Generate Quarto Report"))
   })
 
   output$download_heading <- renderUI({
@@ -687,23 +1258,25 @@ function(input, output, session) {
     }
   }, ignoreInit = TRUE)
 
-  # --- Persist settings to SQLite (debounced from JS) ---
+  # --- Persist settings to projects.sqlite (debounced from JS) ---
+  # Settings are scoped to (active project, file basename). With no active
+  # project, saves are skipped — there's no place to write them.
   observeEvent(input$eui_save_trigger, {
     payload <- input$eui_save_trigger
     req(payload$filename)
-    # Encode purpose in the SQLite key: "filename||purpose"
-    purpose <- if (!is.null(payload$purpose)) payload$purpose else "general"
-    db_key <- paste0(payload$filename, "||", purpose)
+    p <- rv$active_project
+    if (is.null(p) || is.null(projects_con_)) return()
+    flat <- basename(p$project_path)
     tryCatch({
-      earthUI:::settings_db_write_(
-        settings_con,
-        filename     = db_key,
+      earthUI:::project_file_settings_write_(
+        projects_con_, flat, payload$filename,
         settings     = if (!is.null(payload$settings))     payload$settings     else "{}",
         variables    = if (!is.null(payload$variables))    payload$variables    else "{}",
-        interactions = if (!is.null(payload$interactions)) payload$interactions else "{}"
+        interactions = if (!is.null(payload$interactions)) payload$interactions else "{}",
+        method       = "earth"
       )
     }, error = function(e) {
-      message("earthUI: SQLite save error: ", e$message)
+      message("earthUI: project settings save error: ", e$message)
     })
   }, ignoreInit = TRUE)
 
@@ -898,11 +1471,12 @@ function(input, output, session) {
         var selectIds = ['target', 'weights_col',
                          'degree', 'pmethod', 'glm_family', 'trace',
                          'varmod_method'];
+        // output_folder excluded — owned by the active project, not by saved settings
         var numericIds = ['nprune', 'thresh', 'penalty', 'minspan', 'endspan',
                           'fast_k', 'nfold_override', 'nk', 'newvar_penalty',
                           'fast_beta', 'ncross', 'varmod_exponent', 'varmod_conv',
                           'varmod_clamp', 'varmod_minspan', 'adjust_endspan',
-                          'exhaustive_tol', 'output_folder', 'subset_arg'];
+                          'exhaustive_tol', 'subset_arg'];
         var checkboxIds = ['stratify', 'keepxy', 'scale_y', 'auto_linpreds',
                            'use_beta_cache', 'force_xtx_prune', 'get_leverages',
                            'force_weights', 'skip_subject_row'];
@@ -2744,6 +3318,77 @@ function(input, output, session) {
   rv_report <- reactiveValues(proc = NULL, out_path = NULL, assets_dir = NULL,
                               assets_proc = NULL)
 
+  # --- 9. Generate Quarto Report (writes .qmd + assets) ---
+  observeEvent(input$generate_qmd_btn, {
+    req(rv$result)
+    folder <- input$output_folder
+    if (is.null(folder) || !nzchar(folder)) {
+      showNotification("Active project's output folder is not set.",
+                       type = "error", duration = 6); return()
+    }
+    base <- tools::file_path_sans_ext(rv$file_name %||% "earth_report")
+    eui_log_$start("9. Generate Quarto Report")
+    tryCatch({
+      qmd_path <- generate_quarto_report(rv$result, dest_dir = folder,
+                                          base = base)
+      bundle_dir <- dirname(qmd_path)
+      eui_log_$end("9. Generate Quarto Report")
+      showNotification(paste0("Quarto bundle written to: ", bundle_dir),
+                       type = "message", duration = 8)
+      # Auto-fill the Convert section's source field with the new .qmd
+      updateTextInput(session, "convert_qmd_path", value = qmd_path)
+      session$sendCustomMessage("download_check",
+                                list(id = "generate_qmd_btn"))
+    }, error = function(e) {
+      eui_log_$err("9. Generate Quarto Report", e$message)
+      showNotification(paste("Generate error:", e$message),
+                       type = "error", duration = 12)
+    })
+  })
+
+  # --- 10. Convert Quarto Report (any .qmd → HTML/Word/PDF) ---
+  shinyFiles::shinyFileChoose(input, "convert_qmd_browse",
+                              roots = volumes, session = session,
+                              filetypes = c("qmd"))
+  observeEvent(input$convert_qmd_browse, {
+    sel <- shinyFiles::parseFilePaths(volumes, input$convert_qmd_browse)
+    if (nrow(sel) >= 1L && nzchar(sel$datapath[1L])) {
+      updateTextInput(session, "convert_qmd_path",
+                      value = as.character(sel$datapath[1L]))
+    }
+  })
+
+  observeEvent(input$convert_qmd_btn, {
+    qmd <- trimws(input$convert_qmd_path %||% "")
+    if (!nzchar(qmd) || !file.exists(qmd)) {
+      showNotification("Pick a valid .qmd file first.",
+                       type = "error", duration = 6); return()
+    }
+    fmts <- input$convert_formats
+    if (length(fmts) == 0L) {
+      showNotification("Select at least one output format.",
+                       type = "error", duration = 6); return()
+    }
+    paper <- earthUI:::locale_paper_()
+    eui_log_$start(paste0("10. Convert Quarto (", paste(fmts, collapse = ","), ")"))
+    tryCatch({
+      out_paths <- convert_quarto_file(qmd, formats = fmts,
+                                        paper_size = paper)
+      eui_log_$end(paste0("10. Convert Quarto (", paste(fmts, collapse = ","), ")"))
+      showNotification(paste0("Wrote ", length(out_paths), " file(s):\n",
+                              paste(out_paths, collapse = "\n")),
+                       type = "message", duration = 12)
+      session$sendCustomMessage("download_check_multi",
+                                list(id = "convert_qmd_btn"))
+    }, error = function(e) {
+      eui_log_$err(paste0("10. Convert Quarto (", paste(fmts, collapse = ","), ")"),
+                   e$message)
+      showNotification(paste("Convert error:", e$message),
+                       type = "error", duration = 15)
+    })
+  })
+
+  # --- Legacy single-shot Download Report (kept for back-compat) ---
   observeEvent(input$export_report_btn, {
     req(rv$result)
     # Don't start a new render if one is already running
@@ -3007,18 +3652,6 @@ function(input, output, session) {
             " comps (rows: ", paste(comp_rows, collapse = ","), ")")
 
     tryCatch({
-      tmp_adj <- tempfile(fileext = ".xlsx")
-      writexl::write_xlsx(rv$rca_df, tmp_adj)
-
-      grid_script <- system.file("app", "sales_grid.R", package = "earthUI")
-      if (!nzchar(grid_script)) {
-        showNotification("Sales grid script not found in package.",
-                         type = "error", duration = 10)
-        return()
-      }
-      source(grid_script, local = TRUE)
-
-      # Build specials named list from designations
       sg_specials_map <- list()
       sg_input <- input$col_specials
       if (!is.null(sg_input)) {
@@ -3035,12 +3668,12 @@ function(input, output, session) {
         message = "Generating Sales Grid",
         detail = sprintf("0 of %d comps processed", n_comp),
         value = 0, {
-        generate_sales_grid(
-          adjusted_file     = tmp_adj,
-          comp_rows         = comp_rows,
-          output_file       = out_path,
-          specials          = sg_specials_map,
-          progress_fn       = function(sheet, total_sheets, comps_done, total_comps) {
+        build_sales_grid(
+          rca_df       = rv$rca_df,
+          comp_rows    = comp_rows,
+          output_file  = out_path,
+          specials     = sg_specials_map,
+          progress_fn  = function(sheet, total_sheets, comps_done, total_comps) {
             setProgress(
               value = comps_done / total_comps,
               detail = sprintf("Sheet %d of %d — %d of %d comps processed",
@@ -3048,7 +3681,6 @@ function(input, output, session) {
           }
         )
       })
-      unlink(tmp_adj)
 
       eui_log_$end("8. Generate Sales Grid & Download")
       showNotification(paste0("Sales grid saved to: ", out_path,

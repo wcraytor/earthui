@@ -51,9 +51,17 @@ prepare_report_assets <- function(earth_result, assets_dir = NULL) {
   targets <- earth_result$target
   n_responses <- if (multi) length(targets) else 1L
 
-  # Save pre-computed data
+  # Save pre-computed data. Strip the heavy earth model + raw data from
+  # `result` — the report only reads small metadata (predictors, degree,
+  # cv_enabled, allowed_matrix, target, categoricals) and lets pre-saved
+  # plot files supply everything else. Without this, report_data.rds
+  # bloats to hundreds of MB on CV-heavy fits and readRDS can fail.
+  lean_result <- earth_result[c("target", "predictors", "categoricals",
+                                "linpreds", "degree", "cv_enabled",
+                                "allowed_matrix")]
+  class(lean_result) <- class(earth_result)
   saveRDS(list(
-    result       = earth_result,
+    result       = lean_result,
     summary_info = summary_info,
     equation     = equation,
     importance   = importance,
@@ -61,7 +69,7 @@ prepare_report_assets <- function(earth_result, assets_dir = NULL) {
     anova        = anova_df,
     multi        = multi,
     targets      = targets
-  ), file.path(assets_dir, "report_data.rds"))
+  ), file.path(assets_dir, "report_data.rds"), compress = "xz")
 
   # --- Set up font for plots (no network) ---
   use_showtext <- requireNamespace("sysfonts", quietly = TRUE) &&
@@ -179,6 +187,122 @@ prepare_report_assets <- function(earth_result, assets_dir = NULL) {
 
   if (use_showtext) showtext::showtext_auto(FALSE)
   invisible(assets_dir)
+}
+
+
+#' Generate a Quarto report source bundle (without rendering)
+#'
+#' Writes a self-contained Quarto project under `<dest_dir>/<base>_qmd/`
+#' containing the populated `<base>.qmd` source, all pre-generated plots
+#' (PNG + PDF), the report data RDS, and `reference.docx` for Word
+#' rendering. The resulting bundle can be edited or combined with other
+#' Quarto sources, then rendered to HTML / Word / PDF via
+#' [convert_quarto_file()].
+#'
+#' Use this when you want the Quarto source as a first-class artifact —
+#' e.g., to combine reports from multiple projects into a master document
+#' before publishing.
+#'
+#' @param earth_result An object of class `"earthUI_result"` as returned
+#'   by [fit_earth()].
+#' @param dest_dir Directory to write the bundle into. The bundle itself
+#'   lives at `<dest_dir>/<base>_qmd/`.
+#' @param base Bundle base name (no extension). The .qmd file inside is
+#'   named `<base>.qmd`.
+#'
+#' @return Invisibly, the absolute path to the generated `.qmd` file.
+#'
+#' @export
+generate_quarto_report <- function(earth_result, dest_dir, base = "earth_report") {
+  validate_earthUI_result(earth_result)
+  dest_dir <- path.expand(dest_dir)
+  bundle_dir <- file.path(dest_dir, paste0(base, "_qmd"))
+  dir.create(bundle_dir, recursive = TRUE, showWarnings = FALSE)
+  bundle_dir <- normalizePath(bundle_dir)
+
+  # Build assets directly inside the bundle
+  prepare_report_assets(earth_result, assets_dir = bundle_dir)
+
+  # Copy the Quarto template + reference.docx into the bundle
+  template <- system.file("quarto", "earth_report.qmd", package = "earthUI")
+  if (template == "")
+    stop("Quarto template not found. Try reinstalling 'earthUI'.",
+         call. = FALSE)
+  qmd_path <- file.path(bundle_dir, paste0(base, ".qmd"))
+  file.copy(template, qmd_path, overwrite = TRUE)
+
+  # Make the bundle self-rendering: inline default params so the .qmd
+  # finds report_data.rds + plots/ as siblings without external args.
+  qmd_text <- readLines(qmd_path, warn = FALSE)
+  qmd_text <- sub('^  data_file: ""$', '  data_file: "report_data.rds"',
+                  qmd_text)
+  writeLines(qmd_text, qmd_path)
+
+  ref_docx <- system.file("quarto", "reference.docx", package = "earthUI")
+  if (ref_docx != "")
+    file.copy(ref_docx, file.path(bundle_dir, "reference.docx"),
+              overwrite = TRUE)
+
+  message("earthUI: Quarto report bundle ready at ", bundle_dir)
+  invisible(qmd_path)
+}
+
+#' Convert a Quarto source file to one or more output formats
+#'
+#' Renders any `.qmd` file (not just earthUI-generated ones) to the
+#' requested formats via `quarto::quarto_render()`. Useful for
+#' converting hand-edited or manually-combined Quarto reports — e.g.,
+#' a master document that uses `{{< include >}}` to pull in multiple
+#' project reports.
+#'
+#' @param qmd_path Path to a Quarto source (`.qmd`) file.
+#' @param formats Character vector of output formats. Any subset of
+#'   `c("html", "docx", "pdf")`.
+#' @param output_dir Directory to write the rendered output(s). Defaults
+#'   to the same directory as `qmd_path`.
+#' @param paper_size Character: `"letter"` or `"a4"`. Used only for PDF
+#'   output. Default `"letter"`.
+#'
+#' @return Invisibly, a character vector of output file paths.
+#'
+#' @export
+convert_quarto_file <- function(qmd_path,
+                                formats = c("html"),
+                                output_dir = NULL,
+                                paper_size = "letter") {
+  if (!requireNamespace("quarto", quietly = TRUE)) {
+    stop("The 'quarto' package is required. ",
+         "Install it with: install.packages('quarto')", call. = FALSE)
+  }
+  qmd_path <- path.expand(qmd_path)
+  if (!file.exists(qmd_path))
+    stop("Quarto file not found: ", qmd_path, call. = FALSE)
+  formats <- match.arg(formats, c("html", "docx", "pdf"), several.ok = TRUE)
+  paper_size <- match.arg(paper_size, c("letter", "a4"))
+
+  if (is.null(output_dir)) output_dir <- dirname(qmd_path)
+  output_dir <- path.expand(output_dir)
+  if (!dir.exists(output_dir))
+    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+  base <- tools::file_path_sans_ext(basename(qmd_path))
+  out_paths <- character(0)
+  for (fmt in formats) {
+    out_file <- file.path(output_dir, paste0(base, ".", fmt))
+    message(sprintf("earthUI: rendering %s -> %s", fmt, out_file))
+    quarto::quarto_render(input = qmd_path,
+                          output_format = fmt,
+                          output_file   = basename(out_file),
+                          quiet         = FALSE)
+    # quarto_render writes to the qmd's directory; move if different
+    src <- file.path(dirname(qmd_path), basename(out_file))
+    if (normalizePath(src, mustWork = FALSE) !=
+        normalizePath(out_file, mustWork = FALSE)) {
+      if (file.exists(src)) file.rename(src, out_file)
+    }
+    out_paths <- c(out_paths, out_file)
+  }
+  invisible(out_paths)
 }
 
 

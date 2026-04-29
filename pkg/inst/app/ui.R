@@ -109,6 +109,23 @@ fluidPage(
                     choices = c("Letter" = "letter", "A4" = "a4"),
                     selected = "letter", width = "100%"),
         actionLink("locale_save_default", "Save as my default",
+                   style = "font-size: 0.85em; color: #5e81ac; display: block; margin-top: 4px;"),
+
+        tags$hr(style = "margin: 8px 0;"),
+        tags$div(style = "font-weight: bold; font-size: 0.9em; margin-bottom: 4px;",
+                 "regProj Root Folder"),
+        tags$div(class = "small text-muted",
+                 style = "margin-bottom: 6px;",
+                 "Where all projects are stored. Pick a drive with enough space."),
+        tags$div(style = "display:flex; gap:6px; align-items:flex-end;",
+          tags$div(style = "flex:1;",
+            textInput("regproj_root", NULL, value = "", width = "100%")),
+          shinyFiles::shinyDirButton("regproj_root_browse",
+                                     "Browse…", "Select regProj Root Folder",
+                                     class = "btn btn-outline-secondary btn-sm",
+                                     style = "margin-bottom:15px;")
+        ),
+        actionLink("regproj_root_save", "Save",
                    style = "font-size: 0.85em; color: #5e81ac; display: block; margin-top: 4px;")
       )
     ),
@@ -628,11 +645,13 @@ fluidPage(
                 }
               }
             });
-            // Numeric inputs
+            // Numeric inputs (output_folder is owned by the active project
+            // and intentionally excluded so a stale SQLite snapshot doesn't
+            // override the project-derived path)
             ['nprune','thresh','penalty','minspan','endspan','fast_k','nfold_override',
              'nk','newvar_penalty','fast_beta','ncross','varmod_exponent','varmod_conv',
              'varmod_clamp','varmod_minspan','adjust_endspan','exhaustive_tol',
-             'output_folder','random_seed'].forEach(function(id) {
+             'random_seed'].forEach(function(id) {
               if (s[id] !== undefined) $('#' + id).val(s[id]).trigger('change');
             });
             // Checkbox inputs
@@ -799,68 +818,56 @@ fluidPage(
     sidebarPanel(
       width = 4,
 
-      # --- Purpose ---
-      tags$div(
-        style = "font-weight: bold;",
-        radioButtons("purpose", "Purpose:",
-                     choices = c("General" = "general",
-                                 "For Appraisal" = "appraisal",
-                                 "Market Area Analysis" = "market"),
-                     selected = "general", inline = TRUE)
-      ),
-      conditionalPanel(
-        condition = "input.purpose !== 'appraisal'",
-        checkboxInput("skip_subject_row", "Skip first row", value = FALSE)
-      ),
-      hr(),
-
-      # --- Data Import ---
+      # --- Project (Phase B: top-of-sidebar selector) ---
       tags$details(class = "eui-section", open = NA,
-        tags$summary(h4("1. Import Data"),
+        tags$summary(h4("1. Project"),
           tags$span(class = "eui-section-info",
                     `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
-                    `data-bs-content` = "Upload a CSV or Excel file. Select the locale to match your file's decimal and field separators. For Excel files, choose the sheet to import.",
+                    `data-bs-content` = "Active project sets the location (purpose, country, state, county, city). Pick from existing or create a new one. Once a project is active its location is locked; click Close Project to switch.",
                     `data-bs-placement` = "left", onclick = "event.stopPropagation();",
                     "?")),
-        tags$div(class = "eui-locale-row", style = "display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;",
-          tags$label(class = "control-label", "Choose CSV or Excel file"),
-          tags$div(style = "display:flex; align-items:center; gap:6px;",
-            tags$label(class = "control-label", style = "margin-bottom:0;", "Locale"),
-            tags$div(style = "width:150px; margin-bottom:0;",
-              selectInput("locale_import", NULL,
-                          choices = earthUI:::locale_country_choices_(),
-                          selected = "us", width = "100%")
-            )
-          )
-        ),
-        fileInput("file_input", NULL,
-                  accept = c(".csv", ".xlsx", ".xls")),
-        uiOutput("sheet_selector"),
-        uiOutput("data_preview_info")
+        uiOutput("regproj_project_ui")
       ),
       hr(),
 
-      # --- 2. Output Folder ---
-      conditionalPanel(
-        condition = "output.data_loaded",
-        tags$details(class = "eui-section",
-          tags$summary(h4("2. Project Output Folder"),
-            tags$span(class = "eui-section-info",
-                      `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
-                      `data-bs-content` = "All output files (Excel, RDS, logs, reports) are saved to this folder. Change it to organize outputs per project.",
-                      `data-bs-placement` = "left", onclick = "event.stopPropagation();",
-                      "?")),
-          tags$div(style = "display:flex; gap:6px; align-items:flex-end;",
-            tags$div(style = "flex:1;",
-              textInput("output_folder", NULL,
-                        value = path.expand("~/Downloads"))),
-            shinyFiles::shinyDirButton("output_folder_browse",
-                                       "Browse\u2026", "Select Output Folder",
-                                       class = "btn btn-outline-secondary btn-sm",
-                                       style = "margin-bottom:15px;")
-          )
+      # --- Purpose (hidden — driven by active project; kept in DOM so
+      # existing input$purpose-based logic continues to work until Phase E) ---
+      conditionalPanel(condition = "false",
+        tags$div(
+          radioButtons("purpose", "Purpose:",
+                       choices = c("General" = "general",
+                                   "For Appraisal" = "appraisal",
+                                   "Market Area Analysis" = "market"),
+                       selected = "general", inline = TRUE)
         ),
-        hr()
+        checkboxInput("skip_subject_row", "Skip first row", value = FALSE)
+      ),
+
+      # --- Data Import (only when an active project exists) ---
+      conditionalPanel(condition = "output.has_active_project",
+        tags$details(class = "eui-section", open = NA,
+          tags$summary(h4("2. Import Data"),
+          tags$span(class = "eui-section-info",
+                    `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                    `data-bs-content` = "Pick a CSV or Excel file from the active project's in/ folder. Add files manually to <project>/<os>/in/ via Finder/Explorer; click Refresh to rescan. Locale (decimal/field separators) comes from the project's country.",
+                    `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                    "?")),
+        tags$label(class = "control-label", "Pick a file from the project's in/"),
+        uiOutput("regproj_file_picker_ui"),
+        actionLink("regproj_files_refresh", "Refresh file list",
+                   style = "font-size: 0.85em; color: #5e81ac; display: block; margin-top: 4px;"),
+        uiOutput("sheet_selector"),
+        uiOutput("data_preview_info")
+        )
+      ),
+      hr(),
+
+      # output_folder is now driven entirely by the active project \u2014 kept
+      # hidden in the DOM so existing input$output_folder readers continue
+      # to work. The active-project observer in server.R writes the
+      # canonical <project>/<os>/out/earth path on project switch.
+      conditionalPanel(condition = "false",
+        textInput("output_folder", NULL, value = "")
       ),
 
       # --- Variable Configuration ---
@@ -1261,7 +1268,7 @@ fluidPage(
           )
         ),
 
-        # --- Download Report ---
+        # --- 9. Generate Quarto Report (writes .qmd + assets, no rendering) ---
         conditionalPanel(
           condition = "output.model_fitted",
           hr(),
@@ -1269,23 +1276,49 @@ fluidPage(
             tags$summary(uiOutput("report_heading", inline = TRUE),
               tags$span(class = "eui-section-info",
                         `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
-                        `data-bs-content` = "Generates a Quarto report (HTML, Word, or PDF) with the model equation, summary statistics, variable importance, g-function plots, diagnostics, and correlation matrix.",
+                        `data-bs-content` = "Writes a self-contained Quarto report bundle (.qmd source + plots + data + reference.docx) to the project's output folder. The bundle can be edited or combined with other Quarto sources before being rendered via Section 10.",
                         `data-bs-placement` = "left", onclick = "event.stopPropagation();",
                         "?")),
-            selectInput("export_format", "Format",
-                        choices = {
-                          fmts <- c("HTML" = "html", "Word" = "docx")
-                          if (earthUI:::has_latex_()) {
-                            fmts <- c(fmts, "PDF" = "pdf")
-                          }
-                          fmts
-                        }),
+            actionButton("generate_qmd_btn", "Generate Quarto Report",
+                         class = "btn-primary",
+                         style = "width: 100%;")
+          )
+        ),
+
+        # --- 10. Convert Quarto Report (any .qmd) -> HTML/Word/PDF ---
+        conditionalPanel(
+          condition = "output.has_active_project",
+          hr(),
+          tags$details(class = "eui-section",
+            tags$summary(h4("10. Convert Quarto Report"),
+              tags$span(class = "eui-section-info",
+                        `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                        `data-bs-content` = "Renders any Quarto .qmd file to HTML / Word / PDF. Defaults to the current project's most recently generated bundle, but you can browse to any .qmd — useful for converting hand-authored or combined reports.",
+                        `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                        "?")),
+            tags$div(style = "display:flex; gap:6px; align-items:flex-end;",
+              tags$div(style = "flex:1;",
+                textInput("convert_qmd_path", "Quarto source (.qmd)", value = "")),
+              shinyFiles::shinyFilesButton("convert_qmd_browse", "Browse…",
+                                            "Choose a Quarto file",
+                                            multiple = FALSE,
+                                            class = "btn btn-outline-secondary btn-sm",
+                                            style = "margin-bottom:15px;")
+            ),
+            checkboxGroupInput("convert_formats", "Output formats",
+                               choices = {
+                                 fmts <- c("HTML" = "html", "Word" = "docx")
+                                 if (earthUI:::has_latex_())
+                                   fmts <- c(fmts, "PDF" = "pdf")
+                                 fmts
+                               },
+                               selected = "html", inline = TRUE),
             if (!earthUI:::has_latex_()) {
               tags$p(style = "font-size: 0.78em; color: #81A1C1; margin-top: -8px; margin-bottom: 6px;",
                 "PDF requires LaTeX. Install with: ",
                 tags$code("tinytex::install_tinytex()"))
             },
-            actionButton("export_report_btn", "Download Report",
+            actionButton("convert_qmd_btn", "Convert",
                          class = "btn-primary",
                          style = "width: 100%;")
           )

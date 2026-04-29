@@ -140,6 +140,7 @@ cfg_from_json <- function(json_path, data_file,
     contract_date_col = contract_col,
     living_area_col   = la_col,
     weight_col        = wt_col,
+    col_specials      = col_specials,
     subset_expr       = s$subset_arg %||% "",
     cqa_score         = rc$cqa_score,
     cqa_score_type    = cqa_type_internal,
@@ -316,11 +317,26 @@ run_market_area <- function(cfg) {
     cat("skipped RCA: cqa_score is null in config\n")
   }
 
-  # 9. Sales grid comp selection
+  # 9. Sales grid comp selection + workbook
   if (!is.null(rca_df)) {
     sel <- select_sales_grid_comps(rca_df)
     cat(sprintf("sales-grid comps: %d recommended, %d other eligible\n",
                 nrow(sel$recommended), nrow(sel$others)))
+    if (nrow(sel$recommended) > 0L &&
+        requireNamespace("openxlsx", quietly = TRUE)) {
+      sg_path <- file.path(cfg$output_folder, paste0(base, "_salesgrid.xlsx"))
+      tryCatch({
+        build_sales_grid(
+          rca_df      = rca_df,
+          comp_rows   = sel$recommended$row,
+          output_file = sg_path,
+          specials    = cfg$col_specials %||% list()
+        )
+        cat("wrote:", sg_path, "\n")
+      }, error = function(e) {
+        cat(sprintf("ERROR building sales grid: %s\n", conditionMessage(e)))
+      })
+    }
   }
 
   # 10. Reports — render each format listed in the JSON `reports` array
