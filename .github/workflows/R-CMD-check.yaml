@@ -48,4 +48,8 @@ jobs:
       - uses: r-lib/actions/check-r-package@v2
         with:
           working-directory: pkg
-          args: ${{ runner.os == 'Windows' && 'c("--as-cran", "--no-manual")' || '"--as-cran"' }}
+          # Skip the PDF reference-manual build on Windows and on R-devel:
+          # the R-devel runner's minimal TeX cannot build the manual *index*
+          # (the manual content itself is fine; the stable boxes below still
+          # build the full indexed manual, and CRAN builds it with full TeX).
+          args: ${{ (runner.os == 'Windows' || matrix.config.r == 'devel') && 'c("--as-cran", "--no-manual")' || '"--as-cran"' }}
