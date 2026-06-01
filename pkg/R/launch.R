@@ -5,8 +5,9 @@
 #' configuration, model fitting, result visualization, and report export.
 #'
 #' @param port Integer. Port number for the Shiny app. Defaults to 7878.
-#'   A fixed port ensures browser localStorage (saved settings) persists
-#'   across sessions.
+#'   A fixed port keeps browser-side UI preferences (theme, last-used purpose)
+#'   consistent across sessions. (Model configuration is saved server-side in
+#'   the project database, not in the browser.)
 #' @param ... Additional arguments passed to [shiny::runApp()].
 #'
 #' @return This function does not return a value; it launches the Shiny app.
@@ -21,19 +22,40 @@ launch <- function(port = 7878L, ...) {
     stop("earthUI requires R >= 4.1.0 (you have ", getRversion(), "). ",
          "Please update R from https://cran.r-project.org/", call. = FALSE)
   }
-  for (pkg in c("bslib", "DT", "jsonlite")) {
+  # UI-critical optional packages (declared in Suggests): the app cannot
+  # build its interface without these.
+  for (pkg in c("bslib", "DT", "shinyFiles")) {
     if (!requireNamespace(pkg, quietly = TRUE)) {
-      stop("Package '", pkg, "' is required for the Shiny app. ",
+      stop("Package '", pkg, "' is required to run the earthUI app. ",
            "Install it with: install.packages('", pkg, "')",
            call. = FALSE)
     }
   }
-  # Optional: SQLite settings persistence
+  # Settings persistence lives in the project database (projects.sqlite).
   for (pkg in c("DBI", "RSQLite")) {
     if (!requireNamespace(pkg, quietly = TRUE)) {
-      message("earthUI: '", pkg, "' not installed. ",
-              "Settings will be stored in browser localStorage only. ",
+      message("earthUI: '", pkg, "' not installed - per-project settings ",
+              "save/restore will be disabled. ",
               "Install with: install.packages('", pkg, "')")
+    }
+  }
+  # Feature-level optional packages: the app launches without them, but the
+  # corresponding feature is unavailable until installed.
+  feature_pkgs <- c(
+    callr     = "asynchronous model fitting (otherwise falls back to synchronous)",
+    writexl   = "Excel downloads",
+    knitr     = "report generation",
+    rmarkdown = "report generation",
+    quarto    = "Quarto report rendering"
+  )
+  missing_feat <- names(feature_pkgs)[!vapply(
+    names(feature_pkgs), requireNamespace, logical(1), quietly = TRUE)]
+  if (length(missing_feat) > 0L) {
+    message("earthUI: optional package(s) not installed - the related ",
+            "feature stays unavailable until you install them:")
+    for (pkg in missing_feat) {
+      message("  - ", pkg, ": ", feature_pkgs[[pkg]],
+              "  (install.packages('", pkg, "'))")
     }
   }
 

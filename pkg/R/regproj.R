@@ -95,7 +95,7 @@ country_schema <- function(cc) {
 #'   lowercase 2-letter codes.
 #' @export
 country_choices <- function() {
-  setNames(names(country_names_), unname(country_names_))
+  stats::setNames(names(country_names_), unname(country_names_))
 }
 
 #' Path to the per-user earthUI preferences file
@@ -205,7 +205,7 @@ regproj_reference <- function() {
   ref
 }
 
-#' Path to the central regProj name↔code index (legacy)
+#' Path to the central regProj name-to-code index (legacy)
 #'
 #' The geo data is now stored in `<REGPROJ_ROOT>/geo.sqlite` (see
 #' [regproj_geo_db_path()]). This path returns the location of the
@@ -243,7 +243,7 @@ regproj_index_read <- function(root = default_regproj_root()) {
 
   countries <- DBI::dbGetQuery(con, "SELECT code, name FROM countries")
   if (nrow(countries) > 0L) {
-    out[[""]] <- as.list(setNames(countries$code, countries$name))
+    out[[""]] <- as.list(stats::setNames(countries$code, countries$name))
   }
 
   ae <- DBI::dbGetQuery(con,
@@ -255,7 +255,7 @@ regproj_index_read <- function(root = default_regproj_root()) {
                      ae$country)
   for (sc in unique(ae$scope)) {
     sub <- ae[ae$scope == sc, ]
-    out[[sc]] <- as.list(setNames(sub$code, sub$name))
+    out[[sc]] <- as.list(stats::setNames(sub$code, sub$name))
   }
   out
 }
@@ -307,7 +307,7 @@ regproj_index_get <- function(scope, full_name,
   res$code[1L]
 }
 
-#' Set a name↔code mapping in the geo SQLite DB
+#' Set a name-to-code mapping in the geo SQLite DB
 #'
 #' Inserts (or replaces) the mapping under the given scope.
 #'

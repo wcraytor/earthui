@@ -2,7 +2,7 @@
 % Please edit documentation in R/regproj.R
 \name{regproj_index_path}
 \alias{regproj_index_path}
-\title{Path to the central regProj name↔code index (legacy)}
+\title{Path to the central regProj name-to-code index (legacy)}
 \usage{
 regproj_index_path(root = default_regproj_root())
 }

@@ -1,11 +1,12 @@
 ## R CMD check results
 
-0 errors | 0 warnings | 2 NOTEs
+0 errors | 0 warnings | 0 notes
 
-* NOTE: "Days since last update" — updating from 0.1.1 (accepted 2025-02-28)
-  with new features and bug fixes.
-* NOTE: "Skipping checking math rendering: package 'V8' unavailable" — V8 is
-  not required; math rendering uses MathJax in the Shiny app.
+(On CRAN's incoming checks a "Days since last update" and/or version-increment
+note may appear: 0.8.0 is a substantial feature release over the previously
+accepted 0.1.1. If the math-rendering note recurs ("Skipping checking math
+rendering: package 'V8' unavailable"), V8 is not required — math is rendered
+by MathJax/KaTeX in the Shiny app and reports, not at check time.)
 
 ## Test environments
 
@@ -13,17 +14,44 @@
 * GitHub Actions: ubuntu-latest (R release, R devel, R oldrel-1),
   macOS-latest (R release), windows-latest (R release)
 
-## Changes in v0.1.2
+## Dependencies
 
-* Added Sales Comparison Grid output for appraisal mode with Excel formulas,
-  sheet protection, and auto-recommended comp selection
-* Added special column types: dom, concessions, actual_age, effective_age,
-  lot_size, site_dimensions, area (in addition to existing types)
-* Added grouped rows in Sales Grid (Location, Site Size, Age) with combined
-  value contributions
-* Added Sale Price / Concessions / Net SP row with formula-based Net SP
-* Intermediate output (Step 6) now places ranking columns (residual_sf,
-  cqa_sf, residual, cqa) first and formats them in Excel
-* Fit Earth Model button no longer hidden inside collapsible section
-* Improved notification display for long file paths
-* Set minimum sidebar width to prevent predictor settings overlap
+* Imports are limited to packages used by the exported R API and core
+  computations (earth, ggplot2, shiny, DBI, RSQLite, jsonlite, openxlsx,
+  plotly, readxl, stats, tools, utils).
+* Packages used only by the bundled Shiny application and the report/vignette
+  tooling are in Suggests (bslib, callr, DT, knitr, rmarkdown, shinyFiles,
+  writexl, quarto, tinytex, showtext, sysfonts).
+
+## Major changes in 0.8.0
+
+* **Project model (regProj):** work is organized into first-class *projects*
+  at a fixed, cross-OS location. Geo reference data and per-project settings
+  travel with the project tree via two bundled SQLite databases
+  (`geo.sqlite`, `projects.sqlite`).
+* **Per-project settings:** the model configuration (target, predictors,
+  earth() parameters, allowed-interactions matrix, effective date) is saved
+  per (project, purpose) via explicit "Save current as default" buttons and
+  restored when the project is reopened. Public API `get_project_settings()` /
+  `set_project_settings()` for automation.
+* **Database durability:** `projects.sqlite` opens in WAL mode where
+  supported; the settings-schema migration runs in a single transaction with
+  crash recovery (an interrupted upgrade rolls back cleanly).
+* **Quarto reporting:** report generation is split into generate / convert /
+  render steps, producing HTML, PDF, and Word output.
+* **Batch execution:** Shiny workflows extracted into reusable `pkg/R/`
+  functions so models can be fit and exported without the GUI.
+
+## Bug fixes in 0.8.0
+
+* A Date column used as a model predictor is now aligned to the trained
+  frame at predict time (date -> numeric, factor levels matched), fixing a
+  prediction error on the Intermediate Output and RCA exports.
+* `fit_earth()` drops a non-zero `newvar.penalty` (with a message) when case
+  weights are present, which `earth` does not support.
+* Character date columns are parsed with a multi-format set, so any column
+  that validates as a date also coerces correctly.
+
+## Reverse dependencies
+
+* None (this package has no reverse dependencies on CRAN).

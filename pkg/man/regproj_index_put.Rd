@@ -2,7 +2,7 @@
 % Please edit documentation in R/regproj.R
 \name{regproj_index_put}
 \alias{regproj_index_put}
-\title{Set a name↔code mapping in the geo SQLite DB}
+\title{Set a name-to-code mapping in the geo SQLite DB}
 \usage{
 regproj_index_put(scope, full_name, code, root = default_regproj_root())
 }

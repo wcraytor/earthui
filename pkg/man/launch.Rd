@@ -8,8 +8,9 @@ launch(port = 7878L, ...)
 }
 \arguments{
 \item{port}{Integer. Port number for the Shiny app. Defaults to 7878.
-A fixed port ensures browser localStorage (saved settings) persists
-across sessions.}
+A fixed port keeps browser-side UI preferences (theme, last-used purpose)
+consistent across sessions. (Model configuration is saved server-side in
+the project database, not in the browser.)}
 
 \item{...}{Additional arguments passed to \code{\link[shiny:runApp]{shiny::runApp()}}.}
 }

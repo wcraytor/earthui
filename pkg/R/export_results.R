@@ -129,7 +129,7 @@ auto_export_for_mgcv <- function(result, output_folder, file_name) {
       TRUE
     }, error = function(e) {
       message("earthUI: RDS verification FAILED: ", e$message,
-              " — deleting corrupt file")
+              " - deleting corrupt file")
       unlink(out_path)
       FALSE
     })
