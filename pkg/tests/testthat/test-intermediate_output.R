@@ -132,3 +132,28 @@ test_that("ranking columns are in correct order", {
   expect_equal(reordered[1:4], ranking_cols)
   expect_equal(reordered[5:7], other_cols)
 })
+
+test_that("compute_intermediate_output predicts with a Date predictor (align_to_training_)", {
+  # Regression: a Date column used as a model predictor is numeric in the
+  # trained model but a Date in the raw newdata. Without align_to_training_,
+  # model.matrix.earth() dropped the column ("subscript out of bounds" /
+  # column-count mismatch). The prediction must succeed and not be all-NA.
+  skip_if_not_installed("earth")
+  set.seed(1)
+  n <- 50
+  df <- data.frame(
+    sale_price    = rnorm(n, 5e5, 5e4),
+    contract_date = as.Date("2024-01-01") + sample(0:300, n, TRUE),
+    sqft          = rnorm(n, 1800, 200)
+  )
+  result <- fit_earth(df, target = "sale_price",
+                      predictors = c("contract_date", "sqft"),
+                      type_map = list(contract_date = "Date", sqft = "numeric"))
+  # raw df still has contract_date as a Date
+  expect_true(inherits(df$contract_date, "Date"))
+  expect_no_error(
+    out <- compute_intermediate_output(df, result, purpose = "general")
+  )
+  expect_true("est_sale_price" %in% names(out))
+  expect_false(all(is.na(out$est_sale_price)))   # predictions landed
+})

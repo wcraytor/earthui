@@ -89,3 +89,19 @@ test_that("fit_earth with weights + NA removal + multi-target", {
   )
   expect_s3_class(result, "earthUI_result")
 })
+
+test_that("fit_earth drops newvar.penalty when case weights are present", {
+  # earth rejects a non-zero newvar.penalty together with case weights; the
+  # wrapper must drop it (with a message) rather than error.
+  w <- rep(1, nrow(mtcars)); w[1] <- 0   # zero weight => weighted code path
+  expect_no_error(
+    result <- fit_earth(mtcars, target = "mpg", predictors = c("wt", "hp"),
+                        newvar.penalty = 0.1, weights = w)
+  )
+  expect_s3_class(result, "earthUI_result")
+  # A zero penalty with weights is fine (earth's no-op default)
+  expect_no_error(
+    fit_earth(mtcars, target = "mpg", predictors = c("wt", "hp"),
+              newvar.penalty = 0, weights = w)
+  )
+})

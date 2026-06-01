@@ -35,7 +35,7 @@ lets you choose one of three modes:
   subject row exclusion.
 
 Switching purpose clears all state (imported data, results, settings). When
-you re-import a file, previously saved settings for that file and purpose
+you reopen the project, previously saved settings for that project and purpose
 combination are automatically restored.
 
 ### Getting Started
@@ -81,10 +81,11 @@ Changing an override only affects that one setting.
 ### Saving Defaults
 
 Click **Save as my default** to store your locale preferences globally. These
-defaults apply to all future sessions regardless of which data file you load.
-Per-file settings (target, predictors, parameters) are saved separately in
-the browser's local storage, keyed by both filename and purpose mode. Locale
-defaults persist across all files via an SQLite database.
+defaults apply to all future sessions regardless of which project you open.
+Project settings (target, predictors, parameters) are saved separately in the
+project database via the **Save current as default** buttons, scoped per
+project and purpose. Locale defaults persist across all projects via the same
+database.
 
 ## MLS Input Data Requirements
 
@@ -164,9 +165,9 @@ checkbox). In **General** mode, all rows are treated equally.
 
 The sidebar is organized into numbered sections:
 
-1. **Import Data** --- CSV or Excel file upload
-2. **Project Output Folder** --- where downloads are saved
-3. **Variable Configuration** --- target, predictors, data types, special columns
+1. **Project** --- pick or create a project; sets the input/output locations
+2. **Import Data** --- choose a CSV or Excel file from the project's input folder
+3. **Variable Configuration** --- target, effective date, predictors, data types, special columns
 4. **Earth Call Parameters** --- degree, penalty, pruning, CV, subset filters.
    Recommended values are displayed below key parameters (see below).
 5. **Fit Earth Model** --- green button to run the model
@@ -230,7 +231,8 @@ variable pairs can form interaction terms (hinge products).
 - **Left-click a variable name** (row or column) to toggle all its
   interactions at once
 - **Allow All / Clear All** buttons toggle the entire matrix
-- Selections persist via localStorage per input file
+- Selections are saved with the earth parameters when you click **Save current
+  as default** in Section 4 (stored in the project database, per project and purpose)
 
 ### Block from Degree 1 (Interaction Only)
 
@@ -363,7 +365,7 @@ In appraisal/market modes, rows are sorted by `residual_sf` descending.
 ## mgcvUI Auto-Export
 
 On every successful fit with `degree <= 2`, earthUI automatically saves the
-full result object as an `.rds` file to the Project Output Folder. The filename
+full result object as an `.rds` file to the project's output folder. The filename
 follows the pattern `<datafile>_earthUI_result_<YYYYMMDD_HHMMSS>.rds`.
 
 This file can be loaded by [mgcvUI](https://github.com/wcraytor/mgcvUI) (a

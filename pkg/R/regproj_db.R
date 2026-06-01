@@ -212,6 +212,12 @@ regproj_projects_db_connect <- function(root = default_regproj_root()) {
   p <- regproj_projects_db_path(root)
   con <- DBI::dbConnect(RSQLite::SQLite(), p)
   DBI::dbExecute(con, "PRAGMA foreign_keys = ON;")
+  # WAL journaling: a writer and reader don't block, and a crash mid-write
+  # rolls back to the last commit cleanly. Non-fatal if the filesystem (e.g.
+  # some network mounts) doesn't support it — SQLite falls back to the
+  # rollback journal, which is also atomic/crash-safe.
+  tryCatch(DBI::dbGetQuery(con, "PRAGMA journal_mode = WAL;"),
+           error = function(e) NULL)
   regproj_projects_db_init_(con)
   con
 }
@@ -230,12 +236,24 @@ regproj_projects_db_init_ <- function(con) {
       last_used_at      INTEGER,
       last_file         TEXT
     );")
-  # Per-file settings within a project. A project can hold multiple input
-  # files (different cleanings / variants); each gets its own row.
-  DBI::dbExecute(con, "
+  # Per-project settings, scoped by (flat_segment, purpose). Settings follow
+  # the PROJECT and its purpose, NOT the individual data file — a project
+  # commonly holds several files (a small test extract, the full dataset)
+  # that share the same columns and therefore the same variable/parameter
+  # configuration. The key is (project, purpose) so switching files keeps
+  # the configuration. (The table is still named project_file_settings for
+  # historical reasons; file_basename was removed from the key.)
+  #
+  # Migration: earlier schemas keyed on file_basename — either
+  # (flat_segment, file_basename) or (flat_segment, file_basename, purpose).
+  # If a file_basename column is present, rebuild keyed by (flat_segment,
+  # purpose), collapsing the project's per-file rows into one per purpose and
+  # keeping the most recently updated (SQLite returns the bare columns from
+  # the MAX(updated_at) row).
+  new_schema_sql <- "
     CREATE TABLE IF NOT EXISTS project_file_settings (
       flat_segment       TEXT NOT NULL,
-      file_basename      TEXT NOT NULL,
+      purpose            TEXT NOT NULL DEFAULT 'general',
       earth_settings     TEXT,
       earth_variables    TEXT,
       earth_interactions TEXT,
@@ -244,22 +262,107 @@ regproj_projects_db_init_ <- function(con) {
       mgcv_settings      TEXT,
       mgcv_variables     TEXT,
       updated_at         INTEGER,
-      PRIMARY KEY (flat_segment, file_basename)
-    );")
+      PRIMARY KEY (flat_segment, purpose)
+    );"
+
+  # Crash recovery: a prior, pre-transactional migration could be interrupted
+  # after renaming the table aside but before the new table was rebuilt,
+  # leaving the data only in project_file_settings_old. Restore it before
+  # doing anything else so the data is never stranded.
+  tbls <- DBI::dbListTables(con)
+  if (("project_file_settings_old" %in% tbls) &&
+      !("project_file_settings" %in% tbls)) {
+    DBI::dbExecute(con,
+      "ALTER TABLE project_file_settings_old RENAME TO project_file_settings;")
+  }
+
+  existing_cols <- DBI::dbGetQuery(con, "PRAGMA table_info(project_file_settings)")
+  has_table    <- nrow(existing_cols) > 0L
+  has_file_col <- has_table && ("file_basename" %in% existing_cols$name)
+  has_purpose  <- has_table && ("purpose" %in% existing_cols$name)
+
+  if (has_file_col) {
+    # purpose source: keep the old purpose column if present, otherwise derive
+    # it from the project's purpose code.
+    purpose_sql <- if (has_purpose) "o.purpose" else
+      "CASE p.purpose WHEN 'gen' THEN 'general' WHEN 'appr' THEN 'appraisal'
+                      WHEN 'mktarea' THEN 'market' ELSE 'general' END"
+    # ATOMIC upgrade: rename -> create new -> copy (collapsed to one row per
+    # (flat,purpose), newest kept) -> drop old, all in one transaction. If the
+    # process dies at any point the whole thing rolls back to the original
+    # table — no orphaned _old, no half-copied data, no torn schema.
+    DBI::dbWithTransaction(con, {
+      DBI::dbExecute(con, "DROP TABLE IF EXISTS project_file_settings_old;")
+      DBI::dbExecute(con,
+        "ALTER TABLE project_file_settings RENAME TO project_file_settings_old;")
+      DBI::dbExecute(con, new_schema_sql)
+      DBI::dbExecute(con, sprintf("
+        INSERT OR REPLACE INTO project_file_settings
+          (flat_segment, purpose, earth_settings, earth_variables,
+           earth_interactions, glmnet_settings, glmnet_variables,
+           mgcv_settings, mgcv_variables, updated_at)
+        SELECT o.flat_segment, %s,
+               o.earth_settings, o.earth_variables, o.earth_interactions,
+               o.glmnet_settings, o.glmnet_variables, o.mgcv_settings,
+               o.mgcv_variables, MAX(o.updated_at)
+        FROM project_file_settings_old o
+        LEFT JOIN projects p ON p.flat_segment = o.flat_segment
+        GROUP BY o.flat_segment, %s;", purpose_sql, purpose_sql))
+      DBI::dbExecute(con, "DROP TABLE project_file_settings_old;")
+    })
+  } else {
+    DBI::dbExecute(con, new_schema_sql)
+    # Drop any fully-superseded leftover from a completed-but-not-cleaned
+    # migration (the main table is already the new schema).
+    DBI::dbExecute(con, "DROP TABLE IF EXISTS project_file_settings_old;")
+  }
+
+  # Self-heal: an earlier bug saved settings under purpose='general' (the write
+  # took purpose from a stale JS global instead of the active project), so
+  # appraisal/market projects couldn't restore. Re-key each row to its
+  # project's actual purpose. INSERT OR REPLACE-safe via tryCatch.
+  tryCatch(
+    DBI::dbExecute(con, "
+      UPDATE project_file_settings
+      SET purpose = (
+        SELECT CASE p.purpose
+                 WHEN 'gen' THEN 'general'
+                 WHEN 'appr' THEN 'appraisal'
+                 WHEN 'mktarea' THEN 'market'
+                 ELSE 'general' END
+        FROM projects p
+        WHERE p.flat_segment = project_file_settings.flat_segment)
+      WHERE EXISTS (
+              SELECT 1 FROM projects p
+              WHERE p.flat_segment = project_file_settings.flat_segment)
+        AND purpose <> (
+          SELECT CASE p.purpose
+                   WHEN 'gen' THEN 'general'
+                   WHEN 'appr' THEN 'appraisal'
+                   WHEN 'mktarea' THEN 'market'
+                   ELSE 'general' END
+          FROM projects p
+          WHERE p.flat_segment = project_file_settings.flat_segment);"),
+    error = function(e)
+      message("earthUI: purpose reconciliation skipped: ", e$message))
+
   invisible(NULL)
 }
 
-# ---------- per-file settings CRUD (internal) ----------
+# ---------- per-project settings CRUD (internal) ----------
+# Keyed by (flat_segment, purpose) — settings follow the project + purpose,
+# not the data file.
 
-project_file_settings_read_ <- function(con, flat_segment, file_basename,
-                                         method = "earth") {
+project_file_settings_read_ <- function(con, flat_segment,
+                                         method = "earth",
+                                         purpose = "general") {
   row <- DBI::dbGetQuery(con,
     sprintf("SELECT %s_settings, %s_variables%s
               FROM project_file_settings
-              WHERE flat_segment = ? AND file_basename = ?",
+              WHERE flat_segment = ? AND purpose = ?",
             method, method,
             if (method == "earth") ", earth_interactions" else ""),
-    params = list(flat_segment, file_basename))
+    params = list(flat_segment, purpose))
   if (nrow(row) == 0L) return(NULL)
   vals <- list(
     settings  = row[[paste0(method, "_settings")]][1L],
@@ -277,25 +380,37 @@ project_file_settings_read_ <- function(con, flat_segment, file_basename,
   vals
 }
 
-project_file_settings_write_ <- function(con, flat_segment, file_basename,
+project_file_settings_write_ <- function(con, flat_segment,
                                           settings = NULL, variables = NULL,
                                           interactions = NULL,
-                                          method = "earth") {
-  cols <- c(paste0(method, "_settings"), paste0(method, "_variables"))
-  vals <- list(settings, variables)
-  if (method == "earth") {
-    cols <- c(cols, "earth_interactions")
-    vals <- c(vals, list(interactions))
+                                          method = "earth",
+                                          purpose = "general") {
+  # Only write columns whose values were supplied (non-NULL). A NULL arg means
+  # "leave the existing value untouched", so a partial save (e.g. settings +
+  # variables persisted at fit time) does not clobber a column it isn't
+  # responsible for (e.g. earth_interactions, owned by the JS matrix handler).
+  cols <- character(0)
+  vals <- list()
+  if (!is.null(settings)) {
+    cols <- c(cols, paste0(method, "_settings"));  vals <- c(vals, list(settings))
   }
+  if (!is.null(variables)) {
+    cols <- c(cols, paste0(method, "_variables")); vals <- c(vals, list(variables))
+  }
+  if (method == "earth" && !is.null(interactions)) {
+    cols <- c(cols, "earth_interactions");         vals <- c(vals, list(interactions))
+  }
+  if (length(cols) == 0L) return(invisible(NULL))  # nothing supplied
+
   ts <- as.integer(Sys.time())
-  # UPSERT: insert if missing, update the relevant cols if present
+  # UPSERT: insert if missing, update only the supplied cols if present
   set_clause <- paste(paste0(cols, " = ?"), collapse = ", ")
-  insert_cols <- c("flat_segment", "file_basename", cols, "updated_at")
-  insert_vals <- c(list(flat_segment, file_basename), vals, list(ts))
+  insert_cols <- c("flat_segment", "purpose", cols, "updated_at")
+  insert_vals <- c(list(flat_segment, purpose), vals, list(ts))
   placeholders <- paste(rep("?", length(insert_cols)), collapse = ", ")
   DBI::dbExecute(con,
     sprintf("INSERT INTO project_file_settings (%s) VALUES (%s)
-              ON CONFLICT (flat_segment, file_basename)
+              ON CONFLICT (flat_segment, purpose)
               DO UPDATE SET %s, updated_at = excluded.updated_at",
             paste(insert_cols, collapse = ", "),
             placeholders, set_clause),
@@ -306,50 +421,56 @@ project_file_settings_write_ <- function(con, flat_segment, file_basename,
 
 # ---------- public API for ValEngr / external callers ----------
 
-#' Get per-file model settings for a project
+#' Get model settings for a project
 #'
-#' Reads model settings for a specific file within a project from
-#' `<REGPROJ_ROOT>/projects.sqlite`. Used by the Shiny UI to restore
-#' settings on file open, and by external tools (ValEngr, batch scripts)
-#' to inspect project state.
+#' Reads model settings for a project from `<REGPROJ_ROOT>/projects.sqlite`.
+#' Used by the Shiny UI to restore settings on file open, and by external
+#' tools (ValEngr, batch scripts) to inspect project state. Settings are
+#' scoped by project + purpose and are shared across all data files in the
+#' project (a small test extract and the full dataset share one config).
 #'
 #' @param project_path Absolute path to the project root.
-#' @param file_basename The data file basename (e.g. `"data.csv"`).
 #' @param method One of `"earth"`, `"glmnet"`, `"mgcv"`. Default `"earth"`.
+#' @param purpose Settings scope: one of `"general"`, `"appraisal"`,
+#'   `"market"`. Settings are stored independently per purpose. Default
+#'   `"general"`.
 #' @param root regProj root. Defaults to [default_regproj_root()].
 #' @return Named list with `settings`, `variables`, and (for `earth`)
 #'   `interactions` (each a JSON string), or `NULL` if no row exists.
 #' @export
-get_project_settings <- function(project_path, file_basename,
+get_project_settings <- function(project_path,
                                  method = "earth",
+                                 purpose = "general",
                                  root = default_regproj_root()) {
   flat <- basename(path.expand(project_path))
   con <- regproj_projects_db_connect(root)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
-  project_file_settings_read_(con, flat, file_basename, method = method)
+  project_file_settings_read_(con, flat, method = method, purpose = purpose)
 }
 
-#' Set per-file model settings for a project
+#' Set model settings for a project
 #'
-#' Writes model settings for a specific file within a project to
-#' `<REGPROJ_ROOT>/projects.sqlite`. Used by the Shiny UI to persist
-#' settings on every change, and by external tools to seed projects
-#' programmatically.
+#' Writes model settings for a project to `<REGPROJ_ROOT>/projects.sqlite`.
+#' Used by the Shiny UI to persist settings, and by external tools to seed
+#' projects programmatically. Settings are scoped by project + purpose and
+#' shared across all data files in the project.
 #'
 #' @inheritParams get_project_settings
 #' @param settings,variables,interactions JSON strings (or `NULL` to
 #'   leave unchanged).
 #' @return Invisibly, `NULL`.
 #' @export
-set_project_settings <- function(project_path, file_basename,
+set_project_settings <- function(project_path,
                                  settings = NULL, variables = NULL,
                                  interactions = NULL,
                                  method = "earth",
+                                 purpose = "general",
                                  root = default_regproj_root()) {
   flat <- basename(path.expand(project_path))
   con <- regproj_projects_db_connect(root)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
-  project_file_settings_write_(con, flat, file_basename,
+  project_file_settings_write_(con, flat,
                                 settings = settings, variables = variables,
-                                interactions = interactions, method = method)
+                                interactions = interactions, method = method,
+                                purpose = purpose)
 }

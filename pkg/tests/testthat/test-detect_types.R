@@ -130,3 +130,50 @@ test_that("coerce_types_ skips unknown type", {
   result <- earthUI:::coerce_types_(df, type_map, "x")
   expect_equal(result$x, c(1, 2, 3))
 })
+
+# --- parse_char_dates_ (multi-format character date parsing) ---------------
+
+test_that("parse_char_dates_ parses ISO and US dates, never errors", {
+  expect_equal(earthUI:::parse_char_dates_(c("2024-01-15", "2024-12-31")),
+               as.Date(c("2024-01-15", "2024-12-31")))
+  # MM/DD/YYYY — the values are unambiguous (15, 31 invalid as months)
+  expect_equal(earthUI:::parse_char_dates_(c("01/15/2024", "12/31/2024")),
+               as.Date(c("2024-01-15", "2024-12-31")))
+  # Unparseable -> all NA (must not error; this was the original bug source)
+  expect_true(all(is.na(earthUI:::parse_char_dates_(c("foo", "bar")))))
+  # Empty input
+  expect_equal(length(earthUI:::parse_char_dates_(character(0))), 0L)
+})
+
+# --- align_to_training_ (predict-time newdata alignment) -------------------
+
+test_that("align_to_training_ coerces date columns + factor levels to training", {
+  train <- data.frame(
+    d   = as.numeric(as.Date(c("2024-01-01", "2024-06-01"))),  # numeric in train
+    grp = factor(c("a", "b")),
+    x   = c(1, 2)
+  )
+  # newdata still has d as a Date, grp as character, plus an extra column
+  newd <- data.frame(
+    d     = as.Date(c("2024-03-01", "2024-09-01")),
+    grp   = c("a", "b"),
+    x     = c(3, 4),
+    extra = c(9, 9)
+  )
+  al <- earthUI:::align_to_training_(newd, train)
+  expect_true(is.numeric(al$d))
+  expect_equal(al$d, as.numeric(as.Date(c("2024-03-01", "2024-09-01"))))
+  expect_true(is.factor(al$grp))
+  expect_equal(levels(al$grp), c("a", "b"))
+  expect_equal(al$x, c(3, 4))          # already numeric, untouched
+})
+
+test_that("align_to_training_ coerces a character-date column to numeric", {
+  train <- data.frame(d = as.numeric(as.Date(c("2024-01-01", "2024-06-01"))),
+                      x = c(1, 2))
+  newd  <- data.frame(d = c("2024-03-01", "2024-09-01"), x = c(3, 4),
+                      stringsAsFactors = FALSE)
+  al <- earthUI:::align_to_training_(newd, train)
+  expect_true(is.numeric(al$d))
+  expect_equal(al$d, as.numeric(as.Date(c("2024-03-01", "2024-09-01"))))
+})

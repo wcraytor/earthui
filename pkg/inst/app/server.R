@@ -104,6 +104,22 @@ function(input, output, session) {
   # Seed history per file (last 5, most recent first)
   rv_seed_history <- reactiveVal(integer(0))
 
+  # Pending location prefill for the New Project modal — list(country, levels)
+  # derived from the active project (or most-recent on disk) so np_levels_ui
+  # can preselect country/state/county/city. levels are admin codes. NULL =
+  # no prefill (factory blanks).
+  np_prefill_ <- reactiveVal(NULL)
+
+  # Sale-type exclude popup (Fit flow). fit_go_ is the internal trigger that
+  # actually starts the fit; fit_excl_ holds the sale-type codes to drop from
+  # the regression; st_modal_vals_ holds the values listed in the popup;
+  # last_sale_excl_ is the in-session memory of the last choice (durable
+  # per-project persistence comes in a later pass).
+  fit_go_         <- reactiveVal(0)
+  fit_excl_       <- reactiveVal(character(0))
+  st_modal_vals_  <- reactiveVal(character(0))
+  last_sale_excl_ <- reactiveVal(NULL)
+
   # --- Reactive values ---
   rv <- reactiveValues(
     data = NULL,
@@ -332,13 +348,36 @@ function(input, output, session) {
   # [+ New…] — open the New Project modal. Reset inputs first so previous
   # state (state/county/city selections, project name, etc.) doesn't leak.
   observeEvent(input$regproj_project_new, {
+    # Prefill Country + State / County / City from the active project (or, if
+    # none is open, the most-recent project on disk) so a user working in one
+    # area doesn't re-pick the location every time. Purpose stays at the
+    # factory default ("appr") — different purposes get different projects, so
+    # there's no per-purpose location to remember. The flat segment is decoded
+    # losslessly (regproj_parse_flat) to recover all admin levels as codes;
+    # np_levels_ui consumes np_prefill_ to set the selections.
+    src <- rv$active_project
+    if (is.null(src)) {
+      recent <- tryCatch(regproj_list_projects(sort_by = "recent"),
+                         error = function(e) NULL)
+      if (!is.null(recent) && nrow(recent) > 0L)
+        src <- recent[1L, , drop = FALSE]
+    }
+    parsed <- if (!is.null(src))
+                regproj_parse_flat(basename(src$project_path)) else NULL
+    pf_country <- if (!is.null(parsed)) parsed$country else "us"
+    pf_levels  <- if (!is.null(parsed)) as.character(parsed$levels) else character(0)
+    np_prefill_(if (length(pf_levels) > 0L)
+                  list(country = pf_country, levels = pf_levels) else NULL)
+
     updateRadioButtons(session, "np_purpose", selected = "appr")
     updateTextInput(session, "np_project_name", value = "")
-    updateSelectInput(session, "np_country", selected = "us")
-    schema <- country_schema("us")
+    updateSelectInput(session, "np_country", selected = pf_country)
+    # Clear leftover level inputs from a previous modal session so
+    # np_levels_ui falls back to the prefill values when it renders.
+    schema <- country_schema(pf_country)
     for (i in seq_along(schema)) {
       lid <- paste0("np_level_", i)
-      if (level_has_shipped_("us", i)) {
+      if (level_has_shipped_(pf_country, i)) {
         updateSelectInput(session, lid, selected = "")
       } else {
         updateSelectizeInput(session, lid, selected = "")
@@ -383,13 +422,17 @@ function(input, output, session) {
     ))
   })
 
-  # Country dropdown for the New Project modal
+  # Country dropdown for the New Project modal. Defaults to the prefill
+  # country (active/most-recent project) so the level cascade lines up;
+  # falls back to "us".
   output$np_country_ui <- renderUI({
     ref <- regproj_reference()
     labels <- paste0(unlist(ref$countries), " (", names(ref$countries), ")")
     choices <- setNames(names(ref$countries), labels)
+    pf <- np_prefill_()
+    sel_cc <- if (!is.null(pf) && nzchar(pf$country %||% "")) pf$country else "us"
     selectInput("np_country", "Country *",
-                choices = choices, selected = "us", width = "100%")
+                choices = choices, selected = sel_cc, width = "100%")
   })
 
   # Dynamic admin-level cascade for the New Project modal. Mirrors the
@@ -401,6 +444,12 @@ function(input, output, session) {
       return(tags$div(class = "small text-muted",
                       "(no admin levels for this country)"))
     }
+
+    # Prefill values from the last created project, but only for the matching
+    # country. pf_levels is indexed by admin level (state, county, city, ...).
+    pf <- np_prefill_()
+    pf_levels <- if (!is.null(pf) && identical(pf$country, cc))
+                   pf$levels else character(0)
 
     last_idx <- length(schema)
     parent_codes <- character(0)
@@ -414,10 +463,24 @@ function(input, output, session) {
       # would re-render the cascade on every keystroke and lose focus.
       if (i < last_idx) {
         sel_val <- input[[paste0("np_level_", i)]]
+        # Fall back to the prefill value when the user hasn't picked yet.
+        if ((is.null(sel_val) || !nzchar(sel_val)) &&
+            length(pf_levels) >= i && nzchar(pf_levels[i])) {
+          sel_val <- pf_levels[i]
+        }
         if (!is.null(sel_val) && nzchar(sel_val)) parent_codes[i] <<- sel_val
         sel <- if (!is.null(sel_val) && nzchar(sel_val)) sel_val else NULL
       } else {
+        # Leaf: preselect the prefill value only when every parent level
+        # matches the stored location (so changing a parent clears the leaf,
+        # rather than re-applying a now-mismatched city).
         sel <- NULL
+        if (length(pf_levels) >= i && nzchar(pf_levels[i]) &&
+            (i == 1L ||
+             isTRUE(all(parent_codes[seq_len(i - 1L)] ==
+                        pf_levels[seq_len(i - 1L)])))) {
+          sel <- pf_levels[i]
+        }
       }
       ch <- build_level_choices_(cc, parent_codes[seq_len(i - 1L)], i)
 
@@ -431,6 +494,7 @@ function(input, output, session) {
         # value is the full name. On Create we resolve name->code via the
         # cities table, or auto-abbreviate for new typed names.
         ch_pairs <- ch
+        names_only <- character(0)
         choices <- if (length(ch_pairs) == 0L) {
           c("(pick a city or type new)" = "")
         } else {
@@ -439,9 +503,16 @@ function(input, output, session) {
           c("(pick a city or type new)" = "",
             setNames(names_only, labels))
         }
+        # The prefill value (sel) is a city CODE; the selectize value is the
+        # full name. Map code -> name via the choices so it preselects.
+        sel_city <- ""
+        if (!is.null(sel) && nzchar(sel) && length(ch_pairs) > 0L) {
+          midx <- match(sel, unname(ch_pairs))
+          if (!is.na(midx)) sel_city <- names_only[midx]
+        }
         selectizeInput(paste0("np_level_", i), paste0(lbl, " *"),
                        choices  = choices,
-                       selected = "",
+                       selected = sel_city,
                        options  = list(create = TRUE,
                                        placeholder = "Pick existing or type a new full name"),
                        width    = "100%")
@@ -559,6 +630,8 @@ function(input, output, session) {
       orig_name <- fi$name[1L]
       file.copy(fi$datapath[1L], file.path(in_dir, orig_name), overwrite = FALSE)
     }
+
+    np_prefill_(NULL)
 
     # Refresh project list and set the new one active
     rv$project_refresh_token <- rv$project_refresh_token + 1L
@@ -758,6 +831,145 @@ function(input, output, session) {
   # Shared file-load helper used by both the project-bound file picker
   # and any legacy upload paths. Reads `path` (a real on-disk file) and
   # presents it under the user-friendly `name`.
+  # Authoritative purpose for settings keys. Derived from the ACTIVE PROJECT
+  # (synchronous, always correct), NOT from input$purpose — the latter updates
+  # asynchronously after updateRadioButtons() fires on project change, so it
+  # can be STALE at the moment a file loads and settings are read/written.
+  # A stale purpose makes the read key differ from the write key, so saved
+  # settings appear to vanish. Falls back to the radio only when no project.
+  active_purpose_ <- function() {
+    p <- rv$active_project
+    if (!is.null(p) && !is.null(p$purpose)) {
+      switch(p$purpose, gen = "general", appr = "appraisal",
+             mktarea = "market", "general")
+    } else {
+      input$purpose %||% "general"
+    }
+  }
+
+  # Build the variable-configuration JSON for the CURRENT §3 state, keyed by
+  # candidate column (exactly the shape restoreState() applies). Server-side,
+  # input-driven — no JS/localStorage. Returns a JSON string, or NULL if there
+  # is nothing to save. Shared by the §3 "Save current as default" button and
+  # the fit-time save.
+  build_variables_json_ <- function() {
+    if (is.null(rv$data) || is.null(input$target)) return(NULL)
+    if (!requireNamespace("jsonlite", quietly = TRUE)) return(NULL)
+    appraiser  <- active_purpose_() %in% c("appraisal", "market")
+    candidates <- setdiff(names(rv$data), input$target)
+    preds <- input$predictors   %||% character(0)
+    cats  <- input$categoricals %||% character(0)
+    lins  <- input$linpreds     %||% character(0)
+    ctypes    <- input$col_types
+    cspecials <- input$col_specials
+    vars <- list()
+    for (col in candidates) {
+      type_v <- if (!is.null(ctypes) && !is.null(ctypes[[col]])) ctypes[[col]]
+                else if (!is.null(rv$col_types) && !is.null(rv$col_types[[col]])) rv$col_types[[col]]
+                else "unknown"
+      entry <- list(inc = col %in% preds, fac = col %in% cats,
+                    lin = col %in% lins, type = type_v)
+      if (appraiser) {
+        entry$special <- if (!is.null(cspecials) && !is.null(cspecials[[col]])) {
+          cspecials[[col]]
+        } else "no"
+      }
+      vars[[col]] <- entry
+    }
+    if (length(vars) == 0L) return(NULL)
+    as.character(jsonlite::toJSON(vars, auto_unbox = TRUE))
+  }
+
+  # §3 explicit save: write the current variable configuration straight to
+  # projects.sqlite from the server inputs. No JS, no localStorage, no
+  # debounce, no purpose-from-radio — the path proven correct headlessly.
+  # interactions/settings are left NULL so the partial write preserves them.
+  observeEvent(input$eui_save_varconfig, {
+    p <- rv$active_project
+    if (is.null(p) || is.null(projects_con_)) {
+      showNotification("No active project — open or create a project first.",
+                       type = "warning", duration = 5)
+      return()
+    }
+    if (is.null(rv$data) || is.null(input$target) || is.null(rv$file_name)) {
+      showNotification("Load a file and pick a target first.",
+                       type = "warning", duration = 5)
+      return()
+    }
+    vars_json <- build_variables_json_()
+    if (is.null(vars_json)) {
+      showNotification("No predictor configuration to save yet.",
+                       type = "warning", duration = 4)
+      return()
+    }
+    flat    <- basename(p$project_path)
+    purpose <- active_purpose_()
+    # §3 owns target + predictors. The target lives in earth_settings (shared
+    # with §4's params), so read-merge: update ONLY the target, keep §4's
+    # params. Variables (predictors) are written wholesale; interactions left
+    # untouched (NULL = preserved).
+    cur <- read_current_settings_(flat, purpose)
+    cur$target <- input$target
+    # effective_date belongs to §3 (it sits in section 3). Store as ISO text,
+    # or drop it (NULL removes the key) if unset.
+    cur$effective_date <- if (!is.null(input$effective_date))
+      as.character(input$effective_date) else NULL
+    settings_json <- as.character(jsonlite::toJSON(cur, auto_unbox = TRUE))
+    tryCatch({
+      earthUI:::project_file_settings_write_(
+        projects_con_, flat,
+        settings = settings_json, variables = vars_json, interactions = NULL,
+        method = "earth", purpose = purpose)
+      message("earthUI[SAVE-§3]: target + predictors flat='", flat,
+              "' purpose='", purpose, "' (vars=", nchar(vars_json), "ch)")
+      session$sendCustomMessage("download_check", list(id = "eui_save_varconfig"))
+      showNotification("Variable configuration (target + predictors) saved.",
+                       type = "message", duration = 3)
+    }, error = function(e) {
+      message("earthUI: §3 save error: ", e$message)
+      showNotification(paste("Save error:", conditionMessage(e)),
+                       type = "error", duration = 8)
+    })
+  })
+
+  # Restore the earth call parameters + effective date SERVER-SIDE from a
+  # parsed settings object, using update*Input(). This is the DB-authoritative
+  # path: no localStorage, no client restore race. `s` is the parsed
+  # earth_settings JSON (a named list). Unknown/absent ids are left at their
+  # current value. Mirrors the id set the fit-time save writes.
+  apply_settings_restore_ <- function(s) {
+    if (!is.list(s) || length(s) == 0L) return(invisible(NULL))
+    sel_ids <- c("degree", "pmethod", "glm_family", "trace",
+                 "varmod_method", "weights_col")
+    num_ids <- c("nprune", "thresh", "penalty", "minspan", "endspan", "fast_k",
+                 "nfold_override", "nk", "newvar_penalty", "fast_beta", "ncross",
+                 "varmod_exponent", "varmod_conv", "varmod_clamp",
+                 "varmod_minspan", "adjust_endspan", "exhaustive_tol")
+    chk_ids <- c("stratify", "keepxy", "scale_y", "auto_linpreds",
+                 "use_beta_cache", "force_xtx_prune", "get_leverages",
+                 "force_weights", "skip_subject_row")
+    for (id in sel_ids) {
+      if (!is.null(s[[id]]))
+        updateSelectInput(session, id, selected = as.character(s[[id]]))
+    }
+    for (id in num_ids) {
+      if (!is.null(s[[id]]))
+        updateNumericInput(session, id,
+                           value = suppressWarnings(as.numeric(s[[id]])))
+    }
+    if (!is.null(s[["subset_arg"]]))
+      updateTextInput(session, "subset_arg", value = as.character(s[["subset_arg"]]))
+    for (id in chk_ids) {
+      if (!is.null(s[[id]]))
+        updateCheckboxInput(session, id, value = isTRUE(s[[id]]))
+    }
+    if (!is.null(s[["effective_date"]])) {
+      d <- suppressWarnings(as.Date(as.character(s[["effective_date"]])))
+      if (!is.na(d)) updateDateInput(session, "effective_date", value = d)
+    }
+    invisible(NULL)
+  }
+
   load_data_file_ <- function(path, name) {
     message("earthUI: loading file: ", name, "  <- ", path)
     if (!file.exists(path)) {
@@ -770,27 +982,73 @@ function(input, output, session) {
     rv$file_path <- path
     rv$file_name <- name
 
-    purpose <- input$purpose %||% "general"
+    purpose <- active_purpose_()
     saved <- NULL
     p <- rv$active_project
     if (!is.null(p) && !is.null(projects_con_)) {
       flat <- basename(p$project_path)
+      message("earthUI[RESTORE]: reading key flat='", flat,
+              "' purpose='", purpose, "' (input$purpose='",
+              input$purpose %||% "<null>", "')")
       saved <- tryCatch(
-        earthUI:::project_file_settings_read_(projects_con_, flat, rv$file_name),
+        earthUI:::project_file_settings_read_(projects_con_, flat,
+                                              purpose = purpose),
         error = function(e) {
           message("earthUI: project settings read error: ", e$message); NULL
         })
+    } else {
+      message("earthUI[RESTORE]: no active project / no DB — skipping restore")
+    }
+    # Parse the saved config and restore it SERVER-SIDE (reliable), not via
+    # racy client localStorage:
+    #   rv$restore_target -> target_selector sets `selected`
+    #   apply_settings_restore_() -> update*Input for params + effective_date
+    #   rv$restore_vars   -> variable_table bakes inc/fac/lin/type/special in
+    rv$restore_target <- NULL
+    rv$restore_vars   <- NULL
+    if (!is.null(saved) && requireNamespace("jsonlite", quietly = TRUE)) {
+      if (!is.null(saved$settings)) {
+        s_obj <- tryCatch(
+          jsonlite::fromJSON(saved$settings, simplifyVector = TRUE),
+          error = function(e) NULL)
+        if (is.list(s_obj) && !is.null(names(s_obj))) {
+          tgt <- s_obj$target
+          if (!is.null(tgt) && length(tgt) > 0L) {
+            rv$restore_target <- as.character(tgt)
+          }
+          apply_settings_restore_(s_obj)   # params + effective_date
+        }
+      }
+      if (!is.null(saved$variables)) {
+        parsed_vars <- tryCatch(
+          jsonlite::fromJSON(saved$variables, simplifyVector = FALSE),
+          error = function(e) NULL)
+        # Only a named-object parse is usable as a per-column lookup. A scalar
+        # result (e.g. a double-encoded JSON string from an old row) would make
+        # rvars[[col]] throw "subscript out of bounds".
+        rv$restore_vars <- if (is.list(parsed_vars) &&
+                               length(parsed_vars) > 0L &&
+                               !is.null(names(parsed_vars))) parsed_vars else NULL
+      }
     }
     if (!is.null(saved)) {
+      # The localStorage key is the PROJECT (basename of the project path),
+      # matching storage_key in the render blocks — NOT the data file. The DB
+      # settings (incl. target + effective_date from the fit-time save) must
+      # land in the bucket restoreSettings()/restoreState() actually read.
       session$sendCustomMessage("restore_all_settings", list(
-        filename     = rv$file_name,
+        filename     = basename(p$project_path),
         purpose      = purpose,
         settings     = saved$settings,
         variables    = saved$variables,
         interactions = saved$interactions
       ))
-      message("earthUI: restored project settings for: ", rv$file_name,
-              " (project=", basename(p$project_path), ")")
+      message("earthUI[RESTORE]: FOUND row — settings=",
+              nchar(saved$settings %||% ""), "ch, variables=",
+              nchar(saved$variables %||% ""), "ch, interactions=",
+              nchar(saved$interactions %||% ""), "ch")
+    } else if (!is.null(p) && !is.null(projects_con_)) {
+      message("earthUI[RESTORE]: NO row found for that key — nothing to restore")
     }
 
     rv$sheets <- if (ext %in% c("xlsx", "xls")) {
@@ -854,16 +1112,34 @@ function(input, output, session) {
   })
 
   # Selecting a file from the picker loads it.
-  observeEvent(input$regproj_file_pick, {
+  #
+  # Uses observe() keyed on (project, file) rather than
+  # observeEvent(input$regproj_file_pick). observeEvent dedupes on the
+  # unchanged input value, so switching to a different project whose in/
+  # folder contains a file of the SAME basename as the previously-loaded
+  # one would NOT re-fire — the new file never imports and the app stays
+  # stuck on "2. Import Data" ("doesn't proceed to the next step").
+  # Keying the load on project_path||file makes it idempotent and correct
+  # across same-basename collisions.
+  observe({
     f <- input$regproj_file_pick
     p <- rv$active_project
+    files <- project_in_files_()
     if (is.null(p) || is.null(f) || !nzchar(f)) return()
+    # Ignore a stale picker value during a project switch (the picker
+    # re-renders asynchronously; until then input still holds the old
+    # project's filename). Only act when the value names a file that
+    # actually exists in the current project.
+    if (!(f %in% files)) return()
+    key <- paste(p$project_path, f, sep = "||")
+    if (identical(isolate(rv$loaded_key), key)) return()  # already loaded
     in_dir <- file.path(p$project_path, paste0(os_detect(), "_in"))
     full <- file.path(in_dir, f)
     if (!file.exists(full)) {
       showNotification(sprintf("File not found: %s", full),
                        type = "error", duration = 6); return()
     }
+    rv$loaded_key <- key
     regproj_last_file_set(p$project_path, f)
     load_data_file_(full, f)
   })
@@ -1196,6 +1472,52 @@ function(input, output, session) {
     }
   })
 
+  # Resolve the active case-weight column name (or NULL). Single source of
+  # truth shared by build_fit_args_() and the newvar.penalty disable observer
+  # so they can never disagree. The "weight" special only exists in
+  # appraisal/market mode; in general mode input$col_specials is NOT refreshed
+  # by gatherState, so a "weight" left over from a prior appraisal/market
+  # session is stale and must be ignored. The column must exist in the data;
+  # the weights_col dropdown is the fallback in any mode.
+  resolve_weight_col_ <- function(df = rv$data) {
+    if (is.null(df)) return(NULL)
+    if (isTRUE(input$purpose %in% c("appraisal", "market")) &&
+        !is.null(input$col_specials)) {
+      for (nm in names(input$col_specials)) {
+        if (identical(input$col_specials[[nm]], "weight") &&
+            nm %in% names(df)) return(nm)
+      }
+    }
+    if (!is.null(input$weights_col) && input$weights_col != "null" &&
+        input$weights_col %in% names(df)) return(input$weights_col)
+    NULL
+  }
+
+  # Resolve the column carrying a given Special role (or NULL). Role specials
+  # only exist in appraisal/market mode; in general mode input$col_specials is
+  # stale (gatherState doesn't refresh it), so values are ignored there. The
+  # column must exist in the data.
+  resolve_special_col_ <- function(role, df = rv$data) {
+    if (is.null(df)) return(NULL)
+    if (isTRUE(input$purpose %in% c("appraisal", "market")) &&
+        !is.null(input$col_specials)) {
+      for (nm in names(input$col_specials)) {
+        if (identical(input$col_specials[[nm]], role) &&
+            nm %in% names(df)) return(nm)
+      }
+    }
+    NULL
+  }
+
+  # Disable newvar.penalty whenever a case-weight column is in play — earth
+  # rejects a non-zero newvar.penalty with weights. Uses the shared resolver
+  # so it matches exactly what the fit will use.
+  observe({
+    weights_active <- !is.null(resolve_weight_col_())
+    session$sendCustomMessage("newvar_penalty_state",
+      list(disabled = weights_active))
+  })
+
   observeEvent(input$wp_set_btn, {
     targets <- input$target
     if (length(targets) <= 1L) {
@@ -1263,17 +1585,26 @@ function(input, output, session) {
   # project, saves are skipped — there's no place to write them.
   observeEvent(input$eui_save_trigger, {
     payload <- input$eui_save_trigger
-    req(payload$filename)
+    req(payload)
     p <- rv$active_project
     if (is.null(p) || is.null(projects_con_)) return()
     flat <- basename(p$project_path)
+    # Derive purpose from the active project (synchronous, never stale) so the
+    # write key always matches the read key in load_data_file_. Settings are
+    # keyed by (project, purpose) only — file-independent.
+    purpose <- active_purpose_()
+    message("earthUI[SAVE-JS]: writing key flat='", flat,
+            "' purpose='", purpose, "' settings=",
+            nchar(payload$settings %||% ""), "ch variables=",
+            nchar(payload$variables %||% ""), "ch")
     tryCatch({
       earthUI:::project_file_settings_write_(
-        projects_con_, flat, payload$filename,
+        projects_con_, flat,
         settings     = if (!is.null(payload$settings))     payload$settings     else "{}",
         variables    = if (!is.null(payload$variables))    payload$variables    else "{}",
         interactions = if (!is.null(payload$interactions)) payload$interactions else "{}",
-        method       = "earth"
+        method       = "earth",
+        purpose      = purpose
       )
     }, error = function(e) {
       message("earthUI: project settings save error: ", e$message)
@@ -1315,15 +1646,51 @@ function(input, output, session) {
     # "last" = do nothing, use whatever localStorage has
   }, ignoreInit = TRUE)
 
-  # Button: save current settings as the default
+  # §4 button: save the Earth Call Parameters + the Allowed Interactions matrix
+  # as the project default (server-side, from live inputs). §4 owns the params
+  # half of earth_settings + the interactions column; the target (§3's) is
+  # preserved via read-merge.
   observeEvent(input$eui_save_defaults, {
-    req(rv$file_name)
-    message("earthUI: saving current settings as defaults for: ", rv$file_name)
-    session$sendCustomMessage("collect_and_save_defaults", list(
-      filename = rv$file_name
-    ))
-    showNotification("Current settings saved as defaults.", type = "message",
-                     duration = 3)
+    p <- rv$active_project
+    if (is.null(p) || is.null(projects_con_)) {
+      showNotification("No active project — open or create a project first.",
+                       type = "warning", duration = 5)
+      return()
+    }
+    if (is.null(rv$data) || is.null(rv$file_name) ||
+        !requireNamespace("jsonlite", quietly = TRUE)) {
+      showNotification("Load a file first.", type = "warning", duration = 5)
+      return()
+    }
+    flat    <- basename(p$project_path)
+    purpose <- active_purpose_()
+    cur <- read_current_settings_(flat, purpose)
+    keep_target <- cur$target                 # preserve §3's target
+    keep_eff    <- cur$effective_date          # preserve §3's effective_date
+    new_settings <- build_settings_list_()    # includes the live target...
+    new_settings$target <- NULL               # ...which §4 must NOT own
+    if (!is.null(keep_target)) new_settings$target <- keep_target
+    if (!is.null(keep_eff))    new_settings$effective_date <- keep_eff
+    settings_json <- as.character(jsonlite::toJSON(new_settings, auto_unbox = TRUE))
+    inter_json    <- build_interactions_json_()   # NULL if <2 predictors
+    tryCatch({
+      earthUI:::project_file_settings_write_(
+        projects_con_, flat,
+        settings     = settings_json,
+        variables    = NULL,                  # §3 owns predictors; preserved
+        interactions = inter_json,
+        method = "earth", purpose = purpose)
+      message("earthUI[SAVE-§4]: params + interactions flat='", flat,
+              "' purpose='", purpose, "' (inter=",
+              nchar(inter_json %||% ""), "ch)")
+      session$sendCustomMessage("download_check", list(id = "eui_save_defaults"))
+      showNotification("Earth parameters + interactions saved.",
+                       type = "message", duration = 3)
+    }, error = function(e) {
+      message("earthUI: §4 save error: ", e$message)
+      showNotification(paste("Save error:", conditionMessage(e)),
+                       type = "error", duration = 8)
+    })
   })
 
   output$data_preview_info <- renderUI({
@@ -1459,7 +1826,10 @@ function(input, output, session) {
     req(rv$data)
     # Depend on purpose so this re-renders and restores per-purpose settings
     purpose <- input$purpose
-    storage_key <- if (is.null(rv$file_name)) "default" else rv$file_name
+    # Key client-side persistence by PROJECT (not file) so all data files in a
+    # project share one variable/parameter configuration.
+    storage_key <- if (is.null(rv$active_project)) "default" else
+      basename(rv$active_project$project_path)
 
     # JavaScript: persist target variable + advanced parameters in localStorage
     js <- tags$script(HTML(sprintf("
@@ -1559,6 +1929,19 @@ function(input, output, session) {
           try { localStorage.setItem(getSettingsKey(), JSON.stringify(state)); } catch(e) {}
         }
 
+        // Expose an explicit flush so section-advance handlers (e.g. opening
+        // section 5 / Fit) can force-persist the earth call parameters + target
+        // immediately. Deliberately NOT gated on restoreComplete: this is a
+        // user-driven advance, so whatever is on screen is the intended state.
+        window.euiSaveSettings = function() {
+          saveSettings();
+          if (typeof window.euiSaveToServerNow === 'function') {
+            window.euiSaveToServerNow(storageKeyRaw);
+          } else if (typeof window.euiSaveToServer === 'function') {
+            window.euiSaveToServer(storageKeyRaw);
+          }
+        };
+
         // Restore after selectize initializes (retry until target AND degree are ready)
         // Block saving until restore is complete to prevent defaults overwriting saved values
         var restoreComplete = false;
@@ -1569,8 +1952,9 @@ function(input, output, session) {
           var targetReady = targetEl && targetEl.selectize && targetEl.selectize.isSetup;
           var degreeReady = degreeEl && degreeEl.selectize && degreeEl.selectize.isSetup;
           if (targetReady && degreeReady) {
-            restoreSettings();
-            // Restore wp weights from localStorage
+            // Params + effective_date are restored SERVER-SIDE via update*Input
+            // (apply_settings_restore_); the client must NOT also apply from
+            // localStorage or it would race/override the authoritative values.
             window.euiCurrentFilename = storageKeyRaw;
             setTimeout(function() {
               try {
@@ -1590,21 +1974,29 @@ function(input, output, session) {
         }
         tryRestore();
 
-        // Save on any tracked input change (only after restore is done)
-        $(document).off('shiny:inputchanged.euisettings')
-                   .on('shiny:inputchanged.euisettings', function(event) {
-          if (restoreComplete && allIds.indexOf(event.name) >= 0) {
-            saveSettings();
-            if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(%s);
-          }
-        });
+        // NO on-change settings write-back. It is removed deliberately:
+        // settings are saved only at commit points (Fit, and the §4 Save
+        // button), server-side. Re-enabling an on-change save here caused a
+        // corruption — the server-side restore fires update*Input(), which
+        // emits shiny:inputchanged, which fired this handler and wrote a
+        // half-restored state (empty target) back to the DB, so the *next*
+        // reopen lost the target. saveSettings() remains for euiSaveSettings()
+        // (the explicit Fit-time flush).
       })();
-    ", jsonlite::toJSON(storage_key, auto_unbox = TRUE),
-       jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
+    ", jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
 
+    # Restore the saved target SERVER-SIDE via `selected` rather than relying
+    # on client JS (the target selectize's column options load asynchronously,
+    # so a JS setValue() races and silently drops the value). rv$restore_target
+    # is set in load_data_file_ from the project's saved settings; keep only
+    # names that actually exist as columns.
+    sel_target <- isolate(rv$restore_target)
+    sel_target <- sel_target[sel_target %in% names(rv$data)]
+    if (length(sel_target) == 0L) sel_target <- NULL
     tagList(
       selectInput("target", "Target (response) variable(s)",
-                  choices = names(rv$data), multiple = TRUE),
+                  choices = names(rv$data), selected = sel_target,
+                  multiple = TRUE),
       js
     )
   })
@@ -1626,8 +2018,18 @@ function(input, output, session) {
     candidates <- setdiff(names(rv$data), input$target)
     nrows <- nrow(rv$data)
 
+    # Saved variable config (parsed from the project's DB row in
+    # load_data_file_). Applied server-side to each row's initial state so the
+    # predictor configuration restores deterministically, with no localStorage
+    # race. Isolated: the table re-renders on data/target change, not on this.
+    rvars <- isolate(rv$restore_vars)
+    if (!is.list(rvars)) rvars <- NULL  # never index a non-list by name
+
     # Storage key for remembering settings
-    storage_key <- if (is.null(rv$file_name)) "default" else rv$file_name
+    # Key client-side persistence by PROJECT (not file) so all data files in a
+    # project share one variable/parameter configuration.
+    storage_key <- if (is.null(rv$active_project)) "default" else
+      basename(rv$active_project$project_path)
 
     # Type options for dropdown
     type_options <- c("numeric", "integer", "character", "logical",
@@ -1640,7 +2042,8 @@ function(input, output, session) {
                          "contract_date", "display_only", "dom",
                          "effective_age", "latitude", "listing_date",
                          "living_area", "longitude", "lot_size",
-                         "sale_age", "site_dimensions", "weight")
+                         "sale_age", "sale_type", "site_dimensions", "weight")
+    
 
     # Header row — vertical labels for checkboxes, like glmnetUI
     angled_hdr <- "text-align:center; font-size:0.85em; writing-mode:vertical-lr; transform:rotate(180deg); height:55px; line-height:1; font-weight:bold;"
@@ -1678,9 +2081,18 @@ function(input, output, session) {
         "unknown"
       }
 
-      # Build <option> tags with auto-detected type selected
+      # Saved config for this column (server-side restore), if any.
+      sv <- if (is.list(rvars)) rvars[[col]] else NULL
+      if (!is.list(sv)) sv <- NULL  # guard $ access against scalar entries
+      sel_type    <- if (!is.null(sv) && !is.null(sv$type)) sv$type else detected_type
+      inc_checked <- isTRUE(sv$inc)
+      fac_checked <- isTRUE(sv$fac)
+      lin_checked <- isTRUE(sv$lin)
+      sel_special <- if (!is.null(sv) && !is.null(sv$special)) sv$special else "no"
+
+      # Build <option> tags with the saved (or auto-detected) type selected
       option_tags <- lapply(type_options, function(opt) {
-        if (opt == detected_type) {
+        if (opt == sel_type) {
           tags$option(value = opt, selected = "selected", opt)
         } else {
           tags$option(value = opt, opt)
@@ -1699,18 +2111,28 @@ function(input, output, session) {
                              style = "width: 70px; font-size: 0.75em; padding: 1px 2px; border: 1px solid var(--bs-border-color, #ccc); border-radius: 3px; background: var(--bs-body-bg, #fff); color: var(--bs-body-color, #333);",
                              option_tags)),
         tags$div(style = "width: 20px; text-align: center;",
-                 tags$input(type = "checkbox", id = paste0("eui_inc_", i),
-                            class = "eui-var-cb")),
+                 do.call(tags$input, c(
+                   list(type = "checkbox", id = paste0("eui_inc_", i),
+                        class = "eui-var-cb"),
+                   if (inc_checked) list(checked = NA)))),
         tags$div(style = "width: 20px; text-align: center;",
-                 tags$input(type = "checkbox", id = paste0("eui_fac_", i),
-                            class = "eui-var-cb")),
+                 do.call(tags$input, c(
+                   list(type = "checkbox", id = paste0("eui_fac_", i),
+                        class = "eui-var-cb"),
+                   if (fac_checked) list(checked = NA)))),
         tags$div(style = "width: 20px; text-align: center;",
-                 tags$input(type = "checkbox", id = paste0("eui_lin_", i),
-                            class = "eui-var-cb"))
+                 do.call(tags$input, c(
+                   list(type = "checkbox", id = paste0("eui_lin_", i),
+                        class = "eui-var-cb"),
+                   if (lin_checked) list(checked = NA))))
       )
       if (appraiser) {
         special_option_tags <- lapply(special_options, function(opt) {
-          tags$option(value = opt, opt)
+          if (opt == sel_special) {
+            tags$option(value = opt, selected = "selected", opt)
+          } else {
+            tags$option(value = opt, opt)
+          }
         })
         row_cells <- c(row_cells, list(
           tags$div(style = "width: 80px; text-align: center;",
@@ -1821,16 +2243,32 @@ function(input, output, session) {
           }
         }
 
-        // Restore saved state, then sync to Shiny
-        restoreState();
+        // Saved predictor config is now restored SERVER-SIDE (baked into the
+        // rendered checkboxes/selects above) — do NOT call restoreState() here,
+        // which read possibly-stale localStorage and raced the server render.
+        // Just sync the server-rendered DOM state to the Shiny inputs.
         updateBadges();
         setTimeout(gatherState, 200);
+
+        // Expose an explicit flush so section-advance handlers (e.g. opening
+        // section 4) can force-persist the variable config immediately,
+        // independent of the per-change debounce. gatherState() also re-syncs
+        // input$predictors etc. before the flush hits SQLite.
+        window.euiSaveVars = function() {
+          gatherState();
+          saveState();
+          if (typeof window.euiSaveToServerNow === 'function') {
+            window.euiSaveToServerNow(storageKeyRaw);
+          } else if (typeof window.euiSaveToServer === 'function') {
+            window.euiSaveToServer(storageKeyRaw);
+          }
+        };
 
         // On any checkbox change, save and sync
         $(document).off('change.euivar').on('change.euivar', '.eui-var-cb', function() {
           saveState();
           gatherState();
-          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(storageKeyRaw);
+          // (auto-save removed: saving is button-only, via the §3 button)
         });
 
         // On type dropdown change: auto-link Factor, save and sync
@@ -1842,7 +2280,7 @@ function(input, output, session) {
           }
           saveState();
           gatherState();
-          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(storageKeyRaw);
+          // (auto-save removed: saving is button-only, via the §3 button)
         });
 
         // Update special type badges next to variable names
@@ -1873,7 +2311,7 @@ function(input, output, session) {
           updateBadges();
           saveState();
           gatherState();
-          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(storageKeyRaw);
+          // (auto-save removed: saving is button-only, via the §3 button)
         });
 
         // Expose detectedTypes for earth defaults reset
@@ -2017,7 +2455,10 @@ function(input, output, session) {
     }
 
     # JavaScript to sync checkboxes with Shiny inputs + localStorage persistence
-    storage_key <- if (is.null(rv$file_name)) "default" else rv$file_name
+    # Key client-side persistence by PROJECT (not file) so all data files in a
+    # project share one variable/parameter configuration.
+    storage_key <- if (is.null(rv$active_project)) "default" else
+      basename(rv$active_project$project_path)
     js <- tags$script(HTML(sprintf("
       (function() {
         var n = %d;
@@ -2075,7 +2516,7 @@ function(input, output, session) {
         $(document).off('change.euimatrix').on('change.euimatrix', '.eui-interaction-cb', function() {
           saveState();
           syncToShiny();
-          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(%s);
+          // (auto-save removed: interactions are saved by the §4 button)
         });
 
         // Click variable name (row or column header) to toggle all its interactions
@@ -2141,13 +2582,11 @@ function(input, output, session) {
           blk1[varName] = !blk1[varName];
           updateBlk1Labels();
           syncBlk1();
-          if (typeof window.euiSaveToServer === 'function') window.euiSaveToServer(%s);
+          // (auto-save removed: block-degree-1 is saved by the §4 button)
         });
       })();
     ", n, jsonlite::toJSON(storage_key, auto_unbox = TRUE),
-       jsonlite::toJSON(storage_key, auto_unbox = TRUE),
        jsonlite::toJSON(preds, auto_unbox = FALSE),
-       jsonlite::toJSON(storage_key, auto_unbox = TRUE),
        jsonlite::toJSON(storage_key, auto_unbox = TRUE))))
 
     div(
@@ -2272,21 +2711,11 @@ function(input, output, session) {
       glm_arg <- list(family = input$glm_family)
     }
 
-    # Weights column → numeric vector (or NULL)
-    # Check special type "weight" first, then fall back to weights_col dropdown
+    # Weights column → numeric vector (or NULL). Shared resolver: "weight"
+    # special (appraisal/market only) first, then the weights_col dropdown.
     weights_arg <- NULL
-    weight_col_name <- NULL
-    if (!is.null(input$col_specials)) {
-      for (nm in names(input$col_specials)) {
-        if (input$col_specials[[nm]] == "weight") { weight_col_name <- nm; break }
-      }
-    }
-    if (!is.null(weight_col_name) && weight_col_name %in% names(df)) {
-      weights_arg <- df[[weight_col_name]]
-    } else if (!is.null(input$weights_col) && input$weights_col != "null" &&
-               input$weights_col %in% names(df)) {
-      weights_arg <- df[[input$weights_col]]
-    }
+    weight_col_name <- resolve_weight_col_(df)
+    if (!is.null(weight_col_name)) weights_arg <- df[[weight_col_name]]
 
     # wp (response weights) — per-target numeric vector from dialog
     # Only use wp for multi-target models (earth rejects wp with Scale.y)
@@ -2298,7 +2727,11 @@ function(input, output, session) {
     list(
       df              = df,
       target          = input$target,
-      predictors      = input$predictors,
+      # Role columns (sale_type, weight) are never predictors even if their
+      # Include box is checked.
+      predictors      = setdiff(input$predictors,
+                                c(resolve_special_col_("sale_type", df),
+                                  resolve_weight_col_(df))),
       categoricals    = input$categoricals,
       linpreds        = input$linpreds,
       type_map        = type_map_arg,
@@ -2363,12 +2796,174 @@ function(input, output, session) {
     }
   })
 
+  # Clicking Fit: if a sale_type column is designated, open the exclude popup
+  # first; otherwise start the fit immediately. The fit itself runs on the
+  # internal fit_go_ trigger (the observer below).
   observeEvent(input$run_model, {
+    req(rv$data, input$target, input$predictors)
+    st_col <- resolve_special_col_("sale_type")
+    if (is.null(st_col)) {
+      fit_excl_(character(0))
+      fit_go_(isolate(fit_go_()) + 1L)
+      return()
+    }
+    vals <- unique(trimws(as.character(rv$data[[st_col]])))
+    vals <- sort(vals[!is.na(vals)])
+    st_modal_vals_(vals)
+    label_map <- c(s = "subject", c = "comparable", p = "probate",
+                   h = "short", f = "foreclosure")
+    saved <- isolate(last_sale_excl_())
+    excl_pre <- if (!is.null(saved)) saved else c("s", "p", "h", "f")
+    rows <- lapply(seq_along(vals), function(i) {
+      v <- vals[i]
+      disp    <- if (!nzchar(v)) "(blank)" else v
+      meaning <- if (nzchar(v) && !is.null(label_map[[v]])) label_map[[v]] else "(other)"
+      lbl <- paste0(disp, " — ", meaning)
+      if (identical(v, "s")) {
+        # Subject: always excluded, shown locked (checked + disabled).
+        tags$div(style = "margin:4px 0; color: var(--bs-secondary-color);",
+          tags$input(type = "checkbox", checked = NA, disabled = NA),
+          tags$label(style = "margin-left:6px;",
+                     paste0(lbl, " (always excluded)")))
+      } else if (identical(v, "c")) {
+        # Comparable: always included, shown locked (unchecked + disabled).
+        tags$div(style = "margin:4px 0; color: var(--bs-secondary-color);",
+          tags$input(type = "checkbox", disabled = NA),
+          tags$label(style = "margin-left:6px;",
+                     paste0(lbl, " (always included)")))
+      } else {
+        checkboxInput(paste0("st_excl_", i), lbl, value = (v %in% excl_pre))
+      }
+    })
+    showModal(modalDialog(
+      title = paste0("Exclude sale types from the fit — '", st_col, "'"),
+      size = "s", easyClose = FALSE,
+      tags$div(class = "small text-muted", style = "margin-bottom:8px;",
+        "Checked sale types are removed from the earth regression. ",
+        "Subject ('s') is always excluded."),
+      do.call(tagList, rows),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("sale_type_run", "Run Fit", class = "btn-primary")
+      )
+    ))
+  })
+
+  # Popup Run button: collect the excluded sale types (subject always) and
+  # start the fit. Remembered in-session as the prefill for next time.
+  observeEvent(input$sale_type_run, {
+    vals <- st_modal_vals_()
+    excl <- "s"
+    for (i in seq_along(vals)) {
+      v <- vals[i]
+      if (identical(v, "s") || identical(v, "c")) next  # s always out, c always in
+      if (isTRUE(input[[paste0("st_excl_", i)]])) excl <- c(excl, v)
+    }
+    excl <- unique(excl)
+    last_sale_excl_(excl)
+    removeModal()
+    fit_excl_(excl)
+    fit_go_(isolate(fit_go_()) + 1L)
+  })
+
+  # Persist the variable configuration + earth call parameters to
+  # projects.sqlite directly from the server inputs at fit time. This is the
+  # authoritative, JS-independent guarantee that "clicking Fit saves the
+  # configuration" — it does not depend on localStorage, the per-change
+  # debounce, or the client-side restoreComplete gate. Builds the same JSON
+  # shapes the restore path (restoreSettings()/restoreState()) consumes, keyed
+  # by the same column set the variable table renders (setdiff(names, target)).
+  # interactions are left NULL (partial write preserves the JS-owned column).
+  # Build the full settings list (target + earth params) from the live inputs.
+  # NULL/NA/"" fields are dropped so restore leaves those inputs at defaults.
+  # Pure (no DB write) — the §3 button takes the target half, the §4 button
+  # takes the params half (see those observers). Saving is button-only.
+  build_settings_list_ <- function() {
+    keep_ <- function(x) {
+      if (is.null(x)) return(NULL)
+      if (length(x) == 1L && (is.na(x) || identical(as.character(x), ""))) return(NULL)
+      x
+    }
+    Filter(Negate(is.null), list(
+      target           = input$target,
+      weights_col      = keep_(input$weights_col),
+      degree           = keep_(input$degree),
+      pmethod          = keep_(input$pmethod),
+      glm_family       = keep_(input$glm_family),
+      trace            = keep_(input$trace),
+      varmod_method    = keep_(input$varmod_method),
+      nprune           = keep_(input$nprune),
+      thresh           = keep_(input$thresh),
+      penalty          = keep_(input$penalty),
+      minspan          = keep_(input$minspan),
+      endspan          = keep_(input$endspan),
+      fast_k           = keep_(input$fast_k),
+      nfold_override   = keep_(input$nfold_override),
+      nk               = keep_(input$nk),
+      newvar_penalty   = keep_(input$newvar_penalty),
+      fast_beta        = keep_(input$fast_beta),
+      ncross           = keep_(input$ncross),
+      varmod_exponent  = keep_(input$varmod_exponent),
+      varmod_conv      = keep_(input$varmod_conv),
+      varmod_clamp     = keep_(input$varmod_clamp),
+      varmod_minspan   = keep_(input$varmod_minspan),
+      adjust_endspan   = keep_(input$adjust_endspan),
+      exhaustive_tol   = keep_(input$exhaustive_tol),
+      subset_arg       = keep_(input$subset_arg),
+      stratify         = isTRUE(input$stratify),
+      keepxy           = isTRUE(input$keepxy),
+      scale_y          = isTRUE(input$scale_y),
+      auto_linpreds    = isTRUE(input$auto_linpreds),
+      use_beta_cache   = isTRUE(input$use_beta_cache),
+      force_xtx_prune  = isTRUE(input$force_xtx_prune),
+      get_leverages    = isTRUE(input$get_leverages),
+      force_weights    = isTRUE(input$force_weights),
+      skip_subject_row = isTRUE(input$skip_subject_row)
+      # NOTE: effective_date is NOT here — it lives in section 3 and is saved
+      # by the §3 button (and preserved by the §4 button), per "§3 saves §3".
+    ))
+  }
+
+  # Read + parse the current earth_settings JSON from the DB (named list, or
+  # empty). Used by the buttons to merge: §3 updates only the target and keeps
+  # §4's params; §4 replaces the params and keeps §3's target.
+  read_current_settings_ <- function(flat, purpose) {
+    cur <- tryCatch(
+      earthUI:::project_file_settings_read_(projects_con_, flat, purpose = purpose),
+      error = function(e) NULL)
+    if (is.null(cur) || is.null(cur$settings)) return(list())
+    parsed <- tryCatch(jsonlite::fromJSON(cur$settings, simplifyVector = TRUE),
+                       error = function(e) NULL)
+    if (is.list(parsed) && !is.null(names(parsed))) parsed else list()
+  }
+
+  # Build the interactions JSON ({"i_j": bool}, 1-based i<j over input$predictors)
+  # from the live input$allowed_i_j values — matches the restore format exactly.
+  build_interactions_json_ <- function() {
+    preds <- input$predictors %||% character(0)
+    n <- length(preds)
+    if (n < 2L || !requireNamespace("jsonlite", quietly = TRUE)) return(NULL)
+    state <- list()
+    for (i in seq_len(n - 1L)) {
+      for (j in (i + 1L):n) {
+        state[[paste0(i, "_", j)]] <- isTRUE(input[[paste0("allowed_", i, "_", j)]])
+      }
+    }
+    if (length(state) == 0L) return(NULL)
+    as.character(jsonlite::toJSON(state, auto_unbox = TRUE))
+  }
+
+  # Run the earth fit. Triggered by fit_go_ (the Fit-click handler above).
+  observeEvent(fit_go_(), {
     message("earthUI: Fit clicked. data=", !is.null(rv$data),
             " target=", paste(input$target, collapse=","),
             " predictors=", paste(input$predictors, collapse=","),
             " purpose=", input$purpose)
     req(rv$data, input$target, input$predictors)
+
+    # Fit does NOT save the configuration (button-only save by design: the user
+    # may fit experimentally without making the current setup the project
+    # default). Saving is via the §3 / §4 "Save current as default" buttons.
 
     # --- Appraiser: round latitude/longitude to 3 decimal places ---
     if (input$purpose %in% c("appraisal", "market") && !is.null(input$col_specials)) {
@@ -2447,6 +3042,23 @@ function(input, output, session) {
         type = "message", duration = 4)
     } else {
       fit_data <- rv$data
+    }
+
+    # Drop rows whose sale_type is in the excluded set (subject 's' is always
+    # in the set, added by the popup). No-op when no sale_type column.
+    excl_types <- isolate(fit_excl_())
+    st_col_fit <- resolve_special_col_("sale_type", fit_data)
+    if (!is.null(st_col_fit) && length(excl_types) > 0L) {
+      st_vals <- trimws(as.character(fit_data[[st_col_fit]]))
+      drop_st <- !is.na(st_vals) & st_vals %in% excl_types
+      n_drop <- sum(drop_st)
+      if (n_drop > 0L) {
+        fit_data <- fit_data[!drop_st, , drop = FALSE]
+        showNotification(sprintf(
+          "Excluded %d row(s) by sale type (%s). Fitting on %d rows.",
+          n_drop, paste(excl_types, collapse = ", "), nrow(fit_data)),
+          type = "message", duration = 4)
+      }
     }
 
     fit_args <- build_fit_args_(df = fit_data)
@@ -2641,7 +3253,7 @@ function(input, output, session) {
         })
       })
     }
-  })
+  }, ignoreInit = TRUE)
 
   # --- Background process polling observer ---
   send_trace_lines_ <- function(lines, truncate_at = 0L) {

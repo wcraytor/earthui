@@ -2,21 +2,23 @@
 % Please edit documentation in R/regproj_db.R
 \name{get_project_settings}
 \alias{get_project_settings}
-\title{Get per-file model settings for a project}
+\title{Get model settings for a project}
 \usage{
 get_project_settings(
   project_path,
-  file_basename,
   method = "earth",
+  purpose = "general",
   root = default_regproj_root()
 )
 }
 \arguments{
 \item{project_path}{Absolute path to the project root.}
 
-\item{file_basename}{The data file basename (e.g. \code{"data.csv"}).}
-
 \item{method}{One of \code{"earth"}, \code{"glmnet"}, \code{"mgcv"}. Default \code{"earth"}.}
+
+\item{purpose}{Settings scope: one of \code{"general"}, \code{"appraisal"},
+\code{"market"}. Settings are stored independently per purpose. Default
+\code{"general"}.}
 
 \item{root}{regProj root. Defaults to \code{\link[=default_regproj_root]{default_regproj_root()}}.}
 }
@@ -25,8 +27,9 @@ Named list with \code{settings}, \code{variables}, and (for \code{earth})
 \code{interactions} (each a JSON string), or \code{NULL} if no row exists.
 }
 \description{
-Reads model settings for a specific file within a project from
-\verb{<REGPROJ_ROOT>/projects.sqlite}. Used by the Shiny UI to restore
-settings on file open, and by external tools (ValEngr, batch scripts)
-to inspect project state.
+Reads model settings for a project from \verb{<REGPROJ_ROOT>/projects.sqlite}.
+Used by the Shiny UI to restore settings on file open, and by external
+tools (ValEngr, batch scripts) to inspect project state. Settings are
+scoped by project + purpose and are shared across all data files in the
+project (a small test extract and the full dataset share one config).
 }

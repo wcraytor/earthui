@@ -121,8 +121,11 @@ coerce_types_ <- function(df, type_map, predictors) {
       } else if (inherits(df[[col]], "POSIXct") || inherits(df[[col]], "POSIXlt")) {
         df[[col]] <- as.numeric(df[[col]])
       } else if (is.character(df[[col]])) {
-        # Try to parse character dates, then convert to numeric
-        parsed <- suppressWarnings(as.Date(df[[col]]))
+        # Try to parse character dates, then convert to numeric.
+        # Must try the same multi-format set as validate_types() — a bare
+        # as.Date() only tries ISO formats and *errors* (not warns) on
+        # formats like "01/15/2024", which suppressWarnings() won't catch.
+        parsed <- parse_char_dates_(df[[col]])
         df[[col]] <- as.numeric(parsed)
       } else if (is.numeric(df[[col]])) {
         # Already numeric (e.g., Excel serial date) — leave as-is
@@ -146,4 +149,76 @@ coerce_types_ <- function(df, type_map, predictors) {
     }
   }
   df
+}
+
+
+# Internal: parse a character vector of dates trying multiple formats.
+#
+# Mirrors the format set used by validate_types() so that any column which
+# passes date validation also coerces here. Locale-preferred formats are
+# tried first, then common fallbacks. The first format that parses >= 50%
+# of the non-NA values wins. Returns a Date vector (NA where unparseable);
+# returns all-NA if nothing parses (never errors).
+#
+# @param x A character vector.
+# @return A Date vector the same length as x.
+parse_char_dates_ <- function(x) {
+  out <- as.Date(rep(NA_real_, length(x)), origin = "1970-01-01")
+  non_na_idx <- which(!is.na(x))
+  if (length(non_na_idx) == 0L) return(out)
+
+  locale_fmts <- tryCatch(locale_date_formats_(), error = function(e) character(0))
+  all_fmts <- c("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%m-%d-%Y",
+                "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
+                "%Y-%m-%d %H:%M:%S",
+                "%m/%d/%Y %H:%M:%S", "%d/%m/%Y %H:%M:%S",
+                "%Y-%m-%dT%H:%M:%S",
+                "%b %d, %Y", "%B %d, %Y")
+  formats <- unique(c(locale_fmts, all_fmts))
+
+  for (fmt in formats) {
+    p <- suppressWarnings(as.Date(x, format = fmt))
+    if (sum(!is.na(p[non_na_idx])) / length(non_na_idx) >= 0.5) {
+      return(p)
+    }
+  }
+  out
+}
+
+
+# Internal: align a newdata frame's column classes to a training-data
+# template so predict()/model.matrix.earth() can interpret every model term.
+#
+# fit_earth() stores the *coerced* training frame in result$data, where date
+# predictors have been turned into numerics by coerce_types_(). Downstream
+# consumers (compute_rca_adjustments(), compute_intermediate_output()) predict
+# on the RAW imported data, where those same columns are still Date/POSIXct/
+# character. model.matrix.earth() then silently drops the un-coercible column,
+# yielding a column-count mismatch ("returned 24 columns ... need 25 columns").
+#
+# This aligns factor levels AND coerces any column that is numeric in the
+# training frame but non-numeric in newdata, mirroring coerce_types_()'s date
+# handling so the numeric encoding matches exactly.
+#
+# @param pred_df Newdata to be aligned.
+# @param train_df The coerced training frame (result$data).
+# @return pred_df with classes aligned to train_df.
+align_to_training_ <- function(pred_df, train_df) {
+  for (col in names(train_df)) {
+    if (!(col %in% names(pred_df))) next
+    if (is.factor(train_df[[col]])) {
+      pred_df[[col]] <- factor(pred_df[[col]], levels = levels(train_df[[col]]))
+    } else if (is.numeric(train_df[[col]]) && !is.numeric(pred_df[[col]])) {
+      v <- pred_df[[col]]
+      if (inherits(v, "Date") ||
+          inherits(v, "POSIXct") || inherits(v, "POSIXlt")) {
+        pred_df[[col]] <- as.numeric(v)
+      } else if (is.character(v)) {
+        pred_df[[col]] <- as.numeric(parse_char_dates_(v))
+      } else {
+        pred_df[[col]] <- suppressWarnings(as.numeric(v))
+      }
+    }
+  }
+  pred_df
 }

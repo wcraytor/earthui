@@ -240,9 +240,15 @@ fluidPage(
   tags$script(HTML("
     // --- Per-purpose localStorage key helper ---
     // All file-specific keys use this to append _<purpose>
+    // Always derive purpose from the live radio (matches server input$purpose);
+    // window.euiCurrentPurpose can go stale when a project sets the radio
+    // programmatically, which broke per-purpose settings save/restore.
+    window.euiActivePurpose = function() {
+      var r = $(\"input[name='purpose']:checked\").val();
+      return r || window.euiCurrentPurpose || 'general';
+    };
     window.euiPurposeKey = function(prefix, filename) {
-      var p = window.euiCurrentPurpose || 'general';
-      return prefix + filename + '_' + p;
+      return prefix + filename + '_' + window.euiActivePurpose();
     };
 
     // --- Checkmark helper ---
@@ -589,6 +595,18 @@ fluidPage(
         $('#wp_set_btn').prop('disabled', false).removeClass('disabled');
       }
     });
+    // newvar.penalty is incompatible with case weights in earth. Disable
+    // the input and show a note whenever a weight column is designated.
+    Shiny.addCustomMessageHandler('newvar_penalty_state', function(msg) {
+      if (msg.disabled) {
+        $('#newvar_penalty').val(0).prop('disabled', true)
+          .trigger('change');
+        $('#newvar_penalty_note').show();
+      } else {
+        $('#newvar_penalty').prop('disabled', false);
+        $('#newvar_penalty_note').hide();
+      }
+    });
     Shiny.addCustomMessageHandler('save_wp_weights', function(msg) {
       try {
         localStorage.setItem(window.euiPurposeKey('earthUI_wp_', msg.filename), JSON.stringify(msg.weights));
@@ -614,15 +632,18 @@ fluidPage(
       var fn = msg.filename;
       window.euiCurrentFilename = fn;
       var purpose = msg.purpose || window.euiCurrentPurpose || 'general';
-      if (msg.settings && Object.keys(msg.settings).length > 0) {
-        try { localStorage.setItem('earthUI_settings_' + fn + '_' + purpose, JSON.stringify(msg.settings)); } catch(e) {}
-      }
-      if (msg.variables && Object.keys(msg.variables).length > 0) {
-        try { localStorage.setItem('earthUI_vars_' + fn + '_' + purpose, JSON.stringify(msg.variables)); } catch(e) {}
-      }
-      if (msg.interactions && Object.keys(msg.interactions).length > 0) {
-        try { localStorage.setItem('earthUI_interactions_' + fn + '_' + purpose, JSON.stringify(msg.interactions)); } catch(e) {}
-      }
+      // msg.settings/variables/interactions are ALREADY JSON strings (R sends
+      // the DB column text). Store them VERBATIM. Do NOT JSON.stringify() —
+      // that double-encodes, and euiSaveToServer would then write the garbage
+      // back into the DB, corrupting the row on the next save.
+      var storeRaw = function(key, val) {
+        if (val && val !== '{}' && val !== 'null') {
+          try { localStorage.setItem(key, val); } catch(e) {}
+        }
+      };
+      storeRaw('earthUI_settings_'     + fn + '_' + purpose, msg.settings);
+      storeRaw('earthUI_vars_'         + fn + '_' + purpose, msg.variables);
+      storeRaw('earthUI_interactions_' + fn + '_' + purpose, msg.interactions);
 
       // If apply flag set, push settings directly into Shiny inputs
       if (msg.apply) {
@@ -719,20 +740,38 @@ fluidPage(
       }
     });
 
-    // Debounced save-to-server: collect localStorage and send to R/SQLite
+    // Save-to-server: collect localStorage and send to R/SQLite.
+    // euiSaveToServer() debounces (2s) for noisy per-keystroke / per-toggle
+    // changes. euiSaveToServerNow() flushes immediately for explicit,
+    // user-driven advance points (opening section 4, clicking Fit) so the
+    // write can't be lost to the debounce window if the user reloads or
+    // switches right after.
     window.euiSaveTimer = null;
+    window.euiBuildSavePayload = function(fn) {
+      var purpose = window.euiActivePurpose ? window.euiActivePurpose() : (window.euiCurrentPurpose || 'general');
+      var payload = { filename: fn, purpose: purpose, settings: null, variables: null, interactions: null };
+      try { payload.settings     = localStorage.getItem(window.euiPurposeKey('earthUI_settings_', fn)); } catch(e) {}
+      try { payload.variables    = localStorage.getItem(window.euiPurposeKey('earthUI_vars_', fn)); } catch(e) {}
+      try { payload.interactions = localStorage.getItem(window.euiPurposeKey('earthUI_interactions_', fn)); } catch(e) {}
+      return payload;
+    };
+    window.euiSaveToServerNow = function(fn) {
+      if (window.euiPurposeSwitching) return;
+      clearTimeout(window.euiSaveTimer);
+      Shiny.setInputValue('eui_save_trigger', window.euiBuildSavePayload(fn), {priority: 'event'});
+    };
     window.euiSaveToServer = function(fn) {
       if (window.euiPurposeSwitching) return;
       clearTimeout(window.euiSaveTimer);
       window.euiSaveTimer = setTimeout(function() {
-        var purpose = window.euiCurrentPurpose || 'general';
-        var payload = { filename: fn, purpose: purpose, settings: null, variables: null, interactions: null };
-        try { payload.settings     = localStorage.getItem(window.euiPurposeKey('earthUI_settings_', fn)); } catch(e) {}
-        try { payload.variables    = localStorage.getItem(window.euiPurposeKey('earthUI_vars_', fn)); } catch(e) {}
-        try { payload.interactions = localStorage.getItem(window.euiPurposeKey('earthUI_interactions_', fn)); } catch(e) {}
-        Shiny.setInputValue('eui_save_trigger', payload, {priority: 'deferred'});
+        Shiny.setInputValue('eui_save_trigger', window.euiBuildSavePayload(fn), {priority: 'deferred'});
       }, 2000);
     };
+
+    // No section-advance / Fit save triggers. Saving is button-only by design:
+    // the section 3 Save-current-as-default button saves target + predictors,
+    // and the section 4 button saves the earth params + interactions — both
+    // server-side. Opening a section or clicking Fit does NOT persist anything.
 
     // Apply earth() factory defaults to all parameter inputs
     Shiny.addCustomMessageHandler('apply_earth_defaults', function(msg) {
@@ -881,19 +920,23 @@ fluidPage(
                       `data-bs-placement` = "left", onclick = "event.stopPropagation();",
                       "?")),
           uiOutput("target_selector"),
-          conditionalPanel(
-            condition = "input.purpose !== 'general'",
-            dateInput("effective_date", "Effective Date", value = Sys.Date())
-          ),
+          # Effective Date applies to every purpose — general/CMA and market
+          # values have an effective date too, not just USPAP/IVS appraisals.
+          # (It is only USED to compute sale_age in appraisal/market modes; in
+          # general it is simply recorded.)
+          dateInput("effective_date", "Effective Date", value = Sys.Date()),
           h5("Predictor Settings"),
           uiOutput("predictor_hint_text"),
           div(style = "max-height: 400px; overflow-y: auto; border: 1px solid var(--bs-border-color, #ddd); border-radius: 4px;",
-              uiOutput("variable_table"))
+              uiOutput("variable_table")),
+          tags$div(style = "margin-top: 8px;",
+            actionButton("eui_save_varconfig", "Save current as default",
+                         class = "btn-outline-secondary btn-sm"))
         ),
         hr(),
 
         # --- Earth Call Parameters ---
-        tags$details(class = "eui-section",
+        tags$details(class = "eui-section", id = "eui_section_earthparams",
           tags$summary(h4("4. Earth Call Parameters"),
             tags$span(class = "eui-section-info",
                       `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
@@ -908,9 +951,6 @@ fluidPage(
                                    "Earth defaults" = "earth_defaults"),
                        selected = "last", inline = TRUE)
         ),
-        actionButton("eui_save_defaults", "Save current as default",
-                     class = "btn-dark btn-sm",
-                     style = "padding: 2px 8px; font-size: 0.85em; margin-bottom: 8px;"),
         actionButton("param_info", "Parameter Info",
                      class = "btn-info btn-sm",
                      style = "margin-bottom: 10px; width: 100%;"),
@@ -1006,6 +1046,9 @@ fluidPage(
         param_with_help(
           numericInput("newvar_penalty", "New variable penalty (newvar.penalty)", value = 0, min = 0, step = 0.01),
           "Penalty for adding a new variable (Friedman's gamma). Default 0. Non-zero values (0.01-0.2) prefer reusing existing variables, simplifying interpretation."),
+        tags$div(id = "newvar_penalty_note", style = "display:none; margin-top:-6px; margin-bottom:8px;",
+          tags$small(style = "color: var(--bs-warning-text-emphasis, #b48ead);",
+            "Must be disabled (0) while a weight column is in use — earth does not support new variable penalty with case weights.")),
 
         # 15. fast.k
         param_with_help(
@@ -1185,11 +1228,16 @@ fluidPage(
               numericInput("exhaustive_tol", "Exhaustive.tol", value = 1e-10, min = 0, step = 1e-11),
               "Default 1e-10. If reciprocal condition number < this, forces pmethod='backward'. Only applies with pmethod='exhaustive'.")
           )
-        )),
+        ),
+        tags$div(style = "margin-top: 8px;",
+          actionButton("eui_save_defaults", "Save current as default",
+                       class = "btn-dark btn-sm",
+                       style = "padding: 2px 8px; font-size: 0.85em;"))
+        ),
         hr(),
 
         # --- 5. Fit ---
-        tags$details(class = "eui-section", open = NA,
+        tags$details(class = "eui-section", open = NA, id = "eui_section_fit",
           tags$summary(h4("5. Fit Earth Model")),
           div(style = "position: relative;",
             textInput("random_seed", "Random seed",

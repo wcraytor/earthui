@@ -57,15 +57,12 @@ compute_intermediate_output <- function(data,
     NULL
   }
 
-  # Align factor levels in export_df with training data so predict() works;
-  # rows with unseen levels produce NA predictions.
+  # Align export_df classes with the coerced training frame so predict()
+  # works: factor levels (rows with unseen levels produce NA predictions)
+  # AND date->numeric columns (otherwise model.matrix.earth() drops the
+  # un-coercible column and the term count mismatches).
   train_df <- result$data
-  pred_df  <- export_df
-  for (col in names(train_df)) {
-    if (is.factor(train_df[[col]]) && col %in% names(pred_df)) {
-      pred_df[[col]] <- factor(pred_df[[col]], levels = levels(train_df[[col]]))
-    }
-  }
+  pred_df  <- align_to_training_(export_df, train_df)
   pred_mat <- stats::predict(model, newdata = pred_df)
 
   for (ri in seq_along(targets)) {

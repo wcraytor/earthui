@@ -72,14 +72,10 @@ compute_rca_adjustments <- function(data,
 
   export_df <- data
 
-  # Align factor levels with training data
+  # Align newdata classes (factor levels + date->numeric) with the coerced
+  # training frame so model.matrix.earth() can interpret every model term.
   train_df <- result$data
-  pred_df  <- export_df
-  for (col in names(train_df)) {
-    if (is.factor(train_df[[col]]) && col %in% names(pred_df)) {
-      pred_df[[col]] <- factor(pred_df[[col]], levels = levels(train_df[[col]]))
-    }
-  }
+  pred_df  <- align_to_training_(export_df, train_df)
 
   # Predict on all rows
   pred_mat  <- stats::predict(model, newdata = pred_df)

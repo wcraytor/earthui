@@ -87,10 +87,28 @@ Where:
   on first connect. Read/write via `regproj_index_get/put` (legacy API,
   scope-string based) or direct SQL.
 - `projects.sqlite` — `projects` (per-project metadata) +
-  `project_file_settings (flat_segment, file_basename, earth_settings,
-  earth_variables, earth_interactions, glmnet_*, mgcv_*)`. Settings now
-  scoped per (project, file). Public API: `get_project_settings()`,
-  `set_project_settings()` — designed for ValEngr automation.
+  `project_file_settings (flat_segment, purpose, earth_settings,
+  earth_variables, earth_interactions, glmnet_*, mgcv_*)`. Settings are
+  scoped per **(project, purpose)** — NOT per file (the table name is
+  historical; `file_basename` was removed from the key so a project's
+  several data files share one configuration). PK `(flat_segment, purpose)`.
+  Public API: `get_project_settings()`, `set_project_settings()` (no
+  `file_basename` arg) — designed for ValEngr automation. Opened in WAL
+  mode; the schema migration runs in one transaction with crash recovery.
+
+**Settings save/restore is button-only and DB-authoritative.** Saving
+happens only via the two "Save current as default" buttons, server-side,
+reading the live inputs: the **§3** button saves target + effective date +
+predictor config (read-merges into `earth_settings` + writes
+`earth_variables`); the **§4** button saves the earth params +
+`earth_interactions` (read-merges params into `earth_settings`, preserving
+§3's target/effective_date). **Fit does NOT save.** There is no on-change
+auto-save. Restore is server-side at file load: target via `selected=`,
+params + effective date via `update*Input()` (`apply_settings_restore_`),
+predictors baked into the variable-table render, interactions via the
+matrix render. No localStorage is used as a persistence layer for these
+(the old localStorage round-trip caused a JSON double-encode corruption and
+restore races).
 
 **User-level `R_user_dir("earthUI", "config")/prefs.json`** holds machine
 prefs only — `regproj_root`, locale defaults. NOT settings — those are
@@ -114,7 +132,7 @@ connect.
 R CMD INSTALL pkg
 
 # Run the Shiny app (port 7878)
-Rscript -e 'earthui::launch()'
+Rscript -e 'earthUI::launch()'
 
 # Rebuild roxygen docs + NAMESPACE
 Rscript -e 'roxygen2::roxygenise("pkg")'

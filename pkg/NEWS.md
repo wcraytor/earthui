@@ -1,5 +1,54 @@
 # earthUI 0.8.0
 
+## Per-project settings: save / restore
+
+* Model configuration is now keyed by **(project, purpose)** — the data
+  file is no longer part of the key. A project's several input files (a
+  small test extract, the full dataset) share one variable/parameter
+  configuration, so switching files keeps the setup. `get_project_settings()`
+  and `set_project_settings()` lost their `file_basename` argument
+  accordingly.
+* **Button-only save.** The "Save current as default" buttons are the save
+  mechanism: the **section 3** button saves the target, effective date, and
+  predictor configuration; the **section 4** button saves the earth call
+  parameters and the Allowed Interactions matrix. Each button updates only
+  its own half (read-merge), so they never clobber each other. **Fit no
+  longer auto-saves** — you can fit experimentally without overwriting your
+  saved default. There is no on-change auto-save.
+* Save and restore are **server-side and DB-authoritative**: configuration
+  is written to / read from `projects.sqlite` directly from the inputs at the
+  render and click, with no localStorage round-trip. This removes a class of
+  restore races and a JSON double-encoding bug that could corrupt a saved row
+  on the next save.
+* The **Effective Date** field is shown in all purposes (general/CMA and
+  market values have an effective date too, not just USPAP/IVS appraisals);
+  it is still only used to compute `sale_age` in appraisal/market modes.
+
+## Database durability
+
+* `projects.sqlite` opens in **WAL** journaling mode where supported, for
+  crash-safe writes and non-blocking reads.
+* The settings-table schema **migration runs in a single transaction** with
+  crash recovery: an interrupted upgrade rolls back to the original table
+  (no orphaned `_old`, no half-copied data), and a previously-stranded
+  `_old` table is restored on the next connect. Legacy per-file rows are
+  collapsed to one row per (project, purpose), keeping the most recent.
+
+## Bug fixes
+
+* Predicting on raw data with a **Date column as a model predictor** no
+  longer errors ("subscript out of bounds" / column-count mismatch).
+  Newdata is now aligned to the trained frame (`align_to_training_`):
+  date columns are coerced to the model's numeric encoding and factor
+  levels are matched. Affects the Intermediate Output and RCA exports.
+* `fit_earth()` drops a non-zero `newvar.penalty` (with a message) when
+  case weights are present, since earth does not support that combination
+  — previously it errored mid-fit (notably in market/appraisal mode where
+  a skipped row is encoded as a zero weight).
+* Character date columns are parsed with the same multi-format set as
+  `validate_types()`, so any column that validates as a date also coerces
+  (no more silent failures on `MM/DD/YYYY` and similar).
+
 ## Project model (regProj)
 
 * New first-class **project** concept replaces the old per-file workflow.

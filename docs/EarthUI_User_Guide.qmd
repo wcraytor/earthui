@@ -238,7 +238,7 @@ When you launch earthUI, a **Purpose** radio button at the top of the sidebar le
 
 In all three modes, the core modeling engine is identical --- you are always fitting an Earth (MARS) model. The purpose setting controls which additional tools and interface elements are available.
 
-**Switching purposes clears all state.** When you change the purpose radio, earthUI resets to a clean default state: imported data, model results, tabs, variable configuration, and earth parameters are all cleared. You must re-import your file after switching. Previously saved settings for that file and purpose combination will then be automatically restored from your last session.
+**Switching purposes clears all state.** When you change the purpose radio, earthUI resets to a clean default state: imported data, model results, tabs, variable configuration, and earth parameters are all cleared. You must re-import your file after switching. Previously saved settings for that project and purpose combination are then restored automatically.
 
 ## Real Estate--Specific Features
 
@@ -260,14 +260,14 @@ To use earthUI:
 
 1. **Install the package** in R: `install.packages("earthUI")` or install from source.
 2. **Launch the application**: run `earthUI::launch()` in R, or from the command line run `Rscript -e 'earthUI::launch()'`. The app opens in your web browser on port 7878. You can also access the app directly by navigating to `http://localhost:7878` in your browser.
-3. **Import your data** using the file upload in Section 1 of the sidebar. earthUI accepts CSV and Excel files.
+3. **Choose or create a project** in Section 1 (the Project picker), then **import your data** from the project's input folder in Section 2. earthUI accepts CSV and Excel files.
 4. **Select your Purpose** (General, For Appraisal, or Market Area Analysis).
 5. **Configure variables** --- choose your target(s) and predictors, set data types, and assign any special column roles.
 6. **Set Earth parameters** --- degree, nprune, subset filters, and other `earth()` arguments.
 7. **Fit the model** --- click "Fit Earth Model" and review the results in the main panel.
 8. **Export** --- download predictions as Excel, generate reports, or (in appraisal mode) compute RCA adjustments and Sales Comparison Grids.
 
-Settings are automatically persisted in your browser's local storage and restored when you reload the same input file.
+Settings are saved to the project database when you click the **Save current as default** buttons (in Sections 3 and 4) and are restored automatically when you reopen the project.
 
 \newpage
 
@@ -397,11 +397,11 @@ In General mode, the interface omits the real estate--specific features (special
 
 The sidebar is organized into numbered, collapsible sections that guide you from data import through export:
 
-**1. Import Data** --- File upload accepting CSV and Excel files. For Excel files with multiple sheets, a sheet selector appears. Column names are automatically converted to snake\_case.
+**1. Project** --- Choose an existing project or create a new one (purpose, country, and admin-level location). The active project determines where input files are read from and where outputs and logs are written --- there is no separate output-folder field to set.
 
-**2. Project Output Folder** --- A text field specifying where downloads and fit logs are saved (defaults to `~/Downloads`).
+**2. Import Data** --- Select a data file from the active project's input folder (CSV or Excel). For Excel files with multiple sheets, a sheet selector appears. Column names are automatically converted to snake\_case.
 
-**3. Variable Configuration** --- Target variable selector (supports multiple targets), predictor table with checkboxes for Include, Factor, and Linear. See Chapter 6 for full details.
+**3. Variable Configuration** --- Target variable selector (supports multiple targets), effective date, and a predictor table with checkboxes for Include, Factor, and Linear. See Chapter 6 for full details.
 
 **4. Earth Call Parameters** --- All arguments to the `earth()` function: degree, penalty, nk, pruning method, cross-validation, and more. See Chapter 7 for the complete parameter reference.
 
@@ -409,7 +409,7 @@ The sidebar is organized into numbered, collapsible sections that guide you from
 
 **6. Download Output** --- Exports predictions, residuals, CQA scores, and per-g-function contributions as an Excel file. See Chapter 9.
 
-**7. Download Report** --- Generates a formatted report (HTML, Word, or PDF) saved to the output folder. See Chapter 12.
+In **appraisal mode**, further numbered sections appear: **7. Calculate RCA Adjustments** and **8. Generate Sales Grid**. Report generation is in **9. Generate Quarto Report** and **10. Convert Quarto Report**, saved to the project's output folder. See the later chapters.
 
 ## Main Panel Tabs
 
@@ -444,7 +444,12 @@ Earth Output & Raw text output from `earth::summary()`, including the pruning pa
 
 ## Settings Persistence
 
-earthUI automatically saves your configuration to the browser's local storage, keyed by both the input filename and the current purpose mode. When you reload the same file under the same purpose, all settings are restored: target selection, predictor checkboxes, data types, earth parameters, and response weights. This means the same file can have different configurations for General, Appraisal, and Market modes. Settings are also backed up to an SQLite database so they persist across browser sessions. A **Reset to Defaults** button clears all saved settings for the current purpose.
+earthUI saves your configuration **only when you click a Save button** --- there is no automatic save-as-you-type. Two buttons do the saving:
+
+- **Save current as default** in Section 3 (Variable Configuration) saves the target, the effective date, and the predictor configuration (Include / Factor / Linear / Type / Special).
+- **Save current as default** in Section 4 (Earth Call Parameters) saves the earth call parameters and the Allowed Interactions matrix.
+
+Settings are stored in the project database (`projects.sqlite`), scoped per **project and purpose** --- so all data files within a project share one configuration, and the same project can have different configurations for General, Appraisal, and Market modes. Saved settings are restored automatically when you reopen the project. **Fitting does not save settings**, so you can fit experimentally without overwriting your saved default.
 
 ## Dark Mode
 
@@ -506,7 +511,7 @@ When you change the country, all overrides reset to that country's defaults. Cha
 
 ### Saving Defaults
 
-Click **Save as my default** to store your locale preferences globally. These defaults apply to all future sessions regardless of which data file you load. Per-file settings (target, predictors, parameters) are saved separately in the browser's local storage, but locale defaults persist across all files via an SQLite database. This two-level approach is designed for organizations like audit firms that work with data from multiple countries --- set your most common country as the default, then override per-file when needed.
+Click **Save as my default** to store your locale preferences globally. These defaults apply to all future sessions regardless of which data file you load. Project settings (target, predictors, parameters) are saved separately in the project database, scoped per project and purpose, via the **Save current as default** buttons; locale defaults persist across all projects via the same database. This two-level approach is designed for organizations like audit firms that work with data from multiple countries --- set your most common country as the default, then override per-file when needed.
 
 \begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
 \small\textit{\textbf{Tip:} Number formatting on plot axes and slope labels automatically adapts to your locale. German locale uses periods for thousands (200.000), Finnish uses spaces (200 000), Swiss uses apostrophes (200'000). No currency symbols are displayed --- earthUI is currency-agnostic.}
@@ -534,7 +539,7 @@ After importing, the Data tab splits into two sections: **Subject Property** (ro
 
 ## Effective Date \& Sale Age
 
-In appraisal and market modes, an **Effective Date** field appears in the Variable Configuration section (defaulting to today's date). If you designate a column as `contract_date` in the Special column dropdown, earthUI computes a `sale_age` column --- the number of integer days between each sale's contract date and the effective date. This column replaces the original date column as a predictor.
+An **Effective Date** field appears in the Variable Configuration section in every purpose mode (defaulting to today's date), since general/CMA and market valuations have an effective date too. It is only *used* to compute `sale_age` in appraisal and market modes. If you designate a column as `contract_date` in the Special column dropdown, earthUI computes a `sale_age` column --- the number of integer days between each sale's contract date and the effective date. This column replaces the original date column as a predictor.
 
 The first time you click Fit after designating a contract date, earthUI creates the `sale_age` column and notifies you to click Fit again to include it.
 
@@ -889,15 +894,11 @@ The variance model (`varmod.method = "lm"`) fits on the cross-validation residua
 
 After every successful fit, earthUI writes `<filename>_earth_output_<timestamp>.txt` to the output folder. This file contains the model terms, summary statistics (R\textsuperscript{2}, GRSq, CVRSq), variance model details, and trace log. One file is created per fit, providing a cumulative record for comparing parameter configurations.
 
-## Settings Defaults
+## Saving Parameters
 
-A radio button at the top of Section 4 controls which defaults are loaded:
+Click **Save current as default** at the bottom of Section 4 to save the current earth parameters **and the Allowed Interactions matrix** to the project (scoped per project and purpose). This is a deliberate, button-only action --- nothing is saved as you adjust parameters, and fitting does not save them either, so you can experiment freely. (The companion button in Section 3 saves the target, effective date, and predictor configuration.)
 
-- **Use last settings for input file** --- restores the settings you used last time with this particular file
-- **Use default settings** --- applies your saved custom defaults
-- **Earth defaults** --- resets all parameters to factory values
-
-Click **Save current as default** to store the current parameter configuration as your personal defaults.
+A radio button at the top of Section 4 controls how the parameters initialize: restore the project's last saved parameters, apply your saved defaults, or **Earth defaults** (reset every parameter to `earth()`'s factory values).
 
 \newpage
 
@@ -935,7 +936,7 @@ Every fit (success or failure) writes a log file to your output folder:
 
 - **Filename**: `<datafile>_earth_log_<YYYYMMDD_HHMMSS>.txt`
 - **Contents**: timestamp, all trace output from the fitting process, and any error messages
-- **Location**: the Project Output Folder specified in Section 2 (defaults to `~/Downloads`)
+- **Location**: the active project's output folder (derived automatically from the project)
 
 \begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
 \small\textit{\textbf{Tip:} If callr is not installed, earthUI falls back to synchronous fitting with a simple progress bar. Install callr for the full trace-output experience.}
@@ -1016,7 +1017,7 @@ Factor levels in the prediction data are aligned with the training data before c
 
 ## mgcvUI Auto-Export
 
-On every successful fit with `degree` $\leq$ 2, earthUI automatically saves the full result object as an `.rds` file to the Project Output Folder. The filename follows the pattern `<datafile>_earthUI_result_<YYYYMMDD_HHMMSS>.rds`.
+On every successful fit with `degree` $\leq$ 2, earthUI automatically saves the full result object as an `.rds` file to the project's output folder. The filename follows the pattern `<datafile>_earthUI_result_<YYYYMMDD_HHMMSS>.rds`.
 
 This file can be loaded by mgcvUI (a companion Shiny app for GAM modeling) using `readRDS()`. mgcvUI uses the earth model's knot locations and basis functions as starting points for GAM smooth terms, enabling a seamless transition from MARS to GAM modeling.
 
@@ -1043,7 +1044,7 @@ If earthUI uses a weight column (e.g., to exclude the subject row with weight=0)
 ### Workflow
 
 1. Fit an earth model in earthUI (any degree).
-2. The `.rds` result file is saved automatically to the Project Output Folder.
+2. The `.rds` result file is saved automatically to the project's output folder.
 3. In glmnetUI, open **Section 2: Import from earthUI** and browse to the `.rds` file.
 4. Verify that the **same data file** and **same weight column** are used in both apps.
 5. Configure glmnet parameters in Section 5 (the Interaction Matrix is automatically disabled when an earthUI import is active).
@@ -1258,7 +1259,7 @@ Three formats are available via the format dropdown:
 - **Word** --- a `.docx` file suitable for editing and distribution. Includes a table of contents, page numbers, and uses a custom reference template for consistent styling.
 - **PDF** --- typeset with LuaLaTeX for professional-quality output. Paper size follows the locale setting (Letter or A4). Includes landscape pages for large interaction matrices and uses Roboto Condensed with Latin Modern Math for equations.
 
-Reports are rendered via Quarto and saved directly to the Project Output Folder as `<datafile>_report_<YYYYMMDD_HHMMSS>.<format>`. Rendering runs in the background --- a modal dialog shows elapsed time and Quarto progress while the app remains responsive. A notification confirms the file location on completion.
+Reports are rendered via Quarto and saved directly to the project's output folder as `<datafile>_report_<YYYYMMDD_HHMMSS>.<format>`. Rendering runs in the background --- a modal dialog shows elapsed time and Quarto progress while the app remains responsive. A notification confirms the file location on completion.
 
 All operations (model fitting, data downloads, RCA calculations, sales grid generation, and report rendering) are logged with start/end timestamps and elapsed times to `<datafile>_earthui_log.txt` in the output folder, for troubleshooting and performance monitoring.
 

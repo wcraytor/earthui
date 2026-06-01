@@ -277,7 +277,20 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
   if (!is.null(glm))             earth_args$glm              <- glm
   if (!is.null(trace))           earth_args$trace            <- trace
   if (!is.null(nk))              earth_args$nk               <- as.integer(nk)
-  if (!is.null(newvar.penalty))  earth_args$newvar.penalty   <- newvar.penalty
+  if (!is.null(newvar.penalty)) {
+    # earth's C forward pass rejects a non-zero newvar.penalty when case
+    # weights are present ("newvar.penalty is not yet implemented with
+    # weights"). This bites market/appraisal mode, where the skipped first
+    # row is encoded as a weight of 0. A penalty of 0 is earth's no-op
+    # default and is safe to pass. Drop a non-zero penalty (with notice)
+    # rather than crash the fit.
+    if (!is.null(weights) && newvar.penalty != 0) {
+      message("newvar.penalty (", newvar.penalty, ") is not supported by ",
+              "earth when case weights are used; ignoring it for this fit.")
+    } else {
+      earth_args$newvar.penalty <- newvar.penalty
+    }
+  }
   if (!is.null(fast.beta))       earth_args$fast.beta        <- fast.beta
   if (!is.null(ncross)) {
     # Auto-increase ncross when variance model is enabled and ncross < 3
