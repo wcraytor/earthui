@@ -2,15 +2,20 @@
 
 0 errors | 0 warnings | 0 notes
 
+(Locally a single NOTE "checking for future file timestamps ... unable to
+verify current time" may appear; this is an environment-only artifact of the
+check machine being unable to reach the time-verification service and does not
+occur on CRAN's incoming checks.)
+
 (On CRAN's incoming checks a "Days since last update" and/or version-increment
-note may appear: 0.8.0 is a substantial feature release over the previously
-accepted 0.1.1. If the math-rendering note recurs ("Skipping checking math
+note may appear: 0.8.0 is a substantial feature release over the currently
+published 0.1.3. If the math-rendering note recurs ("Skipping checking math
 rendering: package 'V8' unavailable"), V8 is not required — math is rendered
 by MathJax/KaTeX in the Shiny app and reports, not at check time.)
 
 ## Test environments
 
-* Local: macOS Tahoe (aarch64), R 4.5.2
+* Local: macOS Tahoe (aarch64), R 4.5.3
 * GitHub Actions: ubuntu-latest (R release, R devel, R oldrel-1),
   macOS-latest (R release), windows-latest (R release)
 
