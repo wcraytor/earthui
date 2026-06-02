@@ -59,6 +59,45 @@ launch <- function(port = 7878L, ...) {
     }
   }
 
+  # External command-line tools for report rendering (PDF/HTML/Word): quarto +
+  # pandoc + a LaTeX engine, reachable on PATH. Model fitting and Excel/CSV
+  # export do NOT need these. Warn (do not stop) with install hints so the user
+  # gets a clear message up front instead of a cryptic failure when they click
+  # Generate Report. Common bin dirs are also checked because the app extends
+  # PATH at session start (so a tool in e.g. /opt/homebrew/bin is still found).
+  extra_bin <- c("/usr/local/bin", "/opt/homebrew/bin")
+  have_tool <- function(tool) {
+    if (nzchar(Sys.which(tool))) return(TRUE)
+    exe <- if (.Platform$OS.type == "windows") paste0(tool, ".exe") else tool
+    any(file.exists(file.path(extra_bin, exe)))
+  }
+  report_missing <- character(0)
+  if (!have_tool("quarto")) {
+    report_missing <- c(report_missing,
+      "quarto  - the Quarto CLI (https://quarto.org/docs/get-started/)")
+  }
+  pandoc_ok <- have_tool("pandoc") ||
+    (requireNamespace("rmarkdown", quietly = TRUE) &&
+       isTRUE(tryCatch(rmarkdown::pandoc_available(), error = function(e) FALSE)))
+  if (!pandoc_ok) {
+    report_missing <- c(report_missing,
+      "pandoc  - https://pandoc.org/installing.html (also bundled with RStudio)")
+  }
+  latex_ok <- (requireNamespace("tinytex", quietly = TRUE) &&
+                 isTRUE(tryCatch(tinytex::is_tinytex(), error = function(e) FALSE))) ||
+    have_tool("lualatex") || have_tool("xelatex") || have_tool("pdflatex")
+  if (!latex_ok) {
+    report_missing <- c(report_missing,
+      "LaTeX   - for PDF reports; install with tinytex::install_tinytex()")
+  }
+  if (length(report_missing) > 0L) {
+    message("earthUI: report generation (PDF/HTML/Word) needs external tools ",
+            "not currently found - the app still runs, but the report ",
+            "features will fail until these are installed:")
+    for (m in report_missing) message("    ", m)
+    message("    (Model fitting, plots, and Excel/CSV export do not need these.)")
+  }
+
   # Kill any existing process on the port (avoids "address already in use")
   if (.Platform$OS.type == "unix") {
     tryCatch(
