@@ -1293,6 +1293,31 @@ fluidPage(
           )
         ),
 
+        # --- Lock Model Output (Trilogy mode only) ---
+        # Only shown when earthUI was launched in trilogy mode (from the Trilogy
+        # UI). Locks this fit's .rds + settings as the canonical earth model for
+        # glmnetUI/mgcvUI, via trilogy.json.
+        if (!is.null(getOption("earthUI.trilogy")))
+          conditionalPanel(
+            condition = paste0("output.model_fitted && output.has_active_project",
+                               " && input.purpose === 'appraisal'"),
+            hr(),
+            tags$details(class = "eui-section", open = NA,
+              tags$summary(h4("Lock Model Output (for glmnetUI/mgcvUI)"),
+                tags$span(class = "eui-section-info",
+                          `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+                          `data-bs-content` = "Lock this fitted earth model as the one glmnetUI and mgcvUI import for the Trilogy. Records the .rds, the locked predictor basis, and the shared CQA settings in the project's trilogy.json.",
+                          `data-bs-placement` = "left", onclick = "event.stopPropagation();",
+                          "?")),
+              uiOutput("trilogy_lock_status"),
+              actionButton("trilogy_lock_btn", "Lock This Model for the Trilogy",
+                           class = "btn-primary", style = "width: 100%;"),
+              actionButton("trilogy_unlock_btn", "Clear Lock",
+                           class = "btn-outline-secondary",
+                           style = "width: 100%; margin-top: 6px;")
+            )
+          ),
+
         # --- 7. Calculate RCA Adjustments (Appraisal only) ---
         conditionalPanel(
           condition = "output.model_fitted && input.purpose === 'appraisal'",

@@ -3289,6 +3289,12 @@ function(input, output, session) {
             traces <- isolate(rv$trace_lines)
             folder <- input$output_folder
             fname <- rv$file_name
+            # Expected path of the .rds auto_export_for_mgcv() writes for this
+            # fit (it runs async, so we mirror its naming here). The Trilogy
+            # lock records this path as the canonical earth model.
+            rv$mgcv_rds <- file.path(folder, paste0(
+              tools::file_path_sans_ext(fname %||% "earth"),
+              "_earthUI_result_", earthUI:::fit_stamp_(rv$fit_ts), ".rds"))
             session$onFlushed(function() {
               write_fit_log(folder, traces, fname)
               write_earth_output(res, folder, fname)
@@ -4372,6 +4378,62 @@ function(input, output, session) {
     base <- tools::file_path_sans_ext(rv$file_name %||% "data")
     paste0(base, "_modified_", earthUI:::fit_stamp_(rv$fit_ts), ".xlsx")
   }
+
+  # --- Trilogy: lock this earth model for glmnetUI/mgcvUI ------------------
+  # Writes the canonical earth .rds + locked predictor basis + shared CQA into
+  # the project's trilogy.json (see trilogy.R). Only wired in trilogy mode (the
+  # UI section is hidden otherwise).
+  output$trilogy_lock_status <- renderUI({
+    rv$project_refresh_token
+    pp <- rv$active_project$project_path
+    if (is.null(pp)) return(NULL)
+    if (isTRUE(trilogy_is_locked(pp))) {
+      lk <- trilogy_get_lock(pp)
+      tags$div(class = "small", style = "margin-bottom:6px;",
+        tags$span(style = "color:#a3be8c;font-weight:bold;", "● Locked"),
+        tags$div(class = "text-muted",
+                 paste0("fit ", lk$fit_ts %||% "?", "  —  ",
+                        basename(lk$rds %||% ""))))
+    } else {
+      tags$div(class = "small text-muted", style = "margin-bottom:6px;",
+               "○ Not locked yet — lock this fit to enable glmnetUI/mgcvUI.")
+    }
+  })
+
+  observeEvent(input$trilogy_lock_btn, {
+    pp <- rv$active_project$project_path
+    res <- rv$result
+    if (is.null(pp) || is.null(res)) {
+      showNotification("Need an active project and a fitted model to lock.",
+                       type = "error"); return()
+    }
+    trilogy_set_lock(
+      pp,
+      fit_ts = earthUI:::fit_stamp_(rv$fit_ts),
+      rds    = rv$mgcv_rds %||% "",
+      downstream_locked = list(
+        predictors = as.list(res$predictors),
+        factor     = as.list(res$categoricals),
+        linear     = as.list(res$linpreds)),
+      shared = list(
+        target   = res$target,
+        cqa_mode = input$rca_cqa_type  %||% NULL,
+        cqa      = input$rca_cqa_value %||% NULL))
+    # also register earth's fit-stamp for the run grouping
+    trilogy_register_fit(pp, "earth", earthUI:::fit_stamp_(rv$fit_ts))
+    rv$project_refresh_token <- isolate(rv$project_refresh_token) + 1L
+    showNotification("Earth model locked for the Trilogy.",
+                     type = "message", duration = 5)
+  })
+
+  observeEvent(input$trilogy_unlock_btn, {
+    pp <- rv$active_project$project_path
+    if (!is.null(pp)) {
+      trilogy_clear_lock(pp)
+      rv$project_refresh_token <- isolate(rv$project_refresh_token) + 1L
+      showNotification("Lock cleared.", duration = 4)
+    }
+  })
 
   observeEvent(input$export_data, {
     req(rv$data)
