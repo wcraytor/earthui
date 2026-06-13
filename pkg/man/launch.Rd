@@ -4,13 +4,19 @@
 \alias{launch}
 \title{Launch the earthUI Shiny application}
 \usage{
-launch(port = 7878L, ...)
+launch(port = 7878L, trilogy = NULL, ...)
 }
 \arguments{
 \item{port}{Integer. Port number for the Shiny app. Defaults to 7878.
 A fixed port keeps browser-side UI preferences (theme, last-used purpose)
 consistent across sessions. (Model configuration is saved server-side in
 the project database, not in the browser.)}
+
+\item{trilogy}{Trilogy context, or \code{NULL} (the default) for a normal
+standalone run. When non-\code{NULL}, the app runs in "trilogy mode": it shows
+"(Trilogy Mode)" after the title and (in future steps) the model-lock
+workflow for the run. Normally set by the Trilogy UI, not by hand. Exposed
+to the app via \code{getOption("earthUI.trilogy")}.}
 
 \item{...}{Additional arguments passed to \code{\link[shiny:runApp]{shiny::runApp()}}.}
 }

@@ -100,7 +100,11 @@ fluidPage(
     tags$span(class = "eui-brand",
       tags$img(src = "logo.png"),
       "earthUI",
-      tags$small(" - Interactive Earth Model Builder")
+      tags$small(" - Interactive Earth Model Builder"),
+      if (!is.null(getOption("earthUI.trilogy")))
+        tags$span(" (Trilogy Mode)",
+          style = paste0("font-size: 0.55em; font-weight: bold;",
+                         " color: #5e81ac; margin-left: 8px;"))
     ),
     tags$div(class = "dropdown", id = "eui-settings-dropdown",
       tags$button(class = "eui-menu-btn", onclick = "toggleDropdown('eui-settings-dropdown')",

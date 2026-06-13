@@ -8,6 +8,11 @@
 #'   A fixed port keeps browser-side UI preferences (theme, last-used purpose)
 #'   consistent across sessions. (Model configuration is saved server-side in
 #'   the project database, not in the browser.)
+#' @param trilogy Trilogy context, or `NULL` (the default) for a normal
+#'   standalone run. When non-`NULL`, the app runs in "trilogy mode": it shows
+#'   "(Trilogy Mode)" after the title and (in future steps) the model-lock
+#'   workflow for the run. Normally set by the Trilogy UI, not by hand. Exposed
+#'   to the app via `getOption("earthUI.trilogy")`.
 #' @param ... Additional arguments passed to [shiny::runApp()].
 #'
 #' @return This function does not return a value; it launches the Shiny app.
@@ -17,7 +22,7 @@
 #' if (interactive()) {
 #'   launch()
 #' }
-launch <- function(port = 7878L, ...) {
+launch <- function(port = 7878L, trilogy = NULL, ...) {
   if (getRversion() < "4.1.0") {
     stop("earthUI requires R >= 4.1.0 (you have ", getRversion(), "). ",
          "Please update R from https://cran.r-project.org/", call. = FALSE)
@@ -121,5 +126,10 @@ launch <- function(port = 7878L, ...) {
     stop("Could not find the Shiny app directory. ",
          "Try reinstalling the 'earthUI' package.", call. = FALSE)
   }
+  # Expose the trilogy context to the app (ui.R/server.R read it via
+  # getOption); restore on exit so a standalone run later is unaffected.
+  op <- options(earthUI.trilogy = trilogy)
+  on.exit(options(op), add = TRUE)
+
   shiny::runApp(app_dir, port = port, ...)
 }
