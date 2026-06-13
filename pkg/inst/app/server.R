@@ -202,30 +202,6 @@ function(input, output, session) {
     }
   })
 
-  observeEvent(input$regproj_root_save, {
-    p <- trimws(input$regproj_root %||% "")
-    if (!nzchar(p)) {
-      showNotification("regProj root folder is empty.",
-                       type = "error", duration = 5); return()
-    }
-    p <- path.expand(p)
-    if (!dir.exists(p)) {
-      ok <- tryCatch({ dir.create(p, recursive = TRUE); TRUE },
-                     error = function(e) FALSE,
-                     warning = function(w) FALSE)
-      if (!ok || !dir.exists(p)) {
-        showNotification(sprintf("Cannot create or access: %s", p),
-                         type = "error", duration = 6); return()
-      }
-    }
-    prefs <- earthui_prefs_read()
-    prefs$regproj_root <- p
-    earthui_prefs_write(prefs)
-    rv$project_refresh_token <- rv$project_refresh_token + 1L
-    showNotification(sprintf("regProj root saved: %s", p),
-                     type = "message", duration = 5)
-  })
-
   # --- regProj Project Location cascade (Phase B) ---
 
   # Helper: returns TRUE if this level has shipped reference data
@@ -396,8 +372,8 @@ function(input, output, session) {
                style = "margin-bottom: 12px;",
                "Country, State, County, City, and Purpose are locked once the project is created. Project Name can be renamed later (v1.5)."),
 
-      textInput("np_project_name", "Project Name *",
-                placeholder = "lowercase, _-, max 24 chars (e.g. lakemerritt_20260424)",
+      textInput("np_project_name", "Project Name * (max 8 chars)",
+                placeholder = "max 8 chars; a date-time prefix is added automatically",
                 width = "100%"),
 
       radioButtons("np_purpose", "Purpose *",
@@ -534,14 +510,17 @@ function(input, output, session) {
     cc <- input$np_country %||% ""
     schema <- country_schema(cc)
     last_idx <- length(schema)
-    proj <- trimws(input$np_project_name %||% "")
     pur <- input$np_purpose %||% "appr"
 
-    # Field validation
-    if (!nzchar(proj) || !grepl("^[A-Za-z0-9_-]+$", proj) || nchar(proj) > 24L) {
-      showNotification("Project Name must match ^[A-Za-z0-9_-]+$ (letters, digits, _ and -) and be at most 24 chars.",
-                       type = "error", duration = 5); return()
-    }
+    # Validate the typed name (<= 8 chars) and prepend the creation timestamp.
+    # Country-agnostic: works for any country's admin-level depth.
+    proj <- tryCatch(
+      regproj_new_project_name(trimws(input$np_project_name %||% "")),
+      error = function(e) {
+        showNotification(conditionMessage(e), type = "error", duration = 5)
+        NULL
+      })
+    if (is.null(proj)) return()
     if (length(schema) == 0L) {
       showNotification("This country has no admin levels defined.",
                        type = "error", duration = 5); return()
@@ -784,7 +763,10 @@ function(input, output, session) {
   }
 
   # Save locale as user default
-  observeEvent(input$locale_save_default, {
+  # Settings "Save": persist locale defaults + the regProj root, and keep the
+  # Settings panel open so the user can review/adjust the other fields.
+  observeEvent(input$settings_save, {
+    # 1) Locale defaults -> settings DB
     locale_settings <- list(
       locale_country = input$locale_country,
       locale_paper   = input$locale_paper,
@@ -794,8 +776,33 @@ function(input, output, session) {
       settings_con, "__locale_defaults__",
       settings = jsonlite::toJSON(locale_settings, auto_unbox = TRUE)
     )
-    showNotification("Locale saved as default for all new files.",
+    # 2) regProj root -> per-user prefs (only if a non-empty, usable path)
+    p <- trimws(input$regproj_root %||% "")
+    root_msg <- ""
+    if (nzchar(p)) {
+      p <- path.expand(p)
+      ok <- dir.exists(p) || tryCatch({ dir.create(p, recursive = TRUE); TRUE },
+                                      error = function(e) FALSE,
+                                      warning = function(w) FALSE)
+      if (ok && dir.exists(p)) {
+        prefs <- earthui_prefs_read()
+        prefs$regproj_root <- p
+        earthui_prefs_write(prefs)
+        rv$project_refresh_token <- rv$project_refresh_token + 1L
+        root_msg <- paste0(" regProj root: ", p)
+      } else {
+        showNotification(sprintf("Cannot create or access: %s", p),
+                         type = "error", duration = 6)
+        return()
+      }
+    }
+    showNotification(paste0("Settings saved.", root_msg),
                      type = "message", duration = 4)
+  })
+
+  # Settings "Close": dismiss the Settings panel (does not save).
+  observeEvent(input$settings_close, {
+    session$sendCustomMessage("close_settings_dropdown", list())
   })
 
   # When Settings country changes, apply to locale env and sync import locale
@@ -2038,11 +2045,57 @@ function(input, output, session) {
     appraiser <- input$purpose %in% c("appraisal", "market")
 
     # Special column options
-    special_options <- c("no", "actual_age", "area", "concessions",
-                         "contract_date", "display_only", "dom",
-                         "effective_age", "latitude", "listing_date",
-                         "living_area", "longitude", "lot_size",
-                         "sale_age", "sale_type", "site_dimensions", "weight")
+    special_options <- c("actual_age", "area", "concessions", "contract_date",
+                         "display_only", "dom", "effective_age", "latitude",
+                         "listing_date", "living_area", "longitude", "lot_size",
+                         "no", "sale_age", "sale_type", "site_dimensions", "weight")
+
+    # Guess the default Special tag from a column name (or "no" if none is a
+    # reasonable match). Conservative: generic words ("area", "age") match a
+    # whole name only, never a sub-token, so area_id / garage_spaces stay "no".
+    # Kept identical across the sibling apps (glmnetUI, mgcvUI).
+    special_default_for_ <- function(name, tags) {
+      cand <- setdiff(tags, c("no", "display_only"))
+      if (length(cand) == 0L || is.null(name) || !nzchar(name)) return("no")
+      norm <- function(x) gsub("[^a-z0-9]+", "", tolower(x))
+      tok <- function(x) {
+        x <- gsub("([a-z0-9])([A-Z])", "\\1 \\2", x)
+        parts <- strsplit(tolower(x), "[^a-z0-9]+")[[1L]]
+        parts[nzchar(parts)]
+      }
+      syn <- list(
+        latitude        = c("lat"),
+        longitude       = c("long", "lon", "lng"),
+        living_area     = c("livingarea", "gla", "sqft", "livingsqft", "livingsf",
+                            "grosslivingarea", "livarea", "livsf", "livingsq"),
+        lot_size        = c("lotsize", "lotsf", "lotsqft", "lotarea"),
+        site_dimensions = c("sitedimensions", "sitedim", "sitedims"),
+        actual_age      = c("age", "actualage"),
+        effective_age   = c("effectiveage", "effage"),
+        sale_age        = c("saleage", "ageofsale", "daystosale"),
+        sale_type       = c("saletype", "typeofsale"),
+        contract_date   = c("contractdate", "kdate"),
+        listing_date    = c("listingdate", "listdate"),
+        dom             = c("daysonmarket", "daysmarket"),
+        concessions     = c("concession", "conc", "sellerconcessions",
+                            "saleconcessions"),
+        weight          = c("wt", "wgt")
+      )
+      generic <- c("area", "age")
+      keys_for <- function(tag) {
+        k <- unique(c(norm(tag), norm(syn[[tag]])))
+        k[nzchar(k)]
+      }
+      nn   <- norm(name)
+      toks <- norm(tok(name))
+      for (tag in cand) if (nn %in% keys_for(tag)) return(tag)
+      for (tag in cand) {
+        k <- setdiff(keys_for(tag), generic)
+        k <- k[nchar(k) >= 3L]
+        if (length(k) && any(toks %in% k)) return(tag)
+      }
+      "no"
+    }
     
 
     # Header row — vertical labels for checkboxes, like glmnetUI
@@ -2088,7 +2141,8 @@ function(input, output, session) {
       inc_checked <- isTRUE(sv$inc)
       fac_checked <- isTRUE(sv$fac)
       lin_checked <- isTRUE(sv$lin)
-      sel_special <- if (!is.null(sv) && !is.null(sv$special)) sv$special else "no"
+      sel_special <- if (!is.null(sv) && !is.null(sv$special)) sv$special
+                     else special_default_for_(col, special_options)
 
       # Build <option> tags with the saved (or auto-detected) type selected
       option_tags <- lapply(type_options, function(opt) {
@@ -3212,6 +3266,12 @@ function(input, output, session) {
             weights = fit_args$weights
           )
           rv$result$seed <- seed
+          # Canonical fit time: every output of this fit (the .rds earth model,
+          # logs, sales grid, and the report) is named with THIS time, not each
+          # file's creation time, so a fit's outputs group together (and a
+          # Trilogy run can gather the three methods' files by fit time).
+          rv$fit_ts <- Sys.time()
+          rv$result$fit_ts <- rv$fit_ts   # stash on result for export functions
           elapsed <- rv$result$elapsed
           setProgress(1, detail = "Done")
           session$sendCustomMessage("fitting_done",
@@ -4019,7 +4079,7 @@ function(input, output, session) {
 
     base <- tools::file_path_sans_ext(rv$file_name %||% "earth")
     out_name <- paste0(base, "_report_",
-                       format(Sys.time(), "%Y%m%d_%H%M%S"), ".", fmt)
+                       earthUI:::fit_stamp_(rv$fit_ts), ".", fmt)
     out_path <- file.path(folder, out_name)
     rv_report$out_path <- out_path
     rv_report$fmt <- fmt
@@ -4258,7 +4318,7 @@ function(input, output, session) {
     if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
 
     out_path <- file.path(folder, paste0("SalesGrid_",
-                          format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx"))
+                          earthUI:::fit_stamp_(rv$fit_ts), ".xlsx"))
 
     message("earthUI: Sales grid with ", length(comp_rows),
             " comps (rows: ", paste(comp_rows, collapse = ","), ")")
@@ -4310,7 +4370,7 @@ function(input, output, session) {
   # --- Export Data (Excel) ---
   export_data_filename_ <- function() {
     base <- tools::file_path_sans_ext(rv$file_name %||% "data")
-    paste0(base, "_modified_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx")
+    paste0(base, "_modified_", earthUI:::fit_stamp_(rv$fit_ts), ".xlsx")
   }
 
   observeEvent(input$export_data, {
@@ -4456,7 +4516,7 @@ function(input, output, session) {
       if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
       base <- tools::file_path_sans_ext(rv$file_name %||% "data")
       file <- file.path(folder, paste0(base, "_adjusted_",
-                                       format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx"))
+                                       earthUI:::fit_stamp_(rv$fit_ts), ".xlsx"))
 
       if (!requireNamespace("writexl", quietly = TRUE)) {
         showNotification("Package 'writexl' required.", type = "error", duration = 10)

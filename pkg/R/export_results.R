@@ -58,7 +58,7 @@ write_earth_output <- function(result, output_folder, file_name) {
     if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
     base <- tools::file_path_sans_ext(file_name %||% "earthui")
     out_path <- file.path(folder, paste0(base, "_earth_output_",
-                          format(Sys.time(), "%Y%m%d_%H%M%S"), ".txt"))
+                          fit_stamp_(result$fit_ts), ".txt"))
     model <- result$model
     lines <- utils::capture.output({
       cat(sprintf("earthUI output: %s\n", Sys.time()))
@@ -119,7 +119,7 @@ auto_export_for_mgcv <- function(result, output_folder, file_name) {
     if (!dir.exists(folder)) dir.create(folder, recursive = TRUE)
     base <- tools::file_path_sans_ext(file_name %||% "earth")
     out_path <- file.path(folder, paste0(base, "_earthUI_result_",
-                          format(Sys.time(), "%Y%m%d_%H%M%S"), ".rds"))
+                          fit_stamp_(result$fit_ts), ".rds"))
     saveRDS(result, out_path)
     verify <- tryCatch({
       obj <- readRDS(out_path)

@@ -36,6 +36,10 @@ fluidPage(
     .eui-navbar .eui-menu-btn:hover { background: var(--bs-tertiary-bg); }
     .eui-navbar .eui-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 6px; padding: 12px 16px; min-width: 280px; z-index: 10001; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
     .eui-navbar .dropdown.open .eui-dropdown-menu { display: block; }
+    /* File/dir chooser modals must sit ABOVE the open Settings dropdown
+       (z-index 10001) so their folder list and Select button are clickable. */
+    .modal { z-index: 20002 !important; }
+    .modal-backdrop { z-index: 20001 !important; }
     .eui-navbar .eui-spacer { flex: 1; }
     [data-eui-theme='dark'] .eui-popup-content { background: #3b4252; color: #d8dee9; }
     [data-eui-theme='dark'] details > summary { color: #d8dee9 !important; }
@@ -108,8 +112,6 @@ fluidPage(
         selectInput("locale_paper", "Paper",
                     choices = c("Letter" = "letter", "A4" = "a4"),
                     selected = "letter", width = "100%"),
-        actionLink("locale_save_default", "Save as my default",
-                   style = "font-size: 0.85em; color: #5e81ac; display: block; margin-top: 4px;"),
 
         tags$hr(style = "margin: 8px 0;"),
         tags$div(style = "font-weight: bold; font-size: 0.9em; margin-bottom: 4px;",
@@ -125,8 +127,13 @@ fluidPage(
                                      class = "btn btn-outline-secondary btn-sm",
                                      style = "margin-bottom:15px;")
         ),
-        actionLink("regproj_root_save", "Save",
-                   style = "font-size: 0.85em; color: #5e81ac; display: block; margin-top: 4px;")
+        tags$hr(style = "margin: 8px 0;"),
+        tags$div(style = "display:flex; gap:6px;",
+          actionButton("settings_save", "Save",
+                       class = "btn-primary btn-sm", style = "flex:1;"),
+          actionButton("settings_close", "Close",
+                       class = "btn-outline-secondary btn-sm", style = "flex:1;")
+        )
       )
     ),
     tags$div(class = "eui-spacer"),
@@ -139,12 +146,13 @@ fluidPage(
       var el = document.getElementById(id);
       if (el) el.classList.toggle('open');
     }
-    // Close dropdown when clicking outside
-    document.addEventListener('click', function(e) {
-      var dropdowns = document.querySelectorAll('.eui-navbar .dropdown');
-      dropdowns.forEach(function(dd) {
-        if (!dd.contains(e.target)) dd.classList.remove('open');
-      });
+    // Settings stays open until you click the gear again or press
+    // \"Save and Close\" — it does NOT auto-close on outside clicks, so using
+    // the Browse/Select file dialog can never dismiss it.
+    // Allow the server to close the Settings dropdown (Save and Close).
+    Shiny.addCustomMessageHandler('close_settings_dropdown', function(msg) {
+      var el = document.getElementById('eui-settings-dropdown');
+      if (el) el.classList.remove('open');
     });
 
     function toggleTheme() {

@@ -557,6 +557,37 @@ regproj_flat_segment <- function(country, levels, project_name) {
   paste(c(country, levels, project_name), collapse = "_")
 }
 
+#' Build a timestamped project-name segment for a NEW project
+#'
+#' New projects auto-prepend a creation timestamp to the user-supplied name so
+#' every project folder is unique and time-ordered. The user-typed portion is
+#' validated: it must match `^[A-Za-z0-9_-]+$` and be at most 8 characters.
+#' The result `<YYYYMMDD-HHMMSS>_<name>` becomes the project-name segment of the
+#' regProj flat path, i.e. the full folder is
+#' `<country>_<admin codes...>_<YYYYMMDD-HHMMSS>_<name>`.
+#'
+#' This is country-agnostic: it does not depend on how many admin levels a
+#' country has (see [country_schema()]), so it works for every political naming
+#' convention — US `state/county/city`, FR `region/departement/commune`,
+#' SG `planning_area`, the generic `region/city` fallback, etc. Existing
+#' projects are untouched; only newly created ones get the prefix.
+#'
+#' @param name User-typed project name. Must match `^[A-Za-z0-9_-]+$` and be at
+#'   most 8 characters.
+#' @param when Creation time. Defaults to [Sys.time()]; pass a fixed value in
+#'   tests for reproducibility.
+#' @return Character scalar `<YYYYMMDD-HHMMSS>_<name>`.
+#' @export
+regproj_new_project_name <- function(name, when = Sys.time()) {
+  name <- trimws(as.character(name))
+  if (length(name) != 1L || !nzchar(name) ||
+      !grepl("^[A-Za-z0-9_-]+$", name) || nchar(name) > 8L) {
+    stop("Project name must match ^[A-Za-z0-9_-]+$ and be at most 8 characters.",
+         call. = FALSE)
+  }
+  paste0(format(when, "%Y%m%d-%H%M%S"), "_", name)
+}
+
 #' Decode a flat regProj segment back into components
 #'
 #' Inverse of [regproj_flat_segment()]. Splits on `_`, takes the first
