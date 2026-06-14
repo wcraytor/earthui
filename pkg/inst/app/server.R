@@ -805,6 +805,26 @@ function(input, output, session) {
     session$sendCustomMessage("close_settings_dropdown", list())
   })
 
+  # Help / technical-support dialog (emails support@valuation-engineer.com)
+  observeEvent(input$show_help, {
+    session$sendCustomMessage("close_settings_dropdown", list())
+    showModal(earthUI:::support_request_modal_("earthUI"))
+  })
+
+  # About / disclaimer dialog
+  observeEvent(input$show_about, {
+    session$sendCustomMessage("close_settings_dropdown", list())
+    showModal(modalDialog(
+      title = HTML("&#9888; About earthUI"),
+      size = "l", easyClose = TRUE,
+      earthUI:::appraisal_disclaimer_html_(),
+      tags$hr(),
+      tags$p(class = "text-muted small",
+             sprintf("earthUI %s - AGPL-3.0 license.",
+                     as.character(utils::packageVersion("earthUI")))),
+      footer = modalButton("Close")))
+  })
+
   # When Settings country changes, apply to locale env and sync import locale
   observeEvent(input$locale_country, {
     country <- input$locale_country %||% "us"

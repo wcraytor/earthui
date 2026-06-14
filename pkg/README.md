@@ -182,6 +182,40 @@ qmd <- generate_quarto_report(result, dest_dir = out_dir, base = "Appraisal_1")
 convert_quarto_file(qmd, formats = c("html", "docx"))
 ```
 
+## Disclaimer
+
+**This software is provided for analytical, research, and educational purposes
+only. It does not produce an appraisal and is not a substitute for the judgment
+of a qualified, licensed or certified real estate appraiser.**
+
+The models in this package generate **statistical estimates** from the data you
+supply. Those estimates:
+
+- are **not** an appraisal, valuation, or formal opinion of value;
+- must **not** be used as the basis for lending, mortgage, tax, insurance,
+  legal, investment, or transactional decisions;
+- may be inaccurate, incomplete, or unsuitable for any particular property or
+  purpose; and
+- depend entirely on the quality, accuracy, and representativeness of the data,
+  comparables, and settings chosen by the user.
+
+Any value conclusion intended for professional or transactional use **must be
+independently developed, reviewed, and signed by a qualified appraiser** in
+accordance with all applicable laws and professional standards (for example, the
+Uniform Standards of Professional Appraisal Practice (USPAP) in the United
+States, or the equivalent standards in your jurisdiction).
+
+**No warranty.** This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY — without even the implied warranty of MERCHANTABILITY
+or FITNESS FOR A PARTICULAR PURPOSE, as set out in the GNU Affero General Public
+License v3.0. To the maximum extent permitted by law, the authors and
+contributors accept no liability for any loss or damage arising from the use of,
+or reliance on, this software or its output. **You use it at your own risk and
+are solely responsible for verifying all inputs, assumptions, and results.**
+
+For technical assistance or to report a bug, use the **Help** button in the app
+or email **support@valuation-engineer.com**.
+
 ## License
 
 AGPL-3

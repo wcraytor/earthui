@@ -64,3 +64,10 @@ plot_variable_importance(result)
 plot_contribution(result, 1)
 License
 AGPL-3
+
+Disclaimer
+This software is provided for analytical, research, and educational purposes only. It does not produce an appraisal and is not a substitute for the judgment of a qualified, licensed or certified real estate appraiser. The models generate statistical estimates from the data you supply; those estimates are NOT an appraisal, valuation, or formal opinion of value, and must NOT be used as the basis for lending, tax, legal, financial, or transactional decisions. Any value conclusion intended for professional or transactional use must be independently developed, reviewed, and signed by a qualified appraiser in accordance with applicable professional standards (e.g., USPAP in the United States, or the equivalent in your jurisdiction).
+
+No warranty. This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE, as set out in the GNU Affero General Public License v3.0. To the maximum extent permitted by law, the authors accept no liability for any loss or damage arising from use of, or reliance on, this software or its output. You use it at your own risk and are solely responsible for verifying all inputs, assumptions, and results.
+
+For technical assistance or to report a bug, use the Help button in the app or email support@valuation-engineer.com.

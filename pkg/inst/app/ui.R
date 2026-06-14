@@ -95,6 +95,21 @@ fluidPage(
       obs.observe(document.body, { childList: true, subtree: true });
     });
   ")),
+  # --- Appraisal / liability disclaimer (always visible) ---
+  tags$div(class = "eui-disclaimer", role = "note",
+    style = paste0("background: rgba(235,203,139,0.18);",
+                   " border-bottom: 1px solid #ebcb8b;",
+                   " font-size: 0.76em; line-height: 1.35;",
+                   " padding: 5px 14px; text-align: center;"),
+    HTML(paste0(
+      "&#9888; <b>For analysis only &mdash; not an appraisal.</b> ",
+      "Statistical estimates for analytical and educational use. Any value ",
+      "conclusion must be independently reviewed and signed by a qualified, ",
+      "licensed appraiser per applicable standards (e.g. USPAP). Provided ",
+      "&ldquo;as is&rdquo; without warranty (AGPL-3.0) &mdash; use at your own ",
+      "risk. See the README for full terms."))
+  ),
+
   # --- Top Menu Bar ---
   tags$nav(class = "eui-navbar",
     tags$span(class = "eui-brand",
@@ -137,6 +152,11 @@ fluidPage(
                        class = "btn-primary btn-sm", style = "flex:1;"),
           actionButton("settings_close", "Close",
                        class = "btn-outline-secondary btn-sm", style = "flex:1;")
+        ),
+        tags$div(style = "margin-top: 8px; display:flex; gap:14px;",
+          actionLink("show_help", HTML("&#128231; Help"), class = "small"),
+          actionLink("show_about", HTML("&#9888; About &amp; Disclaimer"),
+                     class = "small")
         )
       )
     ),
