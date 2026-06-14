@@ -18,7 +18,7 @@
 #' @param data A data frame (subject + comps) matching `result$data` in
 #'   schema. Row 1 is the subject.
 #' @param result A fit result list as returned by [fit_earth()].
-#' @param user_cqa Numeric scalar in `[0, 9.99]` — the subject CQA score.
+#' @param user_cqa Numeric scalar in `[0, 10]` — the subject CQA score.
 #' @param cqa_type Character: `"cqa"` (default) uses total-residual CQA;
 #'   `"cqa_sf"` uses per-SF CQA (requires `living_area_col`).
 #' @param living_area_col Character scalar or `NULL`. If supplied and
@@ -50,8 +50,8 @@ compute_rca_adjustments <- function(data,
   }
   cqa_type <- match.arg(cqa_type)
   user_cqa <- as.numeric(user_cqa)
-  if (is.na(user_cqa) || user_cqa < 0 || user_cqa > 9.99) {
-    stop("CQA score must be a number between 0.00 and 9.99.", call. = FALSE)
+  if (is.na(user_cqa) || user_cqa < 0 || user_cqa > 10) {
+    stop("CQA score must be a number between 0.00 and 10.00.", call. = FALSE)
   }
 
   model   <- result$model

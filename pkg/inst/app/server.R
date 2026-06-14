@@ -4561,19 +4561,47 @@ function(input, output, session) {
       }
     }
 
-    cqa_choices <- c("CQA" = "cqa")
-    if (has_la) cqa_choices <- c(cqa_choices, "CQA per SF" = "cqa_sf")
+    cqa_sf_help <- tags$span(
+      `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
+      `data-bs-content` = paste0(
+        "This CQA value is based on the ranked Residual/SF in order to ",
+        "reduce the impact of home size on the residual value."),
+      title = "CQA per SF",
+      style = paste0("display:inline-block; width:16px; height:16px;",
+                     " margin-left:5px; border-radius:50%; background:#88c0d0;",
+                     " color:#fff; font-size:10px; font-weight:bold;",
+                     " line-height:16px; text-align:center; cursor:pointer;"),
+      "?")
+    cqa_names <- list("CQA")
+    cqa_vals  <- c("cqa")
+    if (has_la) {
+      cqa_names <- c(cqa_names, list(tagList("CQA per SF", cqa_sf_help)))
+      cqa_vals  <- c(cqa_vals, "cqa_sf")
+    }
 
     showModal(modalDialog(
       title = "RCA Raw Output — Subject CQA Score",
       radioButtons("rca_cqa_type", "Score type:",
-                   choices = cqa_choices, selected = "cqa", inline = TRUE),
-      textInput("rca_cqa_value", "CQA score for subject (0.00\u20139.99):",
-                value = "5.00", placeholder = "e.g. 5.00"),
+                   choiceNames = cqa_names, choiceValues = cqa_vals,
+                   selected = "cqa", inline = TRUE),
+      textInput("rca_cqa_value", "Enter CQA score for subject:",
+                value = "",
+                placeholder = "[Enter a CQA value between 0.00 and 10.00]"),
       tags$script(HTML("
         $(document).off('click.eui_rca').on('click.eui_rca', '#export_rca', function() {
           Shiny.setInputValue('export_rca_trigger', Math.random());
         });
+        (function(){
+          function rcaValidate(){
+            var el = document.getElementById('rca_cqa_value');
+            var btn = document.getElementById('export_rca');
+            if(!el || !btn) return;
+            var v = parseFloat(el.value);
+            btn.disabled = !(!isNaN(v) && v >= 0 && v <= 10);
+          }
+          $(document).off('input.eui_rca').on('input.eui_rca', '#rca_cqa_value', rcaValidate);
+          setTimeout(rcaValidate, 120);
+        })();
       ")),
       footer = tagList(
         modalButton("Cancel"),
@@ -4591,6 +4619,16 @@ function(input, output, session) {
       message("earthUI RCA: Generate button clicked, purpose=", input$purpose,
               ", data=", !is.null(rv$data), ", result=", !is.null(rv$result))
       req(rv$data, rv$result, input$purpose == "appraisal", nrow(rv$data) >= 2L)
+
+      # Validate the CQA score (0.00-10.00) before proceeding; keep the modal
+      # open and show an error if it is blank or out of range.
+      cqa_num <- suppressWarnings(as.numeric(input$rca_cqa_value))
+      if (length(cqa_num) != 1L || is.na(cqa_num) || cqa_num < 0 || cqa_num > 10) {
+        showNotification("Please enter a CQA score between 0.00 and 10.00.",
+                         type = "error", duration = 6)
+        return()
+      }
+
       removeModal()
 
       folder <- input$output_folder
