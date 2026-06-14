@@ -1,0 +1,11 @@
+# Keep GitHub Actions versions current. Dependabot does not track CRAN package
+# dependencies, so R deps are managed via the R-CMD-check workflow; this only
+# bumps the action versions used in .github/workflows/.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
