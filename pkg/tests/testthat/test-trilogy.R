@@ -71,6 +71,31 @@ test_that("register_fit records per-method stamps and validates method", {
   expect_error(trilogy_register_fit(proj, "bogus", "x"))
 })
 
+test_that("write_conclusion emits conclusion_<fit_ts>.json with the value", {
+  d <- tempfile("concl_"); dir.create(d)
+  on.exit(unlink(d, recursive = TRUE), add = TRUE)
+  p <- trilogy_write_conclusion(d, "glmnet", "20260613_104012",
+                                subject_value = 508000,
+                                metrics = list(r2 = 0.91, rmse = 18200))
+  expect_true(file.exists(p))
+  expect_match(basename(p), "^conclusion_20260613_104012\\.json$")
+  obj <- jsonlite::read_json(p, simplifyVector = TRUE)
+  expect_equal(obj$method, "glmnet")
+  expect_equal(obj$subject_value, 508000)
+  expect_equal(obj$metrics$r2, 0.91)
+})
+
+test_that("trilogy_fit_metrics_ computes r2 + rmse, empty when < 2 points", {
+  set.seed(1)
+  actual <- stats::rnorm(20, 5e5, 5e4)
+  resid  <- stats::rnorm(20, 0, 1e4)
+  m <- trilogy_fit_metrics_(actual, resid)
+  expect_true(is.numeric(m$rmse) && m$rmse > 0)
+  expect_true(is.numeric(m$r2) && m$r2 <= 1)
+  expect_equal(trilogy_fit_metrics_(1, 1), list())          # too few points
+  expect_equal(trilogy_fit_metrics_(c(NA, NA), c(1, 2)), list())
+})
+
 test_that("a corrupt trilogy.json falls back to the skeleton (no error)", {
   proj <- new_proj(); on.exit(unlink(proj, recursive = TRUE), add = TRUE)
   p <- trilogy_json_path(proj)

@@ -4621,6 +4621,20 @@ function(input, output, session) {
       )
 
       writexl::write_xlsx(export_df, file)
+      # Trilogy mode: emit the value conclusion (subject's indicated value) for
+      # the combined report.
+      if (!is.null(getOption("earthUI.trilogy"))) {
+        tgt1 <- rv$result$target[1L]
+        m <- if (!is.null(tgt1) && tgt1 %in% names(export_df) &&
+                 "residual" %in% names(export_df))
+          earthUI:::trilogy_fit_metrics_(export_df[[tgt1]][-1L],
+                                         export_df[["residual"]][-1L])
+        else list()
+        try(trilogy_write_conclusion(
+          folder, "earth", earthUI:::fit_stamp_(rv$fit_ts),
+          subject_value = export_df[["subject_value"]][1L],
+          metrics = m), silent = TRUE)
+      }
       rv$rca_df <- export_df
       rv$rca_targets <- rv$result$target
       session$sendCustomMessage("download_check", list(id = "rca_output_btn"))

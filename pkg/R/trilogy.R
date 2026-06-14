@@ -144,3 +144,53 @@ trilogy_register_fit <- function(project_path, method, fit_ts) {
   obj$run$fit_ts[[method]] <- fit_ts
   trilogy_write(project_path, obj)
 }
+
+#' Write a method's value conclusion as `conclusion_<fit_ts>.json`
+#'
+#' Each app writes one of these into its own output folder so the combined
+#' report can pick up the subject value + key metrics by fit timestamp. The
+#' filename embeds `fit_ts` (matching the rest of the fit's outputs).
+#'
+#' @param out_dir Directory to write into (the method's output folder).
+#' @param method One of `"earth"`, `"glmnet"`, `"mgcv"`.
+#' @param fit_ts Fit-stamp string (`"%Y%m%d_%H%M%S"`).
+#' @param subject_value The subject property's indicated value.
+#' @param metrics Optional named list of fit metrics (e.g. `r2`, `rmse`).
+#' @param extra Optional named list of extra fields to include.
+#' @return Invisibly, the path written.
+#' @export
+trilogy_write_conclusion <- function(out_dir, method, fit_ts, subject_value,
+                                     metrics = list(), extra = list()) {
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    stop("Package 'jsonlite' is required.", call. = FALSE)
+  }
+  method <- match.arg(method, c("earth", "glmnet", "mgcv"))
+  sv <- suppressWarnings(as.numeric(subject_value))
+  obj <- c(list(method = method, fit_ts = fit_ts,
+                subject_value = if (length(sv) == 1L && !is.na(sv)) sv else NULL,
+                metrics = metrics), extra)
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  p <- file.path(out_dir, paste0("conclusion_", fit_ts, ".json"))
+  jsonlite::write_json(obj, p, pretty = TRUE, auto_unbox = TRUE, null = "null")
+  invisible(p)
+}
+
+#' Basic in-sample fit metrics from actual + residual vectors (internal)
+#'
+#' Computes R-squared and RMSE for a conclusion.json `metrics` field. The caller
+#' passes the comparables only (subject row excluded).
+#'
+#' @param actual,resid Numeric vectors (actual values and their residuals).
+#' @return Named list with `r2` and `rmse` (each may be NULL when undefined).
+#' @noRd
+trilogy_fit_metrics_ <- function(actual, resid) {
+  actual <- suppressWarnings(as.numeric(actual))
+  resid  <- suppressWarnings(as.numeric(resid))
+  ok <- is.finite(actual) & is.finite(resid)
+  actual <- actual[ok]; resid <- resid[ok]
+  if (length(resid) < 2L) return(list())
+  ss_tot <- sum((actual - mean(actual))^2)
+  list(
+    r2   = if (ss_tot > 0) round(1 - sum(resid^2) / ss_tot, 4) else NULL,
+    rmse = round(sqrt(mean(resid^2)), 1))
+}
