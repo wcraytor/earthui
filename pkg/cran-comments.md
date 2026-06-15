@@ -7,11 +7,11 @@ verify current time" may appear; this is an environment-only artifact of the
 check machine being unable to reach the time-verification service and does not
 occur on CRAN's incoming checks.)
 
-(On CRAN's incoming checks a "Days since last update" and/or version-increment
-note may appear: 0.8.0 is a substantial feature release over the currently
-published 0.1.3. If the math-rendering note recurs ("Skipping checking math
-rendering: package 'V8' unavailable"), V8 is not required — math is rendered
-by MathJax/KaTeX in the Shiny app and reports, not at check time.)
+(On CRAN's incoming checks a "Days since last update" note may appear: 0.9.0
+is a feature release over the currently published 0.8.0. If the math-rendering
+note recurs ("Skipping checking math rendering: package 'V8' unavailable"), V8
+is not required — math is rendered by MathJax/KaTeX in the Shiny app and
+reports, not at check time.)
 
 ## Test environments
 
@@ -28,34 +28,30 @@ by MathJax/KaTeX in the Shiny app and reports, not at check time.)
   tooling are in Suggests (bslib, callr, DT, knitr, rmarkdown, shinyFiles,
   writexl, quarto, tinytex, showtext, sysfonts).
 
-## Major changes in 0.8.0
+## Major changes in 0.9.0
 
-* **Project model (regProj):** work is organized into first-class *projects*
-  at a fixed, cross-OS location. Geo reference data and per-project settings
-  travel with the project tree via two bundled SQLite databases
-  (`geo.sqlite`, `projects.sqlite`).
-* **Per-project settings:** the model configuration (target, predictors,
-  earth() parameters, allowed-interactions matrix, effective date) is saved
-  per (project, purpose) via explicit "Save current as default" buttons and
-  restored when the project is reopened. Public API `get_project_settings()` /
-  `set_project_settings()` for automation.
-* **Database durability:** `projects.sqlite` opens in WAL mode where
-  supported; the settings-schema migration runs in a single transaction with
-  crash recovery (an interrupted upgrade rolls back cleanly).
-* **Quarto reporting:** report generation is split into generate / convert /
-  render steps, producing HTML, PDF, and Word output.
-* **Batch execution:** Shiny workflows extracted into reusable `pkg/R/`
-  functions so models can be fit and exported without the GUI.
+* **Trilogy coordination:** an optional "trilogy mode" lets earthUI act as the
+  primary method in a comparative appraisal across the maintainer's sibling
+  apps (glmnetUI, mgcvUI). A shared `trilogy.json` file in the project records
+  the locked earth fit, shared inputs, and each method's value conclusion
+  (`conclusion_<fit_ts>.json`). All coordination is file-based and confined to
+  the active project tree; it is inert unless the app is launched in trilogy
+  mode.
+* **Fit timestamps:** every generated output (xlsx, qmd, docx, pdf, html, rds)
+  embeds the model's fit time in its filename, so a run's artifacts group
+  together and downstream tools can locate them by timestamp.
+* **In-app disclaimers and support:** an always-visible appraisal/liability
+  notice, an About dialog with the full disclaimer, and a Help dialog that
+  composes a pre-addressed support email. These are UI-only additions.
+* **RCA CQA input:** the subject CQA score field no longer ships a default
+  value (it shows a prompt instead), carries an explanatory help popover,
+  validates input to the 0.00-10.00 range, and disables the action until a
+  valid value is entered.
 
-## Bug fixes in 0.8.0
+## Bug fixes in 0.9.0
 
-* A Date column used as a model predictor is now aligned to the trained
-  frame at predict time (date -> numeric, factor levels matched), fixing a
-  prediction error on the Intermediate Output and RCA exports.
-* `fit_earth()` drops a non-zero `newvar.penalty` (with a message) when case
-  weights are present, which `earth` does not support.
-* Character date columns are parsed with a multi-format set, so any column
-  that validates as a date also coerces correctly.
+* The subject CQA score is validated and parsed numerically before use,
+  preventing an invalid or blank entry from reaching the RCA computation.
 
 ## Reverse dependencies
 
