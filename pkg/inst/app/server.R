@@ -133,7 +133,7 @@ function(input, output, session) {
     fitting = FALSE,
     bg_proc = NULL,
     trace_lines = character(0),
-    user_varmod = "lm",       # user's explicit varmod.method choice
+    user_varmod = "earth",    # user's explicit varmod.method choice
     wp_weights = NULL,         # per-target response weights (numeric vector or NULL)
     subset_conditions = list(), # condition rows for subset filter builder
     rca_df = NULL,             # RCA export data for histogram plots
@@ -1158,14 +1158,19 @@ function(input, output, session) {
     # project's filename). Only act when the value names a file that
     # actually exists in the current project.
     if (!(f %in% files)) return()
-    key <- paste(p$project_path, f, sep = "||")
-    if (identical(isolate(rv$loaded_key), key)) return()  # already loaded
     in_dir <- file.path(p$project_path, paste0(os_detect(), "_in"))
     full <- file.path(in_dir, f)
     if (!file.exists(full)) {
       showNotification(sprintf("File not found: %s", full),
                        type = "error", duration = 6); return()
     }
+    # Include the file's mtime in the key so editing the file IN PLACE
+    # (same project, same name) changes the key and forces a re-import.
+    # "Refresh file list" bumps project_refresh_token, which re-fires this
+    # observe and re-reads mtime — so Refresh now reloads edited content.
+    mt <- tryCatch(as.numeric(file.mtime(full)), error = function(e) NA_real_)
+    key <- paste(p$project_path, f, mt, sep = "||")
+    if (identical(isolate(rv$loaded_key), key)) return()  # already loaded (unchanged)
     rv$loaded_key <- key
     regproj_last_file_set(p$project_path, f)
     load_data_file_(full, f)
@@ -1729,9 +1734,10 @@ function(input, output, session) {
     )
   })
 
-  # Shared DataTable callback for click-to-popup on cells
+  # Shared DataTable callback for double-click-to-popup on cells.
+  # Double-click (not single) so single click stays free for row selection.
   cell_popup_js <- DT::JS("
-    table.on('click', 'td', function() {
+    table.on('dblclick', 'td', function() {
       var text = $(this).text();
       if (text.length > 0) {
         var $popup = $('#eui-cell-popup');
@@ -2064,59 +2070,11 @@ function(input, output, session) {
 
     appraiser <- input$purpose %in% c("appraisal", "market")
 
-    # Special column options
-    special_options <- c("actual_age", "area", "concessions", "contract_date",
-                         "display_only", "dom", "effective_age", "latitude",
-                         "listing_date", "living_area", "longitude", "lot_size",
-                         "no", "sale_age", "sale_type", "site_dimensions", "weight")
+    # Special column options + default-guesser are shared via valengrCore
+    # across the three sibling apps. Covers appraisal and Market Area Analysis
+    # (appraiser) modes; see valengrCore::special_roles_().
+    special_options <- valengrCore::special_roles_(appraiser)
 
-    # Guess the default Special tag from a column name (or "no" if none is a
-    # reasonable match). Conservative: generic words ("area", "age") match a
-    # whole name only, never a sub-token, so area_id / garage_spaces stay "no".
-    # Kept identical across the sibling apps (glmnetUI, mgcvUI).
-    special_default_for_ <- function(name, tags) {
-      cand <- setdiff(tags, c("no", "display_only"))
-      if (length(cand) == 0L || is.null(name) || !nzchar(name)) return("no")
-      norm <- function(x) gsub("[^a-z0-9]+", "", tolower(x))
-      tok <- function(x) {
-        x <- gsub("([a-z0-9])([A-Z])", "\\1 \\2", x)
-        parts <- strsplit(tolower(x), "[^a-z0-9]+")[[1L]]
-        parts[nzchar(parts)]
-      }
-      syn <- list(
-        latitude        = c("lat"),
-        longitude       = c("long", "lon", "lng"),
-        living_area     = c("livingarea", "gla", "sqft", "livingsqft", "livingsf",
-                            "grosslivingarea", "livarea", "livsf", "livingsq"),
-        lot_size        = c("lotsize", "lotsf", "lotsqft", "lotarea"),
-        site_dimensions = c("sitedimensions", "sitedim", "sitedims"),
-        actual_age      = c("age", "actualage"),
-        effective_age   = c("effectiveage", "effage"),
-        sale_age        = c("saleage", "ageofsale", "daystosale"),
-        sale_type       = c("saletype", "typeofsale"),
-        contract_date   = c("contractdate", "kdate"),
-        listing_date    = c("listingdate", "listdate"),
-        dom             = c("daysonmarket", "daysmarket"),
-        concessions     = c("concession", "conc", "sellerconcessions",
-                            "saleconcessions"),
-        weight          = c("wt", "wgt")
-      )
-      generic <- c("area", "age")
-      keys_for <- function(tag) {
-        k <- unique(c(norm(tag), norm(syn[[tag]])))
-        k[nzchar(k)]
-      }
-      nn   <- norm(name)
-      toks <- norm(tok(name))
-      for (tag in cand) if (nn %in% keys_for(tag)) return(tag)
-      for (tag in cand) {
-        k <- setdiff(keys_for(tag), generic)
-        k <- k[nchar(k) >= 3L]
-        if (length(k) && any(toks %in% k)) return(tag)
-      }
-      "no"
-    }
-    
 
     # Header row — vertical labels for checkboxes, like glmnetUI
     angled_hdr <- "text-align:center; font-size:0.85em; writing-mode:vertical-lr; transform:rotate(180deg); height:55px; line-height:1; font-weight:bold;"
@@ -2162,7 +2120,7 @@ function(input, output, session) {
       fac_checked <- isTRUE(sv$fac)
       lin_checked <- isTRUE(sv$lin)
       sel_special <- if (!is.null(sv) && !is.null(sv$special)) sv$special
-                     else special_default_for_(col, special_options)
+                     else valengrCore::special_default_for_(col, special_options)
 
       # Build <option> tags with the saved (or auto-detected) type selected
       option_tags <- lapply(type_options, function(opt) {
@@ -2414,6 +2372,33 @@ function(input, output, session) {
   fit_p_ <- reactive({
     p <- length(input$predictors)
     if (p < 1L) NULL else p
+  })
+
+  # Auto-fill nk / minspan / endspan with the recommended values for the loaded
+  # data (the formulas mirror rec_nk / rec_minspan / rec_endspan), so the form
+  # defaults to the recommendation. A field is only updated while it is still
+  # untouched (equal to the last value we wrote, or its initial default); a
+  # manual user edit is preserved.
+  rv_recdefault <- reactiveValues(nk = NA_integer_, minspan = 0L, endspan = 0L)
+  observe({
+    n <- fit_n_(); p <- fit_p_()
+    if (is.null(n) || is.null(p)) return()
+    recs <- list(
+      nk      = min(100L, max(21L, 2L * p + 1L, as.integer(floor(n / 10)))),
+      minspan = min(16L, as.integer(floor(5 + n / 50))),
+      endspan = min(16L, as.integer(floor(5 + n / 28)))
+    )
+    for (id in names(recs)) {
+      cur  <- isolate(input[[id]])
+      last <- isolate(rv_recdefault[[id]])
+      untouched <- is.null(cur) ||
+        (is.na(cur) && is.na(last)) ||
+        (!is.na(cur) && !is.na(last) && as.integer(cur) == as.integer(last))
+      if (isTRUE(untouched)) {
+        updateNumericInput(session, id, value = recs[[id]])
+        rv_recdefault[[id]] <- recs[[id]]
+      }
+    }
   })
 
   output$rec_penalty <- renderUI({
@@ -4630,6 +4615,23 @@ function(input, output, session) {
       }
 
       removeModal()
+
+      # Persist the chosen subject-CQA type + value to the shared project
+      # settings (read-merge) so glmnetUI/mgcvUI carry them forward when an
+      # earth model is imported. earthUI is the source of truth.
+      tryCatch({
+        pp <- rv$active_project$project_path
+        if (!is.null(pp)) {
+          flat <- basename(pp); purpose <- active_purpose_()
+          cur <- read_current_settings_(flat, purpose)
+          cur$cqa_type  <- input$rca_cqa_type
+          cur$cqa_value <- input$rca_cqa_value
+          earthUI:::project_file_settings_write_(
+            projects_con_, flat,
+            settings = as.character(jsonlite::toJSON(cur, auto_unbox = TRUE)),
+            method = "earth", purpose = purpose)
+        }
+      }, error = function(e) NULL)
 
       folder <- input$output_folder
       if (is.null(folder) || !nzchar(folder)) folder <- path.expand("~/Downloads")

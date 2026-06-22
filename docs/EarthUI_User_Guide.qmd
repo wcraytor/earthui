@@ -537,6 +537,8 @@ In appraisal mode, **row 1 of your dataset is the subject property** and all rem
 
 After importing, the Data tab splits into two sections: **Subject Property** (row 1) and **Comparable Sales** (rows 2+). Row 1 is always excluded from model fitting --- the notification "Skipping row 1 (subject). Fitting on N rows." confirms this. After fitting, the model still generates predictions for the subject row, shown as `est_<target>` in the output.
 
+In both tables each cell is kept to a single line and truncated to the column width, so wide free-text fields (such as property remarks) do not stretch a row down the page. **Double-click any cell** to open a pop-up showing its full, untruncated contents.
+
 ## Effective Date \& Sale Age
 
 An **Effective Date** field appears in the Variable Configuration section in every purpose mode (defaulting to today's date), since general/CMA and market valuations have an effective date too. It is only *used* to compute `sale_age` in appraisal and market modes. If you designate a column as `contract_date` in the Special column dropdown, earthUI computes a `sale_age` column --- the number of integer days between each sale's contract date and the effective date. This column replaces the original date column as a predictor.

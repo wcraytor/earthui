@@ -23,6 +23,8 @@ fluidPage(
     .eui-param-help:hover { background: #5e81ac; }
     .eui-section-info { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #88c0d0; color: #fff; font-size: 11px; font-weight: bold; line-height: 18px; cursor: pointer; }
     .eui-section-info:hover { background: #5e81ac; }
+    .popover { max-width: 400px; }
+    .popover-body { white-space: normal; word-wrap: break-word; }
     details.eui-section > summary { position: relative; padding-right: 28px; }
     .eui-section-hdr { position: relative; padding-right: 28px; }
     #eui-theme-toggle { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--bs-border-color); background: var(--bs-body-bg); color: var(--bs-body-color); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.15); transition: all 0.3s; }
@@ -95,21 +97,6 @@ fluidPage(
       obs.observe(document.body, { childList: true, subtree: true });
     });
   ")),
-  # --- Appraisal / liability disclaimer (always visible) ---
-  tags$div(class = "eui-disclaimer", role = "note",
-    style = paste0("background: rgba(235,203,139,0.18);",
-                   " border-bottom: 1px solid #ebcb8b;",
-                   " font-size: 0.76em; line-height: 1.35;",
-                   " padding: 5px 14px; text-align: center;"),
-    HTML(paste0(
-      "&#9888; <b>For analysis only &mdash; not an appraisal.</b> ",
-      "Statistical estimates for analytical and educational use. Any value ",
-      "conclusion must be independently reviewed and signed by a qualified, ",
-      "licensed appraiser per applicable standards (e.g. USPAP). Provided ",
-      "&ldquo;as is&rdquo; without warranty (AGPL-3.0) &mdash; use at your own ",
-      "risk. See the README for full terms."))
-  ),
-
   # --- Top Menu Bar ---
   tags$nav(class = "eui-navbar",
     tags$span(class = "eui-brand",
@@ -812,7 +799,7 @@ fluidPage(
         weights_col: 'null',
         locale_country: 'us', locale_paper: 'letter', locale_import: 'us',
         degree: '1', pmethod: 'backward', glm_family: 'none',
-        trace: '0', varmod_method: 'lm'
+        trace: '0', varmod_method: 'earth'
       };
       for (var id in selects) {
         var el = document.getElementById(id);
@@ -1200,7 +1187,7 @@ fluidPage(
               selectInput("varmod_method", "varmod.method",
                           choices = c("none", "const", "lm", "rlm", "earth", "gam",
                                       "power", "power0", "x.lm", "x.rlm", "x.earth", "x.gam"),
-                          selected = "lm"),
+                          selected = "earth"),
               "Variance model method. Requires nfold and ncross. Use trace=0.3 to trace. 'lm','rlm','earth','gam' regress on predicted response; 'x.*' variants regress on predictors."),
             uiOutput("rec_varmod"),
             # 25. varmod.exponent
@@ -1577,6 +1564,17 @@ fluidPage(
       "font-size: 0.8em; color: #7f8c8d;"
     ),
     tags$p(
+      style = "margin: 2px 0; font-weight: 600;",
+      HTML(paste0(
+        "&#9888; For analysis only &mdash; not an appraisal. Any value ",
+        "conclusion must be independently reviewed and signed by a qualified, ",
+        "licensed appraiser per applicable standards (e.g. USPAP). ")),
+      tags$a(href = "#",
+             onclick = paste0("event.preventDefault();var e=document.getElementById",
+                              "('show_about');if(e)e.click();return false;"),
+             "Full disclaimer")
+    ),
+    tags$p(
       style = "margin: 2px 0;",
       HTML(paste0(
         "earthUI v", utils::packageVersion("earthUI"),
@@ -1592,10 +1590,6 @@ fluidPage(
         "GNU Affero General Public License v3.0"
       ),
       " or later (AGPL-3)."
-    ),
-    tags$p(
-      style = "margin: 2px 0;",
-      HTML("This software is provided &ldquo;as is&rdquo;, without warranty of any kind.")
     ),
     tags$p(
       style = "margin: 2px 0;",

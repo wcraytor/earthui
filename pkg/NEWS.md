@@ -1,5 +1,9 @@
 # earthUI 0.8.0
 
+## Data Preview
+
+* **Full-text cell pop-up** now opens on **double-click** (previously single-click), keeping single-click free for row selection. Cells remain truncated to the column width so long free-text fields (e.g. property remarks) do not stretch a row down the page.
+
 ## Per-project settings: save / restore
 
 * Model configuration is now keyed by **(project, purpose)** — the data

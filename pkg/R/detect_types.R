@@ -73,6 +73,13 @@ detect_types <- function(df) {
 is_date_like_ <- function(x) {
   if (length(x) == 0L) return(FALSE)
 
+  # Date strings in the formats below are short (<= ~30 chars). Drop NA and any
+  # value too long to be a date (e.g. free-text "remarks" columns) BEFORE
+  # parsing: as.Date()/strptime() abort with "input string is too long" on long
+  # cells, which would otherwise break type detection for the whole data set.
+  x <- x[!is.na(x) & nchar(x, type = "bytes") <= 40L]
+  if (length(x) == 0L) return(FALSE)
+
   formats <- c(
     "%Y-%m-%d",             # 2024-01-15
     "%Y/%m/%d",             # 2024/01/15
@@ -91,7 +98,9 @@ is_date_like_ <- function(x) {
   n <- length(x)
 
   for (fmt in formats) {
-    parsed <- suppressWarnings(as.Date(x, format = fmt))
+    parsed <- suppressWarnings(tryCatch(
+      as.Date(x, format = fmt),
+      error = function(e) as.Date(rep(NA_character_, n))))
     if (sum(!is.na(parsed)) / n >= threshold) return(TRUE)
   }
 
