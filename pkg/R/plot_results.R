@@ -55,6 +55,17 @@ eui_font_family_ <- function() {
   }
 }
 
+# Internal: enlarge axis tick labels and axis titles so they are legible in
+# both the Shiny tabs and the exported report. ggplot's default axis text
+# (~0.8 * base_size = ~8.8pt) is too small to read. Appended after the per-plot
+# theme() so it overrides theme_minimal()'s defaults.
+eui_axis_fonts_ <- function() {
+  ggplot2::theme(
+    axis.text  = ggplot2::element_text(size = 15),
+    axis.title = ggplot2::element_text(size = 16)
+  )
+}
+
 #' Plot variable importance
 #'
 #' Creates a horizontal bar chart of variable importance from a fitted
@@ -104,10 +115,11 @@ plot_variable_importance <- function(earth_result, type = "nsubsets") {
       x = NULL,
       y = type
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_minimal(base_size = 15) +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(face = "bold", size = 14)
-    )
+      plot.title = ggplot2::element_text(face = "bold", size = 16)
+    ) +
+    eui_axis_fonts_()
 }
 
 #' Plot partial dependence
@@ -182,10 +194,11 @@ plot_partial_dependence <- function(earth_result, variable, n_grid = 50L,
       x = variable,
       y = paste("Predicted", target_label)
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_minimal(base_size = 15) +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(face = "bold", size = 14)
-    )
+      plot.title = ggplot2::element_text(face = "bold", size = 16)
+    ) +
+    eui_axis_fonts_()
 }
 
 #' Plot variable contribution
@@ -272,10 +285,11 @@ plot_contribution <- function(earth_result, variable, response_idx = NULL) {
         x = variable,
         y = paste("Contribution to", target_label)
       ) +
-      ggplot2::theme_minimal() +
+      ggplot2::theme_minimal(base_size = 15) +
       ggplot2::theme(
-        plot.title = ggplot2::element_text(face = "bold", size = 14)
-      )
+        plot.title = ggplot2::element_text(face = "bold", size = 16)
+      ) +
+      eui_axis_fonts_()
   } else {
     plot_df <- data.frame(x = var_col, y = var_contrib)
     plot_df <- plot_df[order(plot_df$x), ]
@@ -364,10 +378,11 @@ plot_contribution <- function(earth_result, variable, response_idx = NULL) {
         x = variable,
         y = paste("Contribution to", target_label)
       ) +
-      ggplot2::theme_minimal() +
+      ggplot2::theme_minimal(base_size = 15) +
       ggplot2::theme(
-        plot.title = ggplot2::element_text(face = "bold", size = 14)
-      )
+        plot.title = ggplot2::element_text(face = "bold", size = 16)
+      ) +
+      eui_axis_fonts_()
   }
 }
 
@@ -508,10 +523,11 @@ plot_residuals <- function(earth_result, response_idx = NULL) {
       x = "Fitted Values",
       y = "Residuals"
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_minimal(base_size = 15) +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(face = "bold", size = 14)
-    )
+      plot.title = ggplot2::element_text(face = "bold", size = 16)
+    ) +
+    eui_axis_fonts_()
 }
 
 #' Plot Q-Q plot of residuals
@@ -561,10 +577,11 @@ plot_qq <- function(earth_result, response_idx = NULL) {
       x = "Theoretical Quantiles",
       y = "Sample Quantiles"
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_minimal(base_size = 15) +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(face = "bold", size = 14)
-    )
+      plot.title = ggplot2::element_text(face = "bold", size = 16)
+    ) +
+    eui_axis_fonts_()
 }
 
 #' Plot actual vs predicted values
@@ -613,10 +630,11 @@ plot_actual_vs_predicted <- function(earth_result, response_idx = NULL) {
       x = paste("Actual", target_label),
       y = paste("Predicted", target_label)
     ) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_minimal(base_size = 15) +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(face = "bold", size = 14)
-    )
+      plot.title = ggplot2::element_text(face = "bold", size = 16)
+    ) +
+    eui_axis_fonts_()
 }
 
 #' List g-function groups from a fitted earth model
@@ -924,11 +942,12 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
             midpoint = 0, labels = dollar_format_) +
           ggplot2::labs(title = title, x = fvar1, y = fvar2,
                         fill = "Contribution") +
-          ggplot2::theme_minimal() +
+          ggplot2::theme_minimal(base_size = 15) +
           ggplot2::theme(
-            plot.title = ggplot2::element_text(face = "bold", size = 13),
+            plot.title = ggplot2::element_text(face = "bold", size = 16),
             panel.grid = ggplot2::element_blank(),
-            strip.text = ggplot2::element_text(face = "bold", size = 11))
+            strip.text = ggplot2::element_text(face = "bold", size = 13)) +
+          eui_axis_fonts_()
       )
     }
 
@@ -956,10 +975,11 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
             midpoint = 0, labels = dollar_format_) +
           ggplot2::labs(title = title, x = fvar1, y = fvar2,
                         fill = "Contribution") +
-          ggplot2::theme_minimal() +
+          ggplot2::theme_minimal(base_size = 15) +
           ggplot2::theme(
-            plot.title = ggplot2::element_text(face = "bold", size = 13),
-            panel.grid = ggplot2::element_blank())
+            plot.title = ggplot2::element_text(face = "bold", size = 16),
+            panel.grid = ggplot2::element_blank()) +
+          eui_axis_fonts_()
       )
     }
 
@@ -975,9 +995,10 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
         ggplot2::scale_y_continuous(labels = dollar_format_) +
         ggplot2::labs(title = title, x = fvar,
                       y = paste("Contribution to", target_label)) +
-        ggplot2::theme_minimal() +
+        ggplot2::theme_minimal(base_size = 15) +
         ggplot2::theme(
-          plot.title = ggplot2::element_text(face = "bold", size = 13))
+          plot.title = ggplot2::element_text(face = "bold", size = 16)) +
+          eui_axis_fonts_()
     )
   }
 
@@ -1109,9 +1130,10 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
         ggplot2::labs(title = title, x = var,
                       y = paste("Contribution to", target_label),
                       color = fvar) +
-        ggplot2::theme_minimal() +
+        ggplot2::theme_minimal(base_size = 15) +
         ggplot2::theme(
-          plot.title = ggplot2::element_text(face = "bold", size = 13))
+          plot.title = ggplot2::element_text(face = "bold", size = 16)) +
+          eui_axis_fonts_()
     )
   }
 
@@ -1154,9 +1176,10 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
         ggplot2::labs(title = title, x = var,
                       y = paste("Contribution to", target_label),
                       color = fvar1, linetype = fvar2) +
-        ggplot2::theme_minimal() +
+        ggplot2::theme_minimal(base_size = 15) +
         ggplot2::theme(
-          plot.title = ggplot2::element_text(face = "bold", size = 13))
+          plot.title = ggplot2::element_text(face = "bold", size = 16)) +
+          eui_axis_fonts_()
     )
   }
 
@@ -1219,10 +1242,11 @@ plot_g_2d_ <- function(earth_result, grp, response_idx = NULL) {
     ggplot2::scale_y_continuous(labels = dollar_format_) +
     ggplot2::labs(title = title, x = var,
                   y = paste("Contribution to", target_label)) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_minimal(base_size = 15) +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(face = "bold", size = 13)
-    )
+      plot.title = ggplot2::element_text(face = "bold", size = 16)
+    ) +
+    eui_axis_fonts_()
 }
 
 # --- Internal: 3D plotly surface for d >= 2 g-functions ---
@@ -1423,9 +1447,10 @@ plot_g_contour_ <- function(earth_result, grp, response_idx = NULL) {
         ggplot2::scale_y_continuous(labels = comma_format_) +
         ggplot2::labs(title = title, x = var1, y = var2,
                       fill = paste("Contribution\nto", target_label)) +
-        ggplot2::theme_minimal() +
+        ggplot2::theme_minimal(base_size = 15) +
         ggplot2::theme(
-          plot.title = ggplot2::element_text(face = "bold", size = 13))
+          plot.title = ggplot2::element_text(face = "bold", size = 16)) +
+          eui_axis_fonts_()
     )
   }
 
@@ -1442,10 +1467,11 @@ plot_g_contour_ <- function(earth_result, grp, response_idx = NULL) {
     ggplot2::scale_y_continuous(labels = comma_format_) +
     ggplot2::labs(title = title, x = var1, y = var2,
                   fill = paste("Contribution\nto", target_label)) +
-    ggplot2::theme_minimal() +
+    ggplot2::theme_minimal(base_size = 15) +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(face = "bold", size = 13)
-    )
+      plot.title = ggplot2::element_text(face = "bold", size = 16)
+    ) +
+    eui_axis_fonts_()
 }
 
 # --- Internal: Static 3D perspective for d >= 2 (PDF/Word reports) ---

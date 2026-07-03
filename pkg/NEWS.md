@@ -1,3 +1,74 @@
+# earthUI 0.10.0
+
+## Advanced (optional): Prolog-based remarks & list processing
+
+> **These features are advanced and entirely optional.** They are **off by
+> default**, are gated behind a single Settings toggle, and can be ignored
+> completely — the rest of earthUI works exactly as before if you never turn
+> them on. They also assume familiarity with **Prolog** and with the project's
+> extraction conventions; users who do not need them can safely skip this whole
+> section.
+
+* **Enable Prolog toggle (Settings ⚙).** A master on/off switch, off by
+  default, carrying an "advanced feature — for users with Prolog expertise"
+  note. The setting is **remembered per project** (saved the moment you toggle
+  it) and shown in the **Project Information** dialog. When it is off, the
+  entire Prolog step is disabled/greyed.
+* **New Special column roles: `remarks` and `list`.** In the predictor table's
+  Special dropdown, tag a free-text column (e.g. `public_remarks`) as
+  `remarks`, or a comma-delimited column (e.g. `existing_structures`) as
+  `list`.
+* **"Execute Prolog Processing" step (two passes).**
+  1. **Expand lists & remarks** — parses `remarks` columns into `pr_*` /
+     `ar_*` feature columns via the **vProlog** package (Trealla Prolog +
+     a DCG grammar for MLS remarks), and one-hot-splits `list` columns into
+     `<col>_<value>` TRUE/FALSE columns. Expansion is **incremental**: only
+     columns designated *since the last run* are processed, and the button is
+     **disabled when everything designated has already been expanded**.
+  2. **Execute derivation rules** — user-scripted Prolog `derive/2` rules
+     (with `count_true`/`count_false`/`cell_or` helpers and `drop/1` to
+     remove columns), edited in a **floating, draggable/dockable code editor**
+     (shinyAce). Rules are syntax-checked and dry-run validated before they
+     run, editing a per-project `<project>_rules.pl` seeded from a commented
+     template.
+* **Versioned active data file.** After expansion or rules run, the augmented
+  frame is written to the project's input folder as
+  `<original_name>_<YYMMDD_HHMMSS>.xlsx` and becomes the **active** MLS data
+  file, so reopening the project loads the augmented data (expansions are not
+  re-computed). The augmented file is also what glmnetUI / mgcvUI consume.
+* **Graceful degradation.** Remarks parsing requires the optional **vProlog**
+  package (installed separately — it is not on CRAN); if it is absent, remarks
+  parsing is skipped with a note while `list` splitting (pure R) still runs.
+  If anything misbehaves, turn the Settings toggle off and continue normally.
+
+## Market Area Profile — Climate Zones (new, experimental)
+
+* New helpers `climate_region_for()`, `market_area_profile()` and
+  `climate_feature_priors()` classify a project's location (county + city) into
+  one of **seven buyer-recognized California climate regions** — a practical
+  reduction of the California Energy Commission's official 16 building-climate
+  zones — and return ordinal contributory-value **priors** for HVAC / cooling
+  features (heating, A/C, swamp cooler, whole-house fan, filtration) by region.
+* A companion Prolog module, `inst/prolog/climate_regions_ca.pl`, mirrors the
+  same classification and priors for use inside derivation rules. Both sides
+  are generated from one canonical R source, so they cannot drift.
+* Intended to inform feature valuation — especially **thin-data features** the
+  regression cannot estimate on its own (e.g. a swamp cooler present in only a
+  handful of comps), and as a plausibility check on estimated coefficients.
+
+## Predictor table
+
+* **New "Latent" column.** A hold-out flag: columns marked Latent are excluded
+  from the model (earth, and the exported data for glmnetUI / mgcvUI) and
+  reserved for latent-variable work. Useful for parking generated feature
+  columns you do not (yet) want in the regression.
+* **Soft-disable instead of delete.** The per-row action is now a toggle: the
+  **✕** greys out and holds a column out of the model without removing it, and
+  flips to a green **＋** to re-enable. Columns are never destroyed.
+* **"T/F/NA" column** (replaces "NAs"): shows true/false/NA counts for each
+  predictor — for logicals, TRUE/FALSE/NA; for numerics, ≠0/=0/NA — so factor
+  balance and missingness are visible at a glance.
+
 # earthUI 0.8.0
 
 ## Data Preview

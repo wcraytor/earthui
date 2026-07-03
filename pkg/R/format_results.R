@@ -455,6 +455,83 @@ format_model_equation <- function(earth_result, digits = 7L,
   result
 }
 
+#' Legend explaining the value-contribution \eqn{g} functions
+#'
+#' Returns a short, self-contained explanation of the
+#' \eqn{{}^{f}g^{j}_{k}} notation produced by [format_model_equation()] — what
+#' each index means and how it determines the graphing dimension — together
+#' with a citation to the RCA protocol. Used both by the Shiny app's Equation
+#' tab and at the bottom of the Quarto report.
+#'
+#' @param format Either `"html"` (MathJax markup, for the Shiny app and the
+#'   HTML report) or `"markdown"` (Pandoc markdown with `$`-delimited math, for
+#'   the Quarto report rendering to HTML, PDF and Word).
+#'
+#' @return A length-one character string.
+#'
+#' @export
+#' @examples
+#' cat(g_function_legend("markdown"))
+g_function_legend <- function(format = c("html", "markdown")) {
+  format <- match.arg(format)
+  doi_url <- "https://doi.org/10.5281/zenodo.14787917"
+
+  if (format == "markdown") {
+    ref <- paste0(
+      "Craytor, W. B. (2025). *Residual Constraint Approach (RCA): ",
+      "Framework & Protocol*, §10. Zenodo. ",
+      "[doi:10.5281/zenodo.14787917](", doi_url, ").")
+    paste0(
+      "Each line of the equation above is a **value-contribution function** ",
+      "written ${}^{f}g^{\\,j}_{k}$:\n\n",
+      "- $j$ — the **group**, i.e. the number of variables the term ",
+      "involves: $j=0$ base constant, $j=1$ one variable, $j=2$ two-variable ",
+      "interaction, $j=3$ three-variable interaction.\n",
+      "- $k$ — the **position** of the function within group $j$ (its ",
+      "$k$-th term).\n",
+      "- $f$ (the leading superscript) — the number of **categorical ",
+      "(factor)** variables in the term.\n\n",
+      "A term needs $d = j - f$ axes to graph, because each factor variable ",
+      "removes one dimension. The price estimate is the base constant plus ",
+      "every $g$ function:\n\n",
+      "$$\\hat{P}={}^{f_{0,1}}g_1^{0}",
+      "+\\sum_{q=1}^{n_1}{}^{f_{1,q}}g_q^{1}(x)",
+      "+\\sum_{r=1}^{n_2}{}^{f_{2,r}}g_r^{2}(x,y)",
+      "+\\sum_{s=1}^{n_3}{}^{f_{3,s}}g_s^{3}(x,y,z)$$\n\n",
+      "Notation and protocol follow ", ref, "\n")
+  } else {
+    ref <- paste0(
+      "Craytor, W. B. (2025). <em>Residual Constraint Approach (RCA): ",
+      "Framework &amp; Protocol</em>, §10. Zenodo. ",
+      "<a href=\"", doi_url, "\">doi:10.5281/zenodo.14787917</a>.")
+    paste0(
+      "<div class=\"eui-gfn-legend\" style=\"margin-top:14px;padding:10px 14px;",
+      "border-left:3px solid var(--bs-border-color,#ccc);font-size:0.92em;\">",
+      "<p style=\"margin:0 0 6px;\">Each line above is a ",
+      "<strong>value-contribution function</strong> written ",
+      "\\({}^{f}g^{\\,j}_{k}\\):</p>",
+      "<ul style=\"margin:0 0 6px;padding-left:1.2em;\">",
+      "<li>\\(j\\) — the <strong>group</strong>, i.e. the number of ",
+      "variables the term involves (\\(j=0\\) base constant, \\(j=1\\) one ",
+      "variable, \\(j=2\\) two-variable interaction, \\(j=3\\) three-variable ",
+      "interaction).</li>",
+      "<li>\\(k\\) — the <strong>position</strong> of the function ",
+      "within group \\(j\\).</li>",
+      "<li>\\(f\\) (the leading superscript) — the number of ",
+      "<strong>categorical (factor)</strong> variables in the term.</li>",
+      "</ul>",
+      "<p style=\"margin:0 0 6px;\">A term needs \\(d = j - f\\) axes to ",
+      "graph, because each factor variable removes one dimension. The price ",
+      "estimate is the base constant plus every \\(g\\) function:</p>",
+      "\\[\\hat{P}={}^{f_{0,1}}g_1^{0}",
+      "+\\sum_{q=1}^{n_1}{}^{f_{1,q}}g_q^{1}(x)",
+      "+\\sum_{r=1}^{n_2}{}^{f_{2,r}}g_r^{2}(x,y)",
+      "+\\sum_{s=1}^{n_3}{}^{f_{3,s}}g_s^{3}(x,y,z)\\]",
+      "<p style=\"margin:6px 0 0;font-style:italic;\">Notation and protocol ",
+      "follow ", ref, "</p></div>")
+  }
+}
+
 # --- Internal helpers for format_model_equation (not exported) ---
 
 #' Map dummy column names to base variables and factor levels

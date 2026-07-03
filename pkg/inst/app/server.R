@@ -658,6 +658,9 @@ function(input, output, session) {
         row("State",        sprintf("%s (%s)", st_name, p$state)),
         row("County",       sprintf("%s (%s)", county_name, p$county)),
         row("City",         tags$code(p$city)),
+        row("Prolog processing",
+            if (isTRUE(input$enable_prolog)) tags$span(style = "color:#3b7a57;", "Enabled")
+            else tags$span(class = "text-muted", "Disabled")),
         row("Last activity", format(p$mtime, "%Y-%m-%d %H:%M:%S")),
         row("Path",
             tags$code(style = "word-break:break-all; font-size:0.85em;",
@@ -796,9 +799,37 @@ function(input, output, session) {
         return()
       }
     }
+    # 3) Remember Enable Prolog per-project (shown in Project Info, restored on open).
+    if (!is.null(rv$active_project)) {
+      prefs <- earthui_prefs_read()
+      if (!is.list(prefs$prolog_enabled)) prefs$prolog_enabled <- list()
+      prefs$prolog_enabled[[basename(rv$active_project$project_path)]] <-
+        isTRUE(input$enable_prolog)
+      earthui_prefs_write(prefs)
+    }
     showNotification(paste0("Settings saved.", root_msg),
                      type = "message", duration = 4)
   })
+
+  # Restore the per-project Enable Prolog state when a project opens.
+  observeEvent(rv$active_project, {
+    if (is.null(rv$active_project)) return()
+    prefs <- earthui_prefs_read()
+    key <- basename(rv$active_project$project_path)
+    updateCheckboxInput(session, "enable_prolog",
+                        value = isTRUE(prefs$prolog_enabled[[key]]))
+  }, ignoreInit = TRUE)
+
+  # Persist Enable Prolog per-project on EVERY change — so the last state always
+  # sticks, not only when Settings > Save is clicked.
+  observeEvent(input$enable_prolog, {
+    if (is.null(rv$active_project)) return()
+    prefs <- earthui_prefs_read()
+    if (!is.list(prefs$prolog_enabled)) prefs$prolog_enabled <- list()
+    prefs$prolog_enabled[[basename(rv$active_project$project_path)]] <-
+      isTRUE(input$enable_prolog)
+    earthui_prefs_write(prefs)
+  }, ignoreInit = TRUE)
 
   # Settings "Close": dismiss the Settings panel (does not save).
   observeEvent(input$settings_close, {
@@ -887,6 +918,8 @@ function(input, output, session) {
     preds <- input$predictors   %||% character(0)
     cats  <- input$categoricals %||% character(0)
     lins  <- input$linpreds     %||% character(0)
+    lats  <- input$latents      %||% character(0)
+    dvars <- isolate(rv$restore_vars)
     ctypes    <- input$col_types
     cspecials <- input$col_specials
     vars <- list()
@@ -895,7 +928,8 @@ function(input, output, session) {
                 else if (!is.null(rv$col_types) && !is.null(rv$col_types[[col]])) rv$col_types[[col]]
                 else "unknown"
       entry <- list(inc = col %in% preds, fac = col %in% cats,
-                    lin = col %in% lins, type = type_v)
+                    lin = col %in% lins, lat = col %in% lats, type = type_v)
+      if (isTRUE(dvars[[col]]$disabled)) entry$disabled <- TRUE
       if (appraiser) {
         entry$special <- if (!is.null(cspecials) && !is.null(cspecials[[col]])) {
           cspecials[[col]]
@@ -1541,6 +1575,284 @@ function(input, output, session) {
     NULL
   }
 
+  # ---- Execute Prolog Processing step (optional, gated by Settings) ----
+  # All columns carrying a given role (remarks/list allow several). Role
+  # specials only exist in appraisal/market mode (col_specials is stale
+  # elsewhere), mirroring resolve_special_col_.
+  resolve_special_cols_ <- function(role, df = rv$data) {
+    out <- character(0)
+    if (!is.null(df) && isTRUE(input$purpose %in% c("appraisal", "market")) &&
+        !is.null(input$col_specials)) {
+      for (nm in names(input$col_specials)) {
+        if (identical(input$col_specials[[nm]], role) && nm %in% names(df))
+          out <- c(out, nm)
+      }
+    }
+    out
+  }
+
+  # A remarks/list column is "expanded" once its generated columns exist in the
+  # data (pr_*/ar_* for remarks; <col>_* for list). Lets Expand be incremental
+  # and gates the button.
+  is_expanded_ <- function(col, role) {
+    nm <- names(rv$data)
+    if (identical(role, "remarks")) any(startsWith(nm, remarks_prefix_(col)))
+    else any(startsWith(nm, paste0(col, "_")))
+  }
+  cols_to_expand_ <- function() {
+    if (is.null(rv$data)) return(character(0))
+    c(Filter(function(c) !is_expanded_(c, "remarks"), resolve_special_cols_("remarks")),
+      Filter(function(c) !is_expanded_(c, "list"),    resolve_special_cols_("list")))
+  }
+
+  # Buttons disabled unless Settings enables the feature; Expand additionally
+  # requires at least one designated-but-unexpanded remarks/list column.
+  output$prolog_buttons_ui <- renderUI({
+    en  <- isTRUE(input$enable_prolog)
+    dis <- if (en) NULL else TRUE   # NA/"disabled" get dropped by htmltools; TRUE renders `disabled`
+    expand_dis <- if (en && length(cols_to_expand_()) > 0) NULL else TRUE
+    # Step 1 flushes the live config AND reads the Special dropdowns directly at
+    # click time into an explicit column->special map (deterministic detection).
+    flush <- "if(window.euiGatherState){window.euiGatherState();}"
+    expand_js <- paste0(flush,
+      "(function(){var m={};if(window.euiCols){",
+      "for(var i=0;i<window.euiCols.length;i++){",
+      "var sp=$('#eui_special_'+(i+1)).val();if(sp){m[window.euiCols[i]]=sp;}}}",
+      "Shiny.setInputValue('prolog_special_map',m,{priority:'event'});})();")
+    tagList(
+      actionButton("run_expand", "1. Expand lists & remarks",
+                   class = "btn-secondary", style = "width:100%; margin-bottom:4px;",
+                   onclick = expand_js, disabled = expand_dis),
+      actionButton("run_rules", "2. Execute derivation rules",
+                   class = "btn-secondary", style = "width:100%; margin-bottom:4px;",
+                   onclick = flush, disabled = dis),
+      actionButton("rules_edit", "Edit derivation rules…",
+                   class = "btn-outline-secondary btn-sm", style = "width:100%;",
+                   onclick = "window.euiShowRules && window.euiShowRules();",
+                   disabled = dis)
+    )
+  })
+
+  output$prolog_status_ui <- renderUI({
+    msg <- rv$prolog_msg
+    if (is.null(msg)) return(NULL)
+    tags$div(class = "small", style = "margin-top: 6px; color: #5e81ac;", msg)
+  })
+
+  # ---- Derivation rules: <project>_rules.pl, edited in a floating window ----
+  use_ace_ <- requireNamespace("shinyAce", quietly = TRUE)
+  rules_file_path_ <- function() {
+    if (!is.null(rv$active_project) && !is.null(rv$active_project$project_path)) {
+      pp <- rv$active_project$project_path
+      return(file.path(pp, paste0(basename(pp), "_rules.pl")))
+    }
+    folder <- input$output_folder
+    if (is.null(folder) || !nzchar(folder)) folder <- path.expand("~/Downloads")
+    file.path(folder, "earthui_rules.pl")
+  }
+  # Load (or seed) the project's rules file into rv$rules_text + the editor.
+  observeEvent(list(rv$active_project, input$output_folder), {
+    path <- rules_file_path_()
+    txt <- if (file.exists(path))
+      paste(readLines(path, warn = FALSE), collapse = "\n") else default_rules_template_()
+    rv$rules_text <- txt
+    if (use_ace_) shinyAce::updateAceEditor(session, "prolog_rules", value = txt)
+    else updateTextAreaInput(session, "prolog_rules", value = txt)
+  }, ignoreInit = FALSE)
+  # Keep rv$rules_text current while the editor window is open.
+  observeEvent(input$prolog_rules, {
+    if (!is.null(input$prolog_rules)) rv$rules_text <- input$prolog_rules
+  })
+
+  output$rules_status_ui <- renderUI({
+    m <- rv$rules_msg
+    if (is.null(m)) return(NULL)
+    col <- if (isTRUE(rv$rules_ok)) "#3b7a57" else "#bf616a"
+    tags$div(class = "small", style = sprintf("margin: 4px 0; color: %s;", col), m$message)
+  })
+
+  # The editor lives in a draggable/dockable panel (ui.R); the button shows it
+  # via JS. This is the column reference rendered inside that panel.
+  output$rules_cols_ref <- renderUI({
+    if (is.null(rv$data))
+      return(tags$div(class = "small text-muted", style = "margin-top:4px;",
+                      "Run Step 1 to generate columns you can reference."))
+    tags$details(style = "margin-top:4px;",
+      tags$summary(class = "small", sprintf("Available columns (%d)", ncol(rv$data))),
+      tags$div(class = "small text-muted", style = "max-height:80px; overflow:auto;",
+               paste(names(rv$data), collapse = ", ")))
+  })
+  observeEvent(input$rules_check, {
+    res <- validate_rules_(input$prolog_rules, rv$data)
+    rv$rules_ok <- res$ok; rv$rules_msg <- res
+  })
+  observeEvent(input$rules_save, {
+    rv$rules_text <- input$prolog_rules
+    res  <- validate_rules_(rv$rules_text, rv$data)
+    path <- rules_file_path_()
+    ok_w <- tryCatch({
+      dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+      writeLines(rv$rules_text %||% "", path); TRUE
+    }, error = function(e) FALSE)
+    rv$rules_ok <- res$ok
+    rv$rules_msg <- list(message = paste0(res$message,
+      if (ok_w) sprintf("  (saved → %s)", basename(path)) else "  (save FAILED)"))
+  })
+
+  # Save the modified frame as a new timestamped version in the project's input
+  # folder and make it the ACTIVE data file, so reopening the project loads it
+  # (with the expansions/derived columns already present). The base name strips
+  # any prior _YYMMDD_HHMMSS so timestamps never chain. Falls back to the output
+  # folder when no project is active.
+  save_as_active_version_ <- function(df) {
+    p <- rv$active_project
+    base <- sub("_[0-9]{6}_[0-9]{6}$", "",
+                tools::file_path_sans_ext(rv$file_name %||% "data"))
+    new_name <- paste0(base, "_", format(Sys.time(), "%y%m%d_%H%M%S"), ".xlsx")
+    dir <- if (!is.null(p)) file.path(p$project_path, paste0(os_detect(), "_in"))
+           else { f <- input$output_folder
+                  if (is.null(f) || !nzchar(f)) path.expand("~/Downloads") else f }
+    if (!dir.exists(dir)) dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+    new_path <- file.path(dir, new_name)
+    ok <- tryCatch({
+      if (requireNamespace("writexl", quietly = TRUE)) { writexl::write_xlsx(df, new_path); TRUE }
+      else if (requireNamespace("openxlsx", quietly = TRUE)) {
+        openxlsx::write.xlsx(df, new_path, overwrite = TRUE); TRUE } else FALSE
+    }, error = function(e) FALSE)
+    if (!isTRUE(ok)) return(NULL)
+    if (!is.null(p)) {
+      rv$file_path <- new_path
+      rv$file_name <- new_name
+      tryCatch(regproj_last_file_set(p$project_path, new_name), error = function(e) NULL)
+    }
+    new_path
+  }
+
+  # After a pass: rebuild rv$restore_vars from the LIVE inputs (preserve the
+  # user's selections), preset Factor on categorical generated columns (NOT
+  # auto-included — that x an all-allowed interaction matrix blows up the fit),
+  # force the remarks/list SOURCE columns out of the model (free text), then
+  # update rv$data and dump the appended xlsx for glmnetUI/mgcvUI.
+  finalize_prolog_ <- function(res, source_cols = character(0)) {
+    ctypes <- detect_types(res$data); cats <- detect_categoricals(res$data)
+    inc <- input$predictors; fac <- input$categoricals; lin <- input$linpreds
+    lat <- input$latents
+    live_types <- input$col_types; live_sp <- input$col_specials
+    cur <- isolate(rv$restore_vars); if (!is.list(cur)) cur <- list()
+    cfg <- list()
+    for (col in names(res$data)) {
+      e <- list(inc = isTRUE(col %in% inc), fac = isTRUE(col %in% fac),
+                lin = isTRUE(col %in% lin), lat = isTRUE(col %in% lat))
+      e$type <- if (!is.null(live_types[[col]])) live_types[[col]] else ctypes[[col]]
+      if (!is.null(live_sp[[col]])) e$special <- live_sp[[col]]
+      if (isTRUE(cur[[col]]$disabled)) e$disabled <- TRUE
+      cfg[[col]] <- e
+    }
+    for (col in res$added) {
+      cfg[[col]]$fac <- isTRUE(col %in% cats)
+      if (is.null(cfg[[col]]$type)) cfg[[col]]$type <- ctypes[[col]]
+    }
+    for (col in source_cols) if (!is.null(cfg[[col]])) { cfg[[col]]$inc <- FALSE; cfg[[col]]$fac <- FALSE }
+    rv$restore_vars <- cfg
+    rv$data <- res$data; rv$categoricals <- cats; rv$col_types <- ctypes
+    save_as_active_version_(res$data)
+  }
+
+  # Rebuild the variable-config (preserving live selections) for a df — used
+  # when columns change outside a processing pass (e.g. the trash icon).
+  rebuild_var_config_ <- function(df) {
+    ctypes <- detect_types(df)
+    inc <- input$predictors; fac <- input$categoricals; lin <- input$linpreds
+    lat <- input$latents
+    live_types <- input$col_types; live_sp <- input$col_specials
+    cur <- isolate(rv$restore_vars); if (!is.list(cur)) cur <- list()
+    cfg <- list()
+    for (col in names(df)) {
+      e <- list(inc = isTRUE(col %in% inc), fac = isTRUE(col %in% fac),
+                lin = isTRUE(col %in% lin), lat = isTRUE(col %in% lat))
+      e$type <- if (!is.null(live_types[[col]])) live_types[[col]] else ctypes[[col]]
+      if (!is.null(live_sp[[col]])) e$special <- live_sp[[col]]
+      if (isTRUE(cur[[col]]$disabled)) e$disabled <- TRUE
+      cfg[[col]] <- e
+    }
+    cfg
+  }
+
+  # ✕/＋ icon in Predictor Settings: soft-disable / re-enable a column (no
+  # delete). A disabled column is greyed and held out of the model; the column
+  # stays in the data so it can be re-enabled.
+  observeEvent(input$eui_toggle_disable_col, {
+    col <- input$eui_toggle_disable_col
+    req(col, rv$data)
+    if (!(col %in% names(rv$data))) return(invisible(NULL))
+    cur <- isTRUE(isolate(rv$restore_vars)[[col]]$disabled)
+    cfg <- rebuild_var_config_(rv$data)   # preserve everyone else's live state
+    cfg[[col]]$disabled <- !cur
+    rv$restore_vars <- cfg
+    rv$vartable_refresh <- (rv$vartable_refresh %||% 0L) + 1L  # force re-render
+  })
+
+  # Step 1: expand Special=remarks/list columns (grammar), no rules.
+  observeEvent(input$run_expand, {
+    req(rv$data, isTRUE(input$enable_prolog))
+    sm <- input$prolog_special_map
+    map_cols <- function(role) {
+      if (!length(sm)) return(character(0))
+      nm <- names(sm)[vapply(sm, function(v) identical(as.character(v), role), logical(1))]
+      intersect(nm, names(rv$data))
+    }
+    remarks_cols <- Filter(function(c) !is_expanded_(c, "remarks"),
+                           union(map_cols("remarks"), resolve_special_cols_("remarks")))
+    list_cols    <- Filter(function(c) !is_expanded_(c, "list"),
+                           union(map_cols("list"),    resolve_special_cols_("list")))
+    if (!length(remarks_cols) && !length(list_cols)) {
+      rv$prolog_msg <- "Nothing new to expand — all designated columns are already expanded."
+      return(invisible(NULL))
+    }
+    res <- tryCatch(withProgress(message = "Expanding lists & remarks", value = 0, {
+      execute_prolog_processing(rv$data, remarks_cols, list_cols,
+        progress = function(f, d) setProgress(value = f, detail = d)) }),
+      error = function(e) { rv$prolog_msg <- paste("Error:", conditionMessage(e)); NULL })
+    if (is.null(res)) return(invisible(NULL))
+    ok <- TRUE
+    path <- tryCatch(finalize_prolog_(res, source_cols = c(remarks_cols, list_cols)),
+      error = function(e) { ok <<- FALSE
+        rv$prolog_msg <- paste("Step 1 error:", conditionMessage(e)); NULL })
+    if (ok) {
+      skipped <- length(remarks_cols) > 0 && !isTRUE(res$remarks_ok)
+      rv$prolog_msg <- sprintf("Step 1: +%d column(s)%s.%s", length(res$added),
+        if (skipped) " (remarks skipped — install vProlog)" else "",
+        if (!is.null(path)) sprintf(" Saved → %s", basename(path)) else "")
+    }
+  })
+
+  # Step 2: run the user's derivation rules over the current columns.
+  observeEvent(input$run_rules, {
+    req(rv$data, isTRUE(input$enable_prolog))
+    rules_text <- rv$rules_text
+    if (is.null(rules_text) || !nzchar(trimws(rules_text))) {
+      rv$prolog_msg <- "No derivation rules — use 'Edit derivation rules…' first."
+      return(invisible(NULL))
+    }
+    vr <- validate_rules_(rules_text, rv$data)
+    rv$rules_ok <- vr$ok; rv$rules_msg <- vr
+    if (!isTRUE(vr$ok)) { rv$prolog_msg <- paste("Rules not run —", vr$message); return(invisible(NULL)) }
+    res <- tryCatch(withProgress(message = "Executing derivation rules", value = 0, {
+      execute_prolog_processing(rv$data, character(0), character(0),
+        rules_text = rules_text,
+        progress = function(f, d) setProgress(value = f, detail = d)) }),
+      error = function(e) { rv$prolog_msg <- paste("Error:", conditionMessage(e)); NULL })
+    if (is.null(res)) return(invisible(NULL))
+    ok <- TRUE
+    path <- tryCatch(finalize_prolog_(res),
+      error = function(e) { ok <<- FALSE
+        rv$prolog_msg <- paste("Step 2 error:", conditionMessage(e)); NULL })
+    if (ok)
+      rv$prolog_msg <- sprintf("Step 2: +%d derived, -%d dropped.%s",
+        length(res$added), res$dropped %||% 0L,
+        if (!is.null(path)) sprintf(" Saved → %s", basename(path)) else "")
+  })
+
   # Disable newvar.penalty whenever a case-weight column is in play — earth
   # rejects a non-zero newvar.penalty with weights. Uses the shared resolver
   # so it matches exactly what the fit will use.
@@ -2044,6 +2356,7 @@ function(input, output, session) {
 
   output$variable_table <- renderUI({
     req(rv$data)
+    rv$vartable_refresh   # re-render trigger (bumped by the ✕/＋ disable toggle)
     if (is.null(input$target) || length(input$target) == 0L) {
       return(tags$p(class = "text-muted", style = "padding: 12px; text-align: center;",
                     "Select a target variable above to configure predictors."))
@@ -2074,6 +2387,10 @@ function(input, output, session) {
     # across the three sibling apps. Covers appraisal and Market Area Analysis
     # (appraiser) modes; see valengrCore::special_roles_().
     special_options <- valengrCore::special_roles_(appraiser)
+    # earthUI-only roles driving the optional "Execute Prolog Processing" step:
+    # "remarks" columns are DCG-parsed via vProlog; "list" columns are split
+    # into one-hot columns. Both allow multiple columns (see the special JS).
+    special_options <- c(special_options, "remarks", "list")
 
 
     # Header row — vertical labels for checkboxes, like glmnetUI
@@ -2083,7 +2400,8 @@ function(input, output, session) {
       tags$div(style = "width: 75px; text-align: center; font-weight: bold; font-size: 0.85em;", "Type"),
       tags$div(style = paste0("width: 20px;", angled_hdr), "Include"),
       tags$div(style = paste0("width: 20px;", angled_hdr), "Factor"),
-      tags$div(style = paste0("width: 20px;", angled_hdr), "Linear")
+      tags$div(style = paste0("width: 20px;", angled_hdr), "Linear"),
+      tags$div(style = paste0("width: 20px;", angled_hdr), "Latent")
     )
     if (appraiser) {
       header_cols <- c(header_cols, list(
@@ -2091,7 +2409,7 @@ function(input, output, session) {
       ))
     }
     header_cols <- c(header_cols, list(
-      tags$div(style = "width: 32px; text-align: right; padding-right: 4px; font-weight: bold; font-size: 0.85em;", "NAs")
+      tags$div(style = "width: 72px; text-align: right; padding-right: 4px; font-weight: bold; font-size: 0.78em;", "T/F/NA")
     ))
     header <- tags$div(
       style = "display: flex; align-items: flex-end; padding: 4px 0; border-bottom: 2px solid var(--bs-border-color, #ccc); position: sticky; top: 0; z-index: 1; background: var(--bs-tertiary-bg, var(--bs-body-bg, #f0f0f0)); gap: 2px;",
@@ -2101,9 +2419,22 @@ function(input, output, session) {
     # Build rows using numeric index for IDs
     rows <- lapply(seq_along(candidates), function(i) {
       col <- candidates[i]
-      n_na <- sum(is.na(rv$data[[col]]))
+      col_vals <- rv$data[[col]]
+      n_na <- sum(is.na(col_vals))
       pct_na <- n_na / nrows
       na_style <- if (pct_na > 0.3) "color: red;" else ""
+      # "T/F/NA" — three counts for EVERY column, by type:
+      #   logical : TRUE / FALSE / NA
+      #   numeric : != 0 / == 0 / NA
+      #   other (Date, character, factor, ...) : 0 / 0 / NA
+      tfna_str <- if (is.logical(col_vals))
+        sprintf("%d/%d/%d", sum(col_vals, na.rm = TRUE),
+                sum(!col_vals, na.rm = TRUE), n_na)
+      else if (is.numeric(col_vals))
+        sprintf("%d/%d/%d", sum(col_vals != 0, na.rm = TRUE),
+                sum(col_vals == 0, na.rm = TRUE), n_na)
+      else
+        sprintf("0/0/%d", n_na)
 
       # Auto-detected type for this column
       detected_type <- if (!is.null(rv$col_types) && col %in% names(rv$col_types)) {
@@ -2116,9 +2447,11 @@ function(input, output, session) {
       sv <- if (is.list(rvars)) rvars[[col]] else NULL
       if (!is.list(sv)) sv <- NULL  # guard $ access against scalar entries
       sel_type    <- if (!is.null(sv) && !is.null(sv$type)) sv$type else detected_type
-      inc_checked <- isTRUE(sv$inc)
-      fac_checked <- isTRUE(sv$fac)
-      lin_checked <- isTRUE(sv$lin)
+      dis_checked <- isTRUE(sv$disabled)
+      inc_checked <- isTRUE(sv$inc) && !dis_checked
+      fac_checked <- isTRUE(sv$fac) && !dis_checked
+      lin_checked <- isTRUE(sv$lin) && !dis_checked
+      lat_checked <- isTRUE(sv$lat) && !dis_checked
       sel_special <- if (!is.null(sv) && !is.null(sv$special)) sv$special
                      else valengrCore::special_default_for_(col, special_options)
 
@@ -2134,7 +2467,15 @@ function(input, output, session) {
       # Build row cells — checkboxes grouped together (Include, Factor, Linear)
       row_cells <- list(
         tags$div(style = "flex: 1; min-width: 60px; font-size: 0.82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
-                 title = col, col,
+                 title = col,
+                 tags$a(href = "#",
+                        title = if (dis_checked) "Re-enable this column" else "Disable (hold out) this column",
+                        style = sprintf("color:%s; text-decoration:none; margin-right:5px; font-weight:bold;",
+                                        if (dis_checked) "#3b7a57" else "#bf616a"),
+                        onclick = sprintf("if(window.euiGatherState){window.euiGatherState();} Shiny.setInputValue('eui_toggle_disable_col', %s, {priority:'event'}); return false;",
+                                          jsonlite::toJSON(col, auto_unbox = TRUE)),
+                        HTML(if (dis_checked) "&#43;" else "&#10005;")),
+                 col,
                  tags$span(id = paste0("eui_special_badge_", i),
                            style = "font-size: 0.7em; color: #0d6efd; font-style: italic; margin-left: 4px;")),
         tags$div(style = "width: 75px; text-align: center;",
@@ -2156,7 +2497,12 @@ function(input, output, session) {
                  do.call(tags$input, c(
                    list(type = "checkbox", id = paste0("eui_lin_", i),
                         class = "eui-var-cb"),
-                   if (lin_checked) list(checked = NA))))
+                   if (lin_checked) list(checked = NA)))),
+        tags$div(style = "width: 20px; text-align: center;",
+                 do.call(tags$input, c(
+                   list(type = "checkbox", id = paste0("eui_lat_", i),
+                        class = "eui-var-cb"),
+                   if (lat_checked) list(checked = NA))))
       )
       if (appraiser) {
         special_option_tags <- lapply(special_options, function(opt) {
@@ -2175,11 +2521,12 @@ function(input, output, session) {
         ))
       }
       row_cells <- c(row_cells, list(
-        tags$div(style = paste0("width: 32px; text-align: right; font-size: 0.8em; padding-right: 4px;", na_style),
-                 if (n_na > 0L) as.character(n_na) else "")
+        tags$div(style = paste0("width: 72px; text-align: right; font-size: 0.72em; padding-right: 4px; white-space: nowrap;", na_style),
+                 tfna_str)
       ))
 
       tags$div(
+        class = if (dis_checked) "eui-row-disabled" else NULL,
         style = "display: flex; align-items: center; padding: 2px 0; border-bottom: 1px solid var(--bs-border-color, #eee); gap: 2px;",
         row_cells
       )
@@ -2215,13 +2562,16 @@ function(input, output, session) {
         var appraiser = %s;
 
         function gatherState() {
-          var inc = [], fac = [], lin = [];
+          var inc = [], fac = [], lin = [], lat = [];
           var types = {};
           var specials = {};
           for (var i = 1; i <= n; i++) {
             var sp = appraiser ? ($('#eui_special_' + i).val() || 'no') : 'no';
             if (appraiser) specials[cols[i-1]] = sp;
-            if ($('#eui_inc_' + i).is(':checked') && sp !== 'display_only') inc.push(cols[i-1]);
+            var isLat = $('#eui_lat_' + i).is(':checked');
+            if (isLat) lat.push(cols[i-1]);
+            // Latent-flagged columns are held out of the model entirely.
+            if ($('#eui_inc_' + i).is(':checked') && !isLat && sp !== 'display_only' && sp !== 'remarks' && sp !== 'list') inc.push(cols[i-1]);
             if ($('#eui_fac_' + i).is(':checked')) fac.push(cols[i-1]);
             if ($('#eui_lin_' + i).is(':checked')) lin.push(cols[i-1]);
             types[cols[i-1]] = $('#eui_type_' + i).val();
@@ -2229,6 +2579,7 @@ function(input, output, session) {
           Shiny.setInputValue('predictors', inc.length > 0 ? inc : null);
           Shiny.setInputValue('categoricals', fac.length > 0 ? fac : null);
           Shiny.setInputValue('linpreds', lin.length > 0 ? lin : null);
+          Shiny.setInputValue('latents', lat.length > 0 ? lat : null);
           Shiny.setInputValue('col_types', types);
           if (appraiser) {
             Shiny.setInputValue('col_specials', specials);
@@ -2242,6 +2593,7 @@ function(input, output, session) {
               inc: $('#eui_inc_' + i).is(':checked'),
               fac: $('#eui_fac_' + i).is(':checked'),
               lin: $('#eui_lin_' + i).is(':checked'),
+              lat: $('#eui_lat_' + i).is(':checked'),
               type: $('#eui_type_' + i).val()
             };
             if (appraiser) {
@@ -2264,6 +2616,7 @@ function(input, output, session) {
                 $('#eui_inc_' + i).prop('checked', s.inc);
                 $('#eui_fac_' + i).prop('checked', s.fac);
                 $('#eui_lin_' + i).prop('checked', s.lin);
+                $('#eui_lat_' + i).prop('checked', s.lat);
                 if (s.type) {
                   $('#eui_type_' + i).val(s.type);
                 }
@@ -2332,8 +2685,8 @@ function(input, output, session) {
         $(document).off('change.euispecial').on('change.euispecial', '.eui-special-select', function() {
           var idx = parseInt(this.id.replace('eui_special_', ''));
           var val = $(this).val();
-          if (val !== 'no' && val !== 'display_only') {
-            // Only one column per special type (except display_only allows multiple)
+          if (val !== 'no' && val !== 'display_only' && val !== 'remarks' && val !== 'list') {
+            // Only one column per special type (display_only/remarks/list allow multiple)
             for (var j = 1; j <= n; j++) {
               if (j !== idx && $('#eui_special_' + j).val() === val) {
                 $('#eui_special_' + j).val('no');
@@ -2349,6 +2702,9 @@ function(input, output, session) {
         // Expose detectedTypes for earth defaults reset
         window.euiDetectedTypes = detectedTypes;
         window.euiCols = cols;
+        // Lightweight flush so e.g. the Prolog step can sync the live Special/
+        // checkbox state to Shiny inputs before reading them (no localStorage/DB).
+        window.euiGatherState = gatherState;
       })();
     ", col_json, n_cols, storage_key_json, detected_types_json, appraiser_json)))
 
@@ -2444,21 +2800,68 @@ function(input, output, session) {
   output$rec_nfold <- renderUI({
     n <- fit_n_()
     req(n)
-    val <- min(15L, max(10L, as.integer(round(n / 100))))
-    tags$div(style = rec_style_, paste0("Recommended: ", val,
-      " = min(15, max(10, \u230A", n, "/100\u230B))"))
+    # Recommended CV folds by sample size. More folds train each fold on more
+    # data (less biased estimate) but shrink the held-out test fold. This table
+    # graduates up to the standard 10-fold as the sample grows while keeping
+    # each test fold large enough (~50+ rows) for a stable per-fold metric, and
+    # falls back to 5-fold for small samples. Caps at 10 \u2014 beyond that adds
+    # compute (each fold is a full earth fit) for negligible gain. (The old
+    # min(15, max(10, n/100)) floored at 10 even for tiny data and overshot to
+    # 15 for large data.)
+    reco_tbl <- data.frame(
+      min_rows = c(  0L, 300L, 400L, 500L, 600L, 700L),
+      max_rows = c(299L, 399L, 499L, 599L, 699L,  Inf),
+      nfold    = c(  5L,   6L,   7L,   8L,   9L,  10L)
+    )
+    row <- reco_tbl[n >= reco_tbl$min_rows & n <= reco_tbl$max_rows, ][1, ]
+    band <- if (is.infinite(row$max_rows)) {
+      paste0(format(row$min_rows, big.mark = ","), "+ rows")
+    } else {
+      paste0(format(row$min_rows, big.mark = ","), "\u2013",
+             format(row$max_rows, big.mark = ","), " rows")
+    }
+    note <- if (row$nfold == 5L) {
+      # Small sample: 5-fold keeps test folds usable, but the estimate is still
+      # noisy, so steer the user to raise ncross to average out the variance.
+      "; small sample — raise ncross (e.g. 15–20) to stabilise the CVR² estimate"
+    } else {
+      "; up to the standard 10-fold as the sample grows"
+    }
+    tags$div(style = rec_style_, paste0("Recommended: ", row$nfold,
+      " (", band, note, ")"))
   })
 
   output$rec_ncross <- renderUI({
     n <- fit_n_()
     req(n)
-    val <- max(3L, as.integer(ceiling(100 / n)))
-    tags$div(style = rec_style_, paste0("Recommended: ", val,
-      " = max(3, \u2308100/", n, "\u2309)"))
+    # Recommended repeats for repeated CV, by sample size. Repeats average out
+    # fold-partition luck to stabilise CVR-squared; larger samples need fewer
+    # repeats because a single CV is already more stable. Table-driven so the
+    # bands are easy to tune. (The old max(3, ceil(100/n)) collapsed to a
+    # constant 3 for any n > 100.)
+    reco_tbl <- data.frame(
+      min_rows = c(  0L, 200L, 400L,  700L, 1200L, 3000L),
+      max_rows = c(199L, 399L, 699L, 1199L, 2999L,   Inf),
+      ncross   = c( 20L,  16L,  12L,   10L,    7L,    5L)
+    )
+    row <- reco_tbl[n >= reco_tbl$min_rows & n <= reco_tbl$max_rows, ][1, ]
+    band <- if (is.infinite(row$max_rows)) {
+      paste0(format(row$min_rows, big.mark = ","), "+ rows")
+    } else {
+      paste0(format(row$min_rows, big.mark = ","), "\u2013",
+             format(row$max_rows, big.mark = ","), " rows")
+    }
+    tags$div(style = rec_style_, paste0("Recommended: ", row$ncross,
+      " (", band, "; fewer repeats needed as the sample grows)"))
   })
 
   output$rec_varmod <- renderUI({
-    tags$div(style = rec_style_, "Recommended: lm (prediction intervals via linear variance model)")
+    tags$div(style = rec_style_, paste0("Recommended: lm — Milborrow's default: ",
+      "a robust linear variance model (spread is estimated from noisy ",
+      "residuals, so a simple model generalises better). If lm fails to ",
+      "converge on your data, try rlm or const (homoscedastic, always ",
+      "converges), or fall back to earth (also handles a nonlinear spread). ",
+      "Needs nfold > 1 and ncross > 1."))
   })
 
   # --- Allowed Interaction Matrix ---
@@ -3643,18 +4046,19 @@ function(input, output, session) {
   output$model_equation <- renderUI({
     req(rv$result)
     eq <- cached_equation_()
+    legend <- HTML(g_function_legend("html"))
     if (inherits(eq, "earthUI_equation_multi")) {
       # Show one equation per response with a heading
       eq_blocks <- lapply(seq_along(eq$targets), function(i) {
         sub_eq <- eq$equations[[i]]
         tagList(
           tags$h5(eq$targets[i], style = "margin-top: 16px;"),
-          withMathJax(HTML(sub_eq$latex_inline))
+          HTML(sub_eq$latex_inline)
         )
       })
-      do.call(tagList, eq_blocks)
+      withMathJax(tagList(do.call(tagList, eq_blocks), legend))
     } else {
-      withMathJax(HTML(eq$latex_inline))
+      withMathJax(tagList(HTML(eq$latex_inline), legend))
     }
   })
 

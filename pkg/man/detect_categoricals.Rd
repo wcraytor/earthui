@@ -2,31 +2,32 @@
 % Please edit documentation in R/detect_categoricals.R
 \name{detect_categoricals}
 \alias{detect_categoricals}
-\title{Detect likely categorical variables in a data frame}
+\title{Detect categorical variables in a data frame}
 \usage{
-detect_categoricals(df, max_unique = 10L)
+detect_categoricals(df)
 }
 \arguments{
 \item{df}{A data frame.}
-
-\item{max_unique}{Integer. Numeric columns with this many or fewer unique
-values are flagged as likely categorical. Default is 10.}
 }
 \value{
 A named logical vector with one element per column. \code{TRUE} indicates
-the column is likely categorical.
+a character, factor, or logical column.
 }
 \description{
-Returns a logical named vector indicating which columns are likely
-categorical. Character and factor columns are always flagged. Numeric
-columns with fewer than \code{max_unique} unique values are also flagged.
+Flags columns that are categorical \strong{by type} — character, factor, or
+logical. These can only be treated as factors in a regression, so they are
+the columns to pre-check in the Factor box. Numeric and integer columns are
+\strong{not} flagged: a numeric variable is a factor only when the user explicitly
+designates it (the Factor checkbox), because by value alone a discrete
+continuous predictor (e.g. \code{bath_count} = 0..5) is indistinguishable from a
+numeric category code.
 }
 \examples{
 df <- data.frame(
-  price = c(100, 200, 300, 400),
   pool = c("Y", "N", "Y", "N"),
   bedrooms = c(2, 3, 2, 4),
-  sqft = c(1200, 1500, 1300, 1800)
+  sqft = c(1200, 1500, 1300, 1800),
+  stringsAsFactors = FALSE
 )
-detect_categoricals(df)
+detect_categoricals(df) # only `pool` is TRUE
 }

@@ -99,14 +99,20 @@ selected predictors (*p*). Key recommendations:
 | **penalty** | `if (degree > 1) 3 else 2` | 2 |
 | **pmethod** | backward | backward |
 | **nprune** | leave empty (let GCV decide) | NULL |
-| **nfold** | `min(15, max(10, round(n/100)))` | 10 |
-| **ncross** | `max(3, ceiling(100/n))` | 3 |
+| **nfold** | banded by sample size: 5 (n < 300) rising one fold per 100 rows to 10 (n >= 700) | 5 |
+| **ncross** | banded by sample size: 20 (n < 200) falling to 5 (n >= 3000) | 16 |
 | **varmod.method** | lm | lm |
 | **newvar.penalty** | 0.1 (if collinear predictors) | 0.1 |
 
-The formulas are derived from Friedman's MARS paper, earth's C source code,
-and empirical testing. See the earthUI User Guide, Chapter 7 for detailed
-explanations and scaling tables.
+The nfold and ncross recommendations come from banded sample-size tables
+rather than a single formula: small samples get fewer folds (so each test
+fold stays large enough for a stable metric) but more CV repetitions (to
+average out fold-partition noise), while large samples get the standard
+10-fold with fewer repetitions. A variance model (`varmod.method`) requires
+`nfold > 1` and `ncross > 1`. The remaining formulas are derived from
+Friedman's MARS paper, earth's C source code, and empirical testing. See
+the earthUI User Guide, Chapter 7 for detailed explanations and scaling
+tables.
 
 ### 4. Examine Results
 

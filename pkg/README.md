@@ -52,6 +52,20 @@ sudo apt install -y fonts-roboto fonts-lmodern   # Ubuntu/Debian
 fc-cache -fv
 ```
 
+### Optional: Prolog remarks processing (advanced)
+
+earthUI includes an **optional, advanced** step that parses MLS free-text
+(`public_remarks`, agent remarks) and comma-delimited "list" columns into
+model-ready feature columns, driven by a Prolog grammar and user-scriptable
+derivation rules. **It is off by default and can be ignored entirely** — the
+whole GUI works without it. It also assumes familiarity with Prolog.
+
+Remarks parsing needs the **vProlog** package (a self-contained Trealla Prolog
+engine), which is **not on CRAN** and is installed separately from its own
+repository. If vProlog is absent, remarks parsing is skipped with a note and
+list-splitting (pure R) still works. See the User Guide's *Advanced (Optional):
+Prolog Remarks Processing & Market Area Profiles* section before enabling it.
+
 ## Quick Start
 
 ```r

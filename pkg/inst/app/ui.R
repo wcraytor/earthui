@@ -56,7 +56,13 @@ fluidPage(
     [data-eui-theme='dark'] .eui-type-select { background: #3b4252 !important; color: #d8dee9 !important; border-color: #434c5e !important; }
     .eui-special-select { appearance: auto; -webkit-appearance: auto; }
     [data-eui-theme='dark'] .eui-special-select { background: #3b4252 !important; color: #d8dee9 !important; border-color: #434c5e !important; }
-    .col-sm-4 { min-width: 500px; }
+    .col-sm-4 { min-width: 560px; }
+    /* A soft-disabled (held-out) predictor row: greyed + non-interactive cells. */
+    .eui-row-disabled { opacity: 0.45; }
+    .eui-row-disabled .eui-var-cb, .eui-row-disabled select { pointer-events: none; }
+    /* Minimum app width so the results tabs are always visible (they need
+       ~1520px; a horizontal scrollbar appears on narrower screens). */
+    body { min-width: 1660px; }
     #shiny-notification-panel { width: 450px; }
     .shiny-notification { font-size: 0.85em; word-wrap: break-word; overflow-wrap: anywhere; }
     details.eui-section > summary { cursor: pointer; list-style: none; }
@@ -133,6 +139,17 @@ fluidPage(
                                      class = "btn btn-outline-secondary btn-sm",
                                      style = "margin-bottom:15px;")
         ),
+        tags$hr(style = "margin: 8px 0;"),
+        checkboxInput("enable_prolog",
+                      "Enable Prolog / list column processing", value = FALSE),
+        tags$div(class = "small", style = "margin-top: -8px; margin-bottom: 6px;",
+                 tags$span(style = "color:#bf616a; font-weight:bold;",
+                           "Advanced feature — intended for users with Prolog expertise. "),
+                 tags$span(class = "text-muted",
+                           paste0("Adds an 'Execute Prolog Processing' step before Fit: ",
+                                  "parse Special=remarks columns into feature columns via ",
+                                  "vProlog, and split Special=list columns into one-hot ",
+                                  "columns. Remarks parsing needs the vProlog package."))),
         tags$hr(style = "margin: 8px 0;"),
         tags$div(style = "display:flex; gap:6px;",
           actionButton("settings_save", "Save",
@@ -1255,6 +1272,20 @@ fluidPage(
         ),
         hr(),
 
+        # --- Execute Prolog Processing (optional; enabled via Settings) ---
+        tags$details(class = "eui-section", open = NA, id = "eui_section_prolog",
+          tags$summary(h4("Execute Prolog Processing")),
+          tags$div(class = "small text-muted", style = "margin-bottom: 6px;",
+                   paste0("Step 1 expands Special=remarks columns into pr_/ar_ ",
+                          "features (via vProlog) and Special=list columns into ",
+                          "one-hot columns. Step 2 runs your derivation rules over ",
+                          "the resulting columns. Enable in Settings (⚙).")),
+          uiOutput("prolog_buttons_ui"),
+          uiOutput("prolog_status_ui"),
+          tags$div(id = "eui_rules_host")   # docked rules editor lands here
+        ),
+        hr(),
+
         # --- 5. Fit ---
         tags$details(class = "eui-section", open = NA, id = "eui_section_fit",
           tags$summary(h4("5. Fit Earth Model")),
@@ -1333,7 +1364,7 @@ fluidPage(
             tags$summary(h4("7. Calculate RCA Adjustments & Download"),
               tags$span(class = "eui-section-info",
                         `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
-                        `data-bs-content` = "Calculates Residential Cost Approach adjustments. Enter the subject's CQA score to interpolate its residual, then computes per-variable and net adjustments for each comparable sale.",
+                        `data-bs-content` = "Calculates Residual Constraint Approach (RCA) adjustments. Enter the subject's CQA score to interpolate its residual, then computes per-variable and net adjustments for each comparable sale.",
                         `data-bs-placement` = "left", onclick = "event.stopPropagation();",
                         "?")),
             actionButton("rca_output_btn", "Calculate RCA Adjustments & Download",
@@ -1600,5 +1631,88 @@ fluidPage(
         "github.com/wcraytor/earthUI"
       )
     )
-  )
+  ),
+
+  # --- Derivation-rules editor: floats (draggable+resizable) OR docks to sidebar
+  tags$style(HTML("
+    .eui-rules-floating { position:fixed; z-index:1080; padding:0; resize:both;
+      overflow:hidden; min-width:360px; min-height:240px;
+      background:var(--bs-body-bg,#fff); border:1px solid #999; border-radius:6px;
+      box-shadow:0 6px 22px rgba(0,0,0,0.30); }
+    .eui-rules-docked { position:static; padding:0; resize:none; overflow:visible;
+      background:var(--bs-body-bg,#fff); border:1px solid var(--bs-border-color,#ccc);
+      border-radius:4px; box-shadow:none; margin-top:6px; width:100%; }
+    .rules-drag-handle { cursor:move; padding:6px 10px; font-weight:bold; display:flex;
+      justify-content:space-between; align-items:center;
+      background:var(--bs-tertiary-bg,#eee); border-bottom:1px solid var(--bs-border-color,#ccc); }
+    .eui-rules-docked .rules-drag-handle { cursor:default; }
+    .rules-body { padding:8px; }
+    .eui-rules-floating .rules-body { height:calc(100% - 36px); overflow:auto; }
+    .eui-rules-ctl { text-decoration:none; color:inherit; font-size:0.8em; margin-left:12px; cursor:pointer; }
+  ")),
+  absolutePanel(
+    id = "rules_panel", class = "eui-rules-floating",
+    draggable = TRUE, top = 80, right = 30, width = 560, height = 480,
+    style = "display:none;",
+    tags$div(class = "rules-drag-handle",
+      tags$span("Derivation Rules — <project>_rules.pl"),
+      tags$span(
+        tags$a(href = "#", class = "eui-rules-ctl",
+               onclick = paste0("window.euiRulesDock(!document.getElementById",
+                 "('rules_panel').classList.contains('eui-rules-docked')); return false;"),
+               tags$span(id = "rules_dock_lbl", "Dock")),
+        tags$a(href = "#", class = "eui-rules-ctl",
+               onclick = "window.euiHideRules(); return false;", HTML("&times;")))),
+    tags$div(class = "rules-body",
+      if (requireNamespace("shinyAce", quietly = TRUE))
+        shinyAce::aceEditor("prolog_rules", value = "", mode = "prolog", theme = "textmate",
+                            height = "300px", fontSize = 13, showLineNumbers = TRUE,
+                            wordWrap = TRUE, autoComplete = "disabled", debounce = 200)
+      else
+        textAreaInput("prolog_rules", NULL, value = "", width = "100%", rows = 16),
+      uiOutput("rules_cols_ref"),
+      uiOutput("rules_status_ui"),
+      tags$div(style = "display:flex; gap:6px; margin-top:6px;",
+        actionButton("rules_check", "Check", class = "btn-outline-secondary btn-sm"),
+        actionButton("rules_save",  "Save",  class = "btn-primary btn-sm")))
+  ),
+  tags$script(HTML("
+    window.euiFitRules = function(){
+      var p=document.getElementById('rules_panel'); if(!p) return;
+      var ed=document.getElementById('prolog_rules'); if(!ed) return;
+      if(p.classList.contains('eui-rules-docked')){ ed.style.height='300px'; }
+      else { ed.style.height = Math.max(120, p.clientHeight - 175) + 'px'; }
+      if(window.ace && ace.edit){ try{ ace.edit('prolog_rules').resize(); }catch(e){} }
+    };
+    window.euiShowRules = function(){
+      var p=document.getElementById('rules_panel'); if(!p) return;
+      p.style.display='block'; setTimeout(window.euiFitRules,30);
+    };
+    window.euiHideRules = function(){
+      var p=document.getElementById('rules_panel'); if(p) p.style.display='none';
+    };
+    window.euiRulesDock = function(dock){
+      var p=document.getElementById('rules_panel'),
+          host=document.getElementById('eui_rules_host'); if(!p) return;
+      if(dock){
+        if(host) host.appendChild(p);
+        p.className='eui-rules-docked'; p.removeAttribute('style'); p.style.display='block';
+        try{ $(p).draggable('disable'); }catch(e){}
+      } else {
+        document.body.appendChild(p);
+        p.className='eui-rules-floating';
+        p.style.cssText='display:block; top:80px; right:30px; width:560px; height:480px;';
+        try{ $(p).draggable('enable'); }catch(e){}
+      }
+      var l=document.getElementById('rules_dock_lbl'); if(l) l.textContent = dock?'Float':'Dock';
+      setTimeout(window.euiFitRules,40);
+    };
+    $(function(){
+      try{ $('#rules_panel').draggable('option','handle','.rules-drag-handle'); }catch(e){}
+      if(window.ResizeObserver){
+        var p=document.getElementById('rules_panel');
+        if(p){ new ResizeObserver(window.euiFitRules).observe(p); }
+      }
+    });
+  "))
 )

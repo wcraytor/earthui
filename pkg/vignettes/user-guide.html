@@ -350,8 +350,9 @@ login, no server, no accounts. You launch it from R, import a dataset
 (CSV or Excel), configure your model, and fit it interactively.</p>
 <div id="three-purpose-modes" class="section level3">
 <h3>Three Purpose Modes</h3>
-<p>When you launch earthUI, a <strong>Purpose</strong> radio button at
-the top of the sidebar lets you choose one of three modes:</p>
+<p>Every project has a <strong>purpose</strong>, chosen when the project
+is created (in the <strong>1. Project</strong> section of the
+sidebar):</p>
 <ul>
 <li><strong>General</strong> — Earth regression for any dataset. The
 default mode.</li>
@@ -361,6 +362,10 @@ adjustments, and Sales Comparison Grid generation.</li>
 <li><strong>Market Area Analysis</strong> — For analyzing groups of
 properties with optional subject row exclusion.</li>
 </ul>
+<p>The active project determines the purpose — to work in a different
+mode, open or create a project with that purpose. Switching projects
+clears all state (imported data, results, settings); previously saved
+settings for the newly opened project are automatically restored.</p>
 </div>
 <div id="getting-started" class="section level3">
 <h3>Getting Started</h3>
@@ -412,9 +417,10 @@ defaults. Changing an override only affects that one setting.</p>
 <h3>Saving Defaults</h3>
 <p>Click <strong>Save as my default</strong> to store your locale
 preferences globally. These defaults apply to all future sessions
-regardless of which data file you load. Per-file settings (target,
-predictors, parameters) are saved separately in the browser’s local
-storage, but locale defaults persist across all files via an SQLite
+regardless of which project you open. Project settings (target,
+predictors, parameters) are saved separately in the project database via
+the <strong>Save current as default</strong> buttons, scoped per project
+and purpose. Locale defaults persist across all projects via the same
 database.</p>
 </div>
 </div>
@@ -571,22 +577,46 @@ is optional (use the “Skip first row” checkbox). In
 <h2>The Sidebar Workflow</h2>
 <p>The sidebar is organized into numbered sections:</p>
 <ol style="list-style-type: decimal">
-<li><strong>Import Data</strong> — CSV or Excel file upload</li>
-<li><strong>Project Output Folder</strong> — where downloads are
-saved</li>
-<li><strong>Variable Configuration</strong> — target, predictors, data
-types, special columns</li>
+<li><strong>Project</strong> — pick or create a project (purpose,
+country, location); sets the input/output locations</li>
+<li><strong>Import Data</strong> — choose a CSV or Excel file from the
+project’s input folder</li>
+<li><strong>Variable Configuration</strong> — target, effective date,
+predictors, data types, special columns</li>
 <li><strong>Earth Call Parameters</strong> — degree, penalty, pruning,
-CV, subset filters</li>
-<li><strong>Fit Earth Model</strong> — green button to run the
-model</li>
-<li><strong>Download Output</strong> — Excel file with predictions and
-diagnostics</li>
-<li><strong>Calculate RCA Adjustments</strong> (appraisal only)</li>
-<li><strong>Generate Sales Grid</strong> (appraisal only)</li>
-<li><strong>Download Report</strong> — HTML, Word, or PDF via
-Quarto</li>
+CV, subset filters. Recommended values are displayed below key
+parameters (see below).</li>
 </ol>
+<ul>
+<li><strong>Execute Prolog Processing</strong> (between 4 and 5;
+optional, enabled via Settings) — expands
+<code>remarks</code>/<code>list</code> columns and runs derivation rules
+(see <em>Advanced</em> below)</li>
+</ul>
+<ol start="5" style="list-style-type: decimal">
+<li><strong>Fit Earth Model</strong> — runs the model asynchronously. A
+<strong>Random seed</strong> field (pre-filled with a random value, with
+a recent-seeds recall dropdown) makes cross-validation folds
+reproducible. The fitting modal streams live trace output, has an
+<strong>Abort</strong> button, and auto-dismisses once all result tabs
+finish rendering.</li>
+<li><strong>Download output</strong> — Excel file with predictions and
+diagnostics (labeled “Download Estimated Sale Prices &amp; Residuals” in
+appraisal/market mode)</li>
+<li><strong>Calculate RCA Adjustments &amp; Download</strong> (appraisal
+only)</li>
+<li><strong>Generate Sales Grid &amp; Download</strong> (appraisal
+only)</li>
+<li><strong>Generate Quarto Report</strong> — writes a self-contained
+<code>.qmd</code> bundle (source + plots + data) to the project’s output
+folder</li>
+<li><strong>Convert Quarto Report</strong> — renders any
+<code>.qmd</code> (defaulting to the last generated bundle) to HTML,
+Word, and/or PDF</li>
+</ol>
+<p>After fitting, the main panel shows ten tabs: Data, Equation,
+Summary, Variable Importance, Contribution, Correlation, Diagnostics,
+RCA Adjustments (appraisal only), ANOVA, and Earth Output.</p>
 </div>
 <div id="variable-selection" class="section level2">
 <h2>Variable Selection</h2>
@@ -601,8 +631,19 @@ character, factor, Date, etc.)</li>
 (appraisal/market only)</li>
 <li><strong>Factor</strong> — treat as categorical</li>
 <li><strong>Linear</strong> — force linear entry (no hinges)</li>
-<li><strong>NAs</strong> — missing value count</li>
+<li><strong>Latent</strong> — hold the column out of the model,
+reserving it for latent-variable work (see <em>Advanced</em> below).
+Latent-flagged columns are excluded from earth and from the data
+exported to glmnetUI / mgcvUI.</li>
+<li><strong>T/F/NA</strong> — true/false/NA counts (logicals:
+TRUE/FALSE/NA; numerics: ≠0/=0/NA), so factor balance and missingness
+are visible at a glance.</li>
 </ul>
+<p>Each row also has a <strong>✕ / ＋ toggle</strong> beside the column
+name: <strong>✕</strong> <em>soft-disables</em> a column — it greys out
+and is held out of the model, but is <strong>not deleted</strong> — and
+flips to a green <strong>＋</strong> to re-enable it. Columns are never
+destroyed.</p>
 </div>
 <div id="special-column-types" class="section level3">
 <h3>Special Column Types</h3>
@@ -639,15 +680,196 @@ Age row</li>
 <li><code>display_only</code> — in exports but excluded from model
 (multiple allowed)</li>
 </ul>
-<p>Only one column per special type (except <code>display_only</code>).
-A blue badge shows the assigned type next to each variable name.</p>
+<p><strong>Text extraction (advanced, optional):</strong></p>
+<ul>
+<li><code>remarks</code> — free-text column
+(e.g. <code>public_remarks</code>) parsed into <code>pr_*</code> /
+<code>ar_*</code> feature columns</li>
+<li><code>list</code> — comma-delimited column
+(e.g. <code>existing_structures</code>) split into one-hot
+<code>&lt;col&gt;_&lt;value&gt;</code> TRUE/FALSE columns</li>
+</ul>
+<p>The <code>remarks</code> and <code>list</code> roles do nothing until
+the optional <strong>Enable Prolog</strong> step is turned on in
+Settings (see <em>Advanced (Optional): Prolog Remarks Processing &amp;
+Market Area Profiles</em> below); multiple columns may carry them.</p>
+<p>Only one column per special type (except <code>display_only</code>,
+<code>remarks</code>, and <code>list</code>). A blue badge shows the
+assigned type next to each variable name.</p>
+</div>
+</div>
+<div id="allowed-interactions-degree-2" class="section level2">
+<h2>Allowed Interactions (Degree 2+)</h2>
+<p>When <code>degree &gt;= 2</code>, the <strong>Allowed
+Interactions</strong> matrix appears under Earth Call Parameters. This
+upper-triangular matrix controls which variable pairs can form
+interaction terms (hinge products).</p>
+<ul>
+<li><strong>Check a cell</strong> to allow the interaction
+<code>h(x1) * h(x2)</code></li>
+<li><strong>Left-click a variable name</strong> (row or column) to
+toggle all its interactions at once</li>
+<li><strong>Allow All / Clear All</strong> buttons toggle the entire
+matrix</li>
+<li>Selections are saved with the earth parameters when you click
+<strong>Save current as default</strong> in Section 4 (stored in the
+project database, per project and purpose)</li>
+</ul>
+<div id="block-from-degree-1-interaction-only" class="section level3">
+<h3>Block from Degree 1 (Interaction Only)</h3>
+<p><strong>Right-click</strong> a variable name in the Allowed
+Interactions matrix to block it from entering the model as a main effect
+(degree-1 hinge). A bold <strong>” 1”</strong> indicator appears after
+the variable name.</p>
+<p>When blocked:</p>
+<ul>
+<li>The variable <strong>cannot</strong> enter as
+<code>h(variable - knot)</code> (main effect)</li>
+<li>The variable <strong>can</strong> enter through interactions like
+<code>h(variable - k1) * h(other_var - k2)</code> (degree 2+)</li>
+<li>Right-click again to unblock</li>
+</ul>
+<p><strong>Use case:</strong> When modeling time adjustments that should
+scale with property size, block <code>sale_age</code> from degree 1 and
+allow it only in an interaction with <code>living_area</code>. This
+forces earth to discover
+<code>h(sale_age - k1) * h(living_area - k2)</code> – a time
+appreciation rate that varies by house size – rather than a flat $/day
+rate that applies equally to all properties.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="co"># Programmatic equivalent using the allowed function:</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>mat <span class="ot">&lt;-</span> <span class="fu">build_allowed_matrix</span>(<span class="fu">c</span>(<span class="st">&quot;sale_age&quot;</span>, <span class="st">&quot;living_area&quot;</span>, <span class="st">&quot;lot_size&quot;</span>))</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>func <span class="ot">&lt;-</span> <span class="fu">build_allowed_function</span>(mat, <span class="at">block_degree1 =</span> <span class="st">&quot;sale_age&quot;</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>result <span class="ot">&lt;-</span> <span class="fu">fit_earth</span>(df, <span class="st">&quot;sale_price&quot;</span>, predictors,</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>                    <span class="at">degree =</span> <span class="dv">2</span><span class="dt">L</span>, <span class="at">allowed_func =</span> func)</span></code></pre></div>
+</div>
+</div>
+<div id="recommended-parameter-values" class="section level2">
+<h2>Recommended Parameter Values</h2>
+<p>earthUI displays recommended values in blue text below key parameters
+in Section 4. These update reactively as you load data and select
+predictors, based on the number of fitting rows (<em>n</em>) and
+predictors (<em>p</em>).</p>
+<div id="summary-table" class="section level3">
+<h3>Summary Table</h3>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Parameter</th>
+<th align="left">Formula</th>
+<th align="right">n=200, p=10</th>
+<th align="right">n=1500, p=10</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left"><strong>nk</strong></td>
+<td align="left">min(100, max(21, 2p+1, n/10))</td>
+<td align="right">21</td>
+<td align="right">100</td>
+</tr>
+<tr class="even">
+<td align="left"><strong>minspan</strong></td>
+<td align="left">min(16, 5 + n/50)</td>
+<td align="right">9</td>
+<td align="right">16</td>
+</tr>
+<tr class="odd">
+<td align="left"><strong>endspan</strong></td>
+<td align="left">min(16, 5 + n/28)</td>
+<td align="right">12</td>
+<td align="right">16</td>
+</tr>
+<tr class="even">
+<td align="left"><strong>penalty</strong></td>
+<td align="left">3 if degree&gt;1, else 2</td>
+<td align="right">2</td>
+<td align="right">2</td>
+</tr>
+<tr class="odd">
+<td align="left"><strong>pmethod</strong></td>
+<td align="left">backward</td>
+<td align="right">backward</td>
+<td align="right">backward</td>
+</tr>
+<tr class="even">
+<td align="left"><strong>nprune</strong></td>
+<td align="left">leave empty</td>
+<td align="right">NULL</td>
+<td align="right">NULL</td>
+</tr>
+<tr class="odd">
+<td align="left"><strong>nfold</strong></td>
+<td align="left">banded: 5 (n&lt;300) up to 10 (n&gt;=700)</td>
+<td align="right">5</td>
+<td align="right">10</td>
+</tr>
+<tr class="even">
+<td align="left"><strong>ncross</strong></td>
+<td align="left">banded: 20 (n&lt;200) down to 5 (n&gt;=3000)</td>
+<td align="right">16</td>
+<td align="right">7</td>
+</tr>
+<tr class="odd">
+<td align="left"><strong>varmod.method</strong></td>
+<td align="left">lm</td>
+<td align="right">lm</td>
+<td align="right">lm</td>
+</tr>
+<tr class="even">
+<td align="left"><strong>newvar.penalty</strong></td>
+<td align="left">0.1 if collinear predictors</td>
+<td align="right">0.1</td>
+<td align="right">0.1</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="key-rationale" class="section level3">
+<h3>Key Rationale</h3>
+<ul>
+<li><strong>nk</strong>: Earth’s default (<code>max(21, 2p+1)</code>)
+does not account for dataset size. For large datasets, <code>n/10</code>
+provides enough forward-pass capacity for the greedy search to explore
+all predictors with multiple knots.</li>
+<li><strong>minspan / endspan</strong>: Earth’s auto-calculation scales
+as log(n<em>p), which grows too slowly for large </em>n*. The linear
+formulas target approximately 100 candidate knot locations per
+continuous predictor, preventing the forward pass from fitting noise.
+Endspan is set slightly larger for additional boundary protection.</li>
+<li><strong>pmethod = backward</strong>: GCV-based pruning is
+deterministic — no dependence on random seeds, which is critical for
+reproducibility.</li>
+<li><strong>nfold / ncross</strong>: With
+<code>pmethod = backward</code>, CV only provides the diagnostic
+CVR<sup>2</sup> and residuals for the variance model. The
+recommendations come from banded sample-size tables: small samples get 5
+folds (keeping each test fold large enough for a stable metric) plus
+many repetitions (up to 20) to average out fold-partition noise, while
+large samples get the standard 10 folds with as few as 5 repetitions. A
+variance model requires <code>nfold &gt; 1</code> and
+<code>ncross &gt; 1</code>.</li>
+<li><strong>newvar.penalty = 0.1</strong>: When predictors are
+correlated (e.g., living area with bedroom count), a small penalty
+biases the forward pass toward reusing existing predictors, producing
+simpler and more interpretable models.</li>
+</ul>
+</div>
+<div id="earth-output-file" class="section level3">
+<h3>Earth Output File</h3>
+<p>After every fit, earthUI writes
+<code>&lt;filename&gt;_earth_output_&lt;timestamp&gt;.txt</code> to the
+output folder containing the model, summary statistics, variance model,
+and trace log — useful for comparing parameter configurations across
+runs.</p>
+<p>See the earthUI User Guide, Chapter 7 for detailed derivations and
+additional scaling tables.</p>
 </div>
 </div>
 <div id="downloading-data-step-6" class="section level2">
 <h2>Downloading Data (Step 6)</h2>
 <p>After fitting, download an Excel file with predictions and
 diagnostics. This output is used in Step 7 (RCA) to assign a CQA
-(Condition/Quality/Appeal) rating to the subject property. The output is
+(Condition-Quality-Appeal) rating to the subject property. The output is
 sorted by <code>residual_sf</code> and <code>cqa_sf</code> to help you
 assess where the subject falls in the ranking. If the model is good
 quality, then the properties should be ranked from lowest appealing to
@@ -681,7 +903,7 @@ price anomaly.</p>
 </tr>
 <tr class="odd">
 <td align="left"><code>cqa</code></td>
-<td align="left">Comparative Quality Analysis score (0-10 scale)</td>
+<td align="left">Condition-Quality-Appeal score (0-10 scale)</td>
 </tr>
 <tr class="even">
 <td align="left"><code>residual_sf</code></td>
@@ -737,7 +959,7 @@ predicted</li>
 <h2>mgcvUI Auto-Export</h2>
 <p>On every successful fit with <code>degree &lt;= 2</code>, earthUI
 automatically saves the full result object as an <code>.rds</code> file
-to the Project Output Folder. The filename follows the pattern
+to the project’s output folder. The filename follows the pattern
 <code>&lt;datafile&gt;_earthUI_result_&lt;YYYYMMDD_HHMMSS&gt;.rds</code>.</p>
 <p>This file can be loaded by <a href="https://github.com/wcraytor/mgcvUI">mgcvUI</a> (a companion Shiny
 app for GAM modeling) using <code>readRDS()</code>. mgcvUI uses the
@@ -758,7 +980,9 @@ export.</p>
 type. If you choose “CQA per SF”, then based on the CQA score you assign
 the subject, its residual score will be its living_area times the
 residual_sf that matches the given CQA_SF score.</li>
-<li>Enter the subject’s CQA score (0.00–9.99, default 5.00)</li>
+<li>Enter the subject’s CQA score (0.00–10.00; the field starts blank
+and the Generate button stays disabled until a valid score is
+entered)</li>
 <li>Click <strong>Generate</strong> to compute adjustments</li>
 </ul>
 </div>
@@ -822,10 +1046,13 @@ adjustments and adjusted sale prices. Output:
 <p>A modal dialog shows:</p>
 <ul>
 <li><strong>Recommended comps</strong> (pre-checked): gross adjustment
-&lt; 25% of sale price, sorted by gross adjustment % ascending</li>
-<li><strong>Additional comps</strong> (unchecked): larger
-adjustments</li>
-<li>Maximum 30 comps / 10 sheets (3 comps per sheet)</li>
+&lt; 25% of sale price, sorted by sale age ascending (most recent sales
+first)</li>
+<li><strong>Additional comps</strong> (unchecked): larger adjustments,
+sorted by gross adjustment % ascending</li>
+<li>Maximum 30 comps / 10 sheets (3 comps per sheet); the selected comps
+are ordered by gross adjustment % ascending in the generated
+workbook</li>
 </ul>
 </div>
 <div id="grid-layout" class="section level3">
@@ -889,13 +1116,23 @@ update</li>
 </ol>
 </div>
 </div>
-<div id="downloading-reports-step-9" class="section level2">
-<h2>Downloading Reports (Step 9)</h2>
-<p>Three formats via Quarto:</p>
+<div id="quarto-reports-steps-9-10" class="section level2">
+<h2>Quarto Reports (Steps 9 &amp; 10)</h2>
+<p>Report generation is a two-step flow:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Generate Quarto Report</strong> (Step 9) writes a
+self-contained bundle — the <code>.qmd</code> source plus plots, data,
+and a reference <code>.docx</code> — to the project’s output folder. The
+bundle can be edited or combined with other Quarto sources before
+rendering.</li>
+<li><strong>Convert Quarto Report</strong> (Step 10) renders any
+<code>.qmd</code> file (defaulting to the most recently generated
+bundle) to one or more formats:</li>
+</ol>
 <ul>
-<li><strong>HTML</strong> — self-contained with interactive tables</li>
+<li><strong>HTML</strong> — with KaTeX math rendering</li>
 <li><strong>Word</strong> — <code>.docx</code> for editing and
-distribution</li>
+distribution, with page numbers</li>
 <li><strong>PDF</strong> — typeset with LuaLaTeX (paper size follows
 locale: Letter or A4)</li>
 </ul>
@@ -903,20 +1140,23 @@ locale: Letter or A4)</li>
 interactions, summary metrics, model equation, coefficients, variable
 importance, g-function plots, correlation matrix, diagnostics, ANOVA,
 and raw earth output.</p>
+<p>All operations are logged to
+<code>&lt;filename&gt;_earthui_log.txt</code> in the output folder with
+start/end timestamps and elapsed times for troubleshooting.</p>
 </div>
 <div id="demo-dataset-appraisal_1.csv" class="section level2">
 <h2>Demo Dataset: Appraisal_1.csv</h2>
 <p>earthUI includes a demo MLS dataset for exploring the appraisal
 workflow. Load it with:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>demo_file <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="st">&quot;Appraisal_1.csv&quot;</span>, <span class="at">package =</span> <span class="st">&quot;earthUI&quot;</span>)</span>
-<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>df <span class="ot">&lt;-</span> <span class="fu">import_data</span>(demo_file)</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>demo_file <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="st">&quot;Appraisal_1.csv&quot;</span>, <span class="at">package =</span> <span class="st">&quot;earthUI&quot;</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>df <span class="ot">&lt;-</span> <span class="fu">import_data</span>(demo_file)</span></code></pre></div>
 <p>Or import it directly through the Shiny app file upload.</p>
 <div id="description" class="section level3">
 <h3>Description</h3>
-<p>The file contains 1,502 residential sales (plus 1 subject property in
-row 1) from a simulated MLS export. The data represents single-family
-home sales in a multi-area market with a range of property sizes, ages,
-and locations.</p>
+<p>The file contains 1,502 data rows — 1,501 residential sales plus the
+subject property in row 1 — from a simulated MLS export. The data
+represents single-family home sales in a multi-area market with a range
+of property sizes, ages, and locations.</p>
 <p>This is not real data, but is based on a realistic neighborhood in
 Northern California. All identification information has been altered or
 removed.</p>
@@ -1170,8 +1410,10 @@ removed.</p>
 <h3>Suggested Quick Start</h3>
 <ol style="list-style-type: decimal">
 <li>Launch earthUI: <code>earthUI::launch()</code></li>
-<li>Import <code>Appraisal_1.csv</code> via the file upload</li>
-<li>Set Purpose to <strong>For Appraisal</strong></li>
+<li>Create (or open) a project with purpose <strong>For
+Appraisal</strong></li>
+<li>Copy <code>Appraisal_1.csv</code> into the project’s input folder
+and pick it in Section 2</li>
 <li>Select <code>sale_price</code> as the target</li>
 <li>Assign special types as shown in the table above</li>
 <li>Include predictors: <code>sale_age</code>, <code>living_sqft</code>,
@@ -1183,6 +1425,193 @@ removed.</p>
 <li>Compute RCA adjustments (Step 7) with a CQA score of ~5.00</li>
 <li>Generate the Sales Comparison Grid (Step 8)</li>
 </ol>
+</div>
+</div>
+<div id="advanced-optional-prolog-remarks-processing-market-area-profiles" class="section level2">
+<h2>Advanced (Optional): Prolog Remarks Processing &amp; Market Area
+Profiles</h2>
+<blockquote>
+<p><strong>This entire section is advanced and optional.</strong>
+Everything below is <strong>off by default</strong>, gated behind a
+single Settings toggle, and can be ignored completely — earthUI’s normal
+workflow does not depend on any of it. These features also assume
+working knowledge of <strong>Prolog</strong> and of the project’s
+extraction conventions. If you do not need them, skip this section. If
+you enable them and something misbehaves, turn the toggle back off and
+continue normally.</p>
+</blockquote>
+<div id="what-it-does" class="section level3">
+<h3>What it does</h3>
+<p>MLS listings carry a great deal of value-relevant information in free
+text (<code>public_remarks</code>, agent remarks) and in comma-delimited
+“list” fields
+(e.g. <code>existing_structures = &quot;Shed, Workshop&quot;</code>). This
+optional step turns that text into ordinary, model-ready columns:</p>
+<ul>
+<li><strong><code>remarks</code> columns</strong> are parsed by a Prolog
+<strong>DCG grammar</strong> into <code>pr_*</code> (public remarks) or
+<code>ar_*</code> (agent remarks) feature columns — e.g.
+<code>pr_condition_score</code>, <code>pr_has_workshop</code>,
+<code>pr_workshop_area</code>, <code>pr_garage_area</code>,
+<code>pr_has_view</code>.</li>
+<li><strong><code>list</code> columns</strong> are split into one-hot
+<code>&lt;col&gt;_&lt;value&gt;</code> TRUE/FALSE columns.</li>
+</ul>
+</div>
+<div id="enabling-it" class="section level3">
+<h3>Enabling it</h3>
+<ol style="list-style-type: decimal">
+<li>Open <strong>Settings (⚙)</strong> and tick <strong>Enable Prolog /
+list column processing</strong>. It is off by default and marked
+<em>advanced — for users with Prolog expertise</em>. The choice is
+<strong>remembered per project</strong> and shown in the <strong>Project
+Information</strong> dialog.</li>
+<li>In the predictor table, set the <strong>Special</strong> role of the
+relevant columns to <code>remarks</code> or <code>list</code>.</li>
+</ol>
+<p>Remarks parsing requires the optional <strong>vProlog</strong>
+package (a self-contained Trealla Prolog engine, installed separately —
+it is <strong>not on CRAN</strong>). If it is not installed, remarks
+parsing is skipped with a note and <code>list</code> splitting (pure R)
+still runs.</p>
+</div>
+<div id="the-two-pass-workflow" class="section level3">
+<h3>The two-pass workflow</h3>
+<p>A new <strong>Execute Prolog Processing</strong> step appears before
+Fit with two buttons:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Expand lists &amp; remarks</strong> — runs the grammar on
+<code>remarks</code> columns and splits <code>list</code> columns. This
+is <strong>incremental</strong>: only columns designated <em>since the
+last expansion</em> are processed, and the button is <strong>disabled
+once everything designated has been expanded</strong>. A progress bar
+shows the run.</li>
+<li><strong>Execute derivation rules</strong> — applies your own Prolog
+<code>derive(Col, Val)</code> rules over the expanded columns, so you
+can combine, threshold, or recompute features (helpers
+<code>count_true</code>/<code>count_false</code>/<code>cell_or</code>
+are provided; <code>drop(Col)</code> removes a column). Rules live in a
+per-project <code>&lt;project&gt;_rules.pl</code> file (seeded from a
+commented template) and are edited in a <strong>floating,
+draggable/dockable code editor</strong> (Edit derivation rules…). Rules
+are syntax-checked and dry-run validated before they run.</li>
+</ol>
+<p><strong>Versioned active file.</strong> After either pass, the
+augmented data frame is written to the project’s input folder as
+<code>&lt;original_name&gt;_&lt;YYMMDD_HHMMSS&gt;.xlsx</code> and
+becomes the project’s <strong>active</strong> MLS data file. Reopening
+the project loads the augmented data — expansions are not recomputed —
+and the same file is what glmnetUI and mgcvUI consume.</p>
+</div>
+<div id="managing-the-generated-columns" class="section level3">
+<h3>Managing the generated columns</h3>
+<p>Text parsing can produce many columns. Rather than force you to model
+them all:</p>
+<ul>
+<li>Flag any you do not want in the regression as
+<strong>Latent</strong> (held out, reserved for latent-variable work),
+or</li>
+<li><strong>✕</strong>-disable ones you want to hide entirely
+(reversible with <strong>＋</strong>).</li>
+</ul>
+</div>
+<div id="market-area-profiles-climate-zones" class="section level3">
+<h3>Market Area Profiles (climate zones)</h3>
+<p>Feature value depends heavily on the <strong>market area</strong>.
+The first <em>market-area profile</em> is a <strong>climate
+profile</strong>: three R helpers — <code>climate_region_for()</code>,
+<code>market_area_profile()</code>, and
+<code>climate_feature_priors()</code> — classify a project’s location
+(county + city) into one of <strong>seven buyer-recognized California
+climate regions</strong> (a practical reduction of the California Energy
+Commission’s official 16 building-climate zones) and return ordinal
+contributory-value <strong>priors</strong> for HVAC / cooling features
+(heating, A/C, swamp cooler, whole-house fan, filtration) by region.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">climate_region_for</span>(<span class="st">&quot;kern&quot;</span>, <span class="st">&quot;ridgecrest&quot;</span>)     <span class="co"># &quot;desert&quot;</span></span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="fu">market_area_profile</span>(<span class="st">&quot;san_mateo&quot;</span>, <span class="st">&quot;pacifica&quot;</span>) <span class="co"># region + label + feature priors</span></span></code></pre></div>
+<p>A companion Prolog module
+(<code>inst/prolog/climate_regions_ca.pl</code>) mirrors the same
+classification for use inside derivation rules; both are generated from
+a single canonical R source so they cannot drift. These priors are
+intended to <em>inform</em> feature valuation — especially thin-data
+features the regression cannot estimate on its own (e.g. a swamp cooler
+present in only a few comps) — and as a plausibility check on estimated
+coefficients. <strong>Experimental</strong>; the region assignments
+(particularly for counties spanning several regions) should be reviewed
+by the appraiser.</p>
+</div>
+</div>
+<div id="system-requirements-troubleshooting" class="section level2">
+<h2>System Requirements &amp; Troubleshooting</h2>
+<div id="supported-platforms" class="section level3">
+<h3>Supported Platforms</h3>
+<p>earthUI runs on <strong>macOS</strong>, <strong>Windows</strong>, and
+<strong>Linux</strong>. RStudio Desktop (2023.06+) is strongly
+recommended — it bundles <strong>pandoc</strong> needed for reports.</p>
+</div>
+<div id="optional-dependencies" class="section level3">
+<h3>Optional Dependencies</h3>
+<ul>
+<li><strong>LaTeX</strong> (TinyTeX, MiKTeX, or MacTeX): PDF report
+generation only. If not detected, the PDF option is automatically
+hidden. Install with: <code>tinytex::install_tinytex()</code></li>
+<li><strong>sysfonts + showtext</strong>: Roboto Condensed font for
+plots. Falls back to system sans-serif automatically if unavailable or
+offline.</li>
+</ul>
+</div>
+<div id="platform-notes" class="section level3">
+<h3>Platform Notes</h3>
+<p><strong>macOS</strong>: Fewest issues. Install TinyTeX for PDF:
+<code>tinytex::install_tinytex()</code></p>
+<p><strong>Windows</strong>: Works well with RStudio.
+Corporate/locked-down machines may have temp directory restrictions —
+the app will warn in the console but continue without settings
+persistence.</p>
+<p><strong>Linux</strong>: May need system libraries:
+<code>sudo apt install libcurl4-openssl-dev libssl-dev libxml2-dev libsqlite3-dev libfontconfig1-dev</code></p>
+</div>
+<div id="graceful-degradation" class="section level3">
+<h3>Graceful Degradation</h3>
+<table>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Missing Component</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>No LaTeX</td>
+<td>PDF option hidden. HTML and Word still available.</td>
+</tr>
+<tr class="even">
+<td>No internet / fonts fail</td>
+<td>System sans-serif used. Console message logged.</td>
+</tr>
+<tr class="odd">
+<td>No RSQLite / read-only filesystem</td>
+<td>Settings don’t persist. App runs normally.</td>
+</tr>
+<tr class="even">
+<td>Temp directory not writable</td>
+<td>Report generation fails with clear error.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="troubleshooting" class="section level3">
+<h3>Troubleshooting</h3>
+<p><strong>“PDF option not available”</strong>: Run
+<code>tinytex::install_tinytex()</code> in R, restart app.</p>
+<p><strong>“Settings will not persist”</strong>: Check permissions on
+the user data directory.</p>
+<p><strong>Port 7878 already in use</strong>: Run
+<code>lsof -ti:7878 | xargs kill</code> (macOS/Linux).</p>
 </div>
 </div>
 

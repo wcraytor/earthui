@@ -10,6 +10,42 @@ has_latex_ <- function() {
 }
 
 
+# Internal: render the "Earth Output" text block from a FULL earth_result,
+# matching the app's Earth Output tab (Timing, Seed, Model, Summary, Variance
+# Model, Trace Log). Captured at asset-generation time and saved into
+# report_data.rds, because the lean result stored for the report strips the
+# heavy earth model (so the report can't call print()/summary() itself).
+earth_output_text_ <- function(earth_result) {
+  model <- earth_result$model
+  lines <- utils::capture.output({
+    if (!is.null(earth_result$elapsed)) {
+      cat(sprintf("== Timing: %.2f seconds ==\n", earth_result$elapsed))
+    }
+    if (!is.null(earth_result$seed)) {
+      cat(sprintf("== Random Seed: %d ==\n", earth_result$seed))
+    }
+    cat("\n== Model ==\n\n")
+    print(model)
+    cat("\n\n== Summary ==\n\n")
+    print(summary(model))
+    if (!is.null(model$varmod)) {
+      cat("\n\n== Variance Model ==\n\n")
+      print(model$varmod)
+    }
+    if (length(earth_result$trace_output) > 0L) {
+      trace_lines <- earth_result$trace_output
+      trace_lines <- trace_lines[
+        !grepl("^Removed .* rows with miss", trace_lines)]
+      trace_lines <- trace_lines[!grepl("^CV fold ", trace_lines)]
+      if (length(trace_lines) > 0L) {
+        cat("\n\n== Trace Log ==\n\n")
+        cat(trace_lines, sep = "\n")
+      }
+    }
+  })
+  paste(lines, collapse = "\n")
+}
+
 #' Prepare report assets
 #'
 #' Pre-generates all plots and data for the earth model report. Returns the
@@ -60,6 +96,9 @@ prepare_report_assets <- function(earth_result, assets_dir = NULL) {
                                 "linpreds", "degree", "cv_enabled",
                                 "allowed_matrix")]
   class(lean_result) <- class(earth_result)
+  # Capture the Earth Output text now, while the full model is still in scope
+  # (the lean result saved below strips it).
+  earth_output <- earth_output_text_(earth_result)
   saveRDS(list(
     result       = lean_result,
     summary_info = summary_info,
@@ -67,6 +106,7 @@ prepare_report_assets <- function(earth_result, assets_dir = NULL) {
     importance   = importance,
     gf           = gf,
     anova        = anova_df,
+    earth_output = earth_output,
     multi        = multi,
     targets      = targets
   ), file.path(assets_dir, "report_data.rds"), compress = "xz")
@@ -130,13 +170,18 @@ prepare_report_assets <- function(earth_result, assets_dir = NULL) {
     }
   }
 
-  # Variable importance plot
-  save_plot_("importance", function() plot_variable_importance(earth_result),
-             width = 8, height = 5)
+  # Variable importance plot. Route ggplot objects through save_ggplot_()
+  # (ggsave) so their fonts render at the same effective resolution as the
+  # contribution/g-function plots. The manual png()/pdf() device used by
+  # save_plot_() renders text at showtext's default dpi, which mismatches the
+  # device resolution and makes axis labels appear too small relative to the
+  # ggsave-rendered plots. save_plot_() is reserved for base-R plots (persp).
+  save_ggplot_("importance", plot_variable_importance(earth_result),
+               width = 8, height = 5)
 
   # Correlation matrix
-  save_plot_("correlation", function() plot_correlation_matrix(earth_result),
-             width = 10, height = 8)
+  save_ggplot_("correlation", plot_correlation_matrix(earth_result),
+               width = 10, height = 8)
 
   # g-function plots (per response for multi-target)
   if (nrow(gf) > 0L) {

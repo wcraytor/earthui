@@ -19,9 +19,12 @@ format:
     include-in-header:
       text: |
         \usepackage{unicode-math}
-        \setmathfont{Latin Modern Math}
-        \setmathfont{Roboto Condensed}[range=up/{num,latin,Latin}]
-        \setmathfont{Roboto Condensed}[range=it/{latin,Latin}]
+        % Use a Times-like serif math font (matches the RCA document) so math
+        % italics such as `j` are unambiguous. The previous Roboto Condensed
+        % override rendered italic `j` like an elongated `i` (sans-serif has no
+        % serif/curved descender). Variable names stay in the body font because
+        % they are wrapped in \text{} (which uses mainfont), not math italics.
+        \setmathfont{TeX Gyre Termes Math}
         \usepackage{pdflscape}
         \usepackage{longtable}
         \usepackage{booktabs}
@@ -162,17 +165,55 @@ if (fmt == "latex") {
   cat("\n\\normalsize\n")
   cat("\\end{landscape}\n\\newpage\n")
 } else if (fmt == "docx") {
-  # Start landscape section
+  # Landscape, with the table rendered as raw OOXML so we can set the font
+  # (Arial Narrow 8pt) and tighten the page margins to 0.5". A pandoc pipe table
+  # can't carry a font; a raw <w:tbl> with explicit run properties can. Word
+  # uses half-points (8pt -> w:sz 16) and twips (0.5in -> 720; landscape letter
+  # page = 15840 x 12240).
+  esc_xml_ <- function(x) {
+    x <- gsub("&", "&amp;", x, fixed = TRUE)
+    x <- gsub("<", "&lt;",  x, fixed = TRUE)
+    gsub(">", "&gt;",  x, fixed = TRUE)
+  }
+  rpr_ <- function(bold = FALSE) paste0(
+    '<w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow" ',
+    'w:cs="Arial Narrow"/>', if (bold) '<w:b/>' else '',
+    '<w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>')
+  cell_ <- function(txt, bold = FALSE) paste0(
+    '<w:tc><w:tcPr><w:tcMar>',
+    '<w:top w:w="20" w:type="dxa"/><w:bottom w:w="20" w:type="dxa"/>',
+    '<w:left w:w="40" w:type="dxa"/><w:right w:w="40" w:type="dxa"/></w:tcMar>',
+    '<w:vAlign w:val="center"/></w:tcPr>',
+    '<w:p><w:pPr><w:jc w:val="center"/>', rpr_(bold), '</w:pPr>',
+    '<w:r>', rpr_(bold), '<w:t xml:space="preserve">', esc_xml_(txt),
+    '</w:t></w:r></w:p></w:tc>')
+  brd_ <- paste0('<w:tblBorders>',
+    paste(sprintf('<w:%s w:val="single" w:sz="4" w:space="0" w:color="999999"/>',
+      c("top", "left", "bottom", "right", "insideH", "insideV")), collapse = ""),
+    '</w:tblBorders>')
+  header_row <- paste0('<w:tr>', cell_("", TRUE),
+    paste(vapply(short, cell_, character(1), bold = TRUE), collapse = ""), '</w:tr>')
+  body_rows <- paste(vapply(seq_len(n), function(i) {
+    cells <- paste(vapply(seq_len(n), function(j) {
+      if (i == j) cell_("") else if (mat[i, j]) cell_("✓") else cell_("—")
+    }, character(1)), collapse = "")
+    paste0('<w:tr>', cell_(short[i], TRUE), cells, '</w:tr>')
+  }, character(1)), collapse = "")
+  tbl_ <- paste0('<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>', brd_,
+    '</w:tblPr>', header_row, body_rows, '</w:tbl>')
+
+  # Portrait sectPr terminates the preceding (1-inch) report body.
   cat('\n\n```{=openxml}\n')
   cat('<w:p><w:pPr><w:sectPr><w:pgSz w:w="12240" w:h="15840"/>')
   cat('<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>')
   cat('</w:sectPr></w:pPr></w:p>\n')
   cat('```\n\n')
   cat("## Allowed Interactions\n\n")
-  print(knitr::kable(display, format = "pipe"))
-  cat('\n\n```{=openxml}\n')
+  cat('```{=openxml}\n', tbl_, '\n```\n\n', sep = "")
+  # Landscape sectPr with 0.5-inch (720 twip) margins terminates this section.
+  cat('```{=openxml}\n')
   cat('<w:p><w:pPr><w:sectPr><w:pgSz w:w="15840" w:h="12240" w:orient="landscape"/>')
-  cat('<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>')
+  cat('<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/>')
   cat('</w:sectPr></w:pPr></w:p>\n')
   cat('```\n\n')
 } else {
@@ -232,6 +273,9 @@ if (!is.null(knitr::pandoc_to()) && knitr::pandoc_to() == "docx") {
 } else {
   cat("$$\n", eq$latex_pdf, "\n$$\n")
 }
+cat("\nSee [Notation: Value-Contribution ($g$) Functions](#sec-gnotation) at",
+    "the end of this report for an explanation of the",
+    "${}^{f}g^{j}_{k}$ notation and its indexes.\n\n")
 ```
 
 ## Coefficients & Basis Functions
@@ -316,7 +360,9 @@ for (ri in seq_along(targets)) {
   # --- Equation ---
   cat("\n### Model Equation\n\n")
   render_eq(eq$equations[[ri]])
-  cat("\n")
+  cat("\nSee [Notation: Value-Contribution ($g$) Functions](#sec-gnotation) at",
+      "the end of this report for an explanation of the",
+      "${}^{f}g^{j}_{k}$ notation and its indexes.\n\n")
 
   # --- g-Function contributions ---
   if (nrow(gf) > 0) {
@@ -361,15 +407,28 @@ knitr::kable(anova_df, digits = 4)
 ## Earth Output
 
 ```{r earth-output, comment=""}
-model <- result$model
-cat("== Model ==\n\n")
-print(model)
-cat("\n\n== Summary ==\n\n")
-print(summary(model))
-if (!is.null(model$varmod)) {
-  cat("\n\n== Variance Model ==\n\n")
-  print(model$varmod)
+if (!is.null(.assets) && !is.null(.assets$earth_output)) {
+  # Pre-captured at asset-generation time (matches the app's Earth Output tab);
+  # the lean result saved for the report has no model to print/summarise.
+  cat(.assets$earth_output)
+} else {
+  # Legacy path: full result available, render directly.
+  model <- result$model
+  cat("== Model ==\n\n")
+  print(model)
+  cat("\n\n== Summary ==\n\n")
+  print(summary(model))
+  if (!is.null(model$varmod)) {
+    cat("\n\n== Variance Model ==\n\n")
+    print(model$varmod)
+  }
 }
+```
+
+## Notation: Value-Contribution ($g$) Functions {#sec-gnotation .unnumbered}
+
+```{r g-legend, results='asis'}
+cat(earthUI::g_function_legend("markdown"))
 ```
 
 ---

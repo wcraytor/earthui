@@ -71,7 +71,7 @@ format:
 \hline
 \rowcolor{earthaccent}\textbf{Version} & \textbf{Audience} & \textbf{Last Updated} \\
 \hline
-0.5.0 & All Users & March 2026 \\
+0.10.0 & All Users & July 2026 \\
 \hline
 \end{tabular}
 \end{center}
@@ -144,6 +144,7 @@ format:
     \item Data Type Detection \& Overrides
     \item Factor and Linear Flags
     \item Special Column Types Reference
+    \item Advanced: Prolog Remarks Processing (Optional)
     \item Multiple Targets
   \end{itemize}
 
@@ -230,15 +231,15 @@ The application provides a complete workflow: data import, variable configuratio
 
 ## Three Purpose Modes
 
-When you launch earthUI, a **Purpose** radio button at the top of the sidebar lets you choose one of three modes:
+Every project has a **Purpose**, chosen when the project is created in the Project section of the sidebar. There are three modes:
 
 - **General** --- Earth regression for any type of population or dataset. This is the default mode. It provides the full MARS modeling workflow without any domain-specific additions.
-- **For Appraisal** --- Earth regression tailored for real estate appraisal. Adds features specific to single-property valuation, including subject property handling, special column designations, Reconciliation by Comparable Adjustment (RCA), and Sales Comparison Grid generation.
+- **For Appraisal** --- Earth regression tailored for real estate appraisal. Adds features specific to single-property valuation, including subject property handling, special column designations, Residual Constraint Approach (RCA), and Sales Comparison Grid generation.
 - **Market Area Analysis** --- Earth regression tailored for market area studies. Adds features for analyzing groups of properties in a defined market, with an optional "Skip first row" checkbox for subject property exclusion.
 
 In all three modes, the core modeling engine is identical --- you are always fitting an Earth (MARS) model. The purpose setting controls which additional tools and interface elements are available.
 
-**Switching purposes clears all state.** When you change the purpose radio, earthUI resets to a clean default state: imported data, model results, tabs, variable configuration, and earth parameters are all cleared. You must re-import your file after switching. Previously saved settings for that project and purpose combination are then restored automatically.
+**The active project determines the purpose.** To work in a different mode, open or create a project with that purpose. Switching projects resets earthUI to a clean default state: imported data, model results, tabs, variable configuration, and earth parameters are all cleared. Previously saved settings for the newly opened project (and its purpose) are then restored automatically.
 
 ## Real Estate--Specific Features
 
@@ -247,7 +248,7 @@ When either **For Appraisal** or **Market Area Analysis** is selected, earthUI a
 - **Special column designations** --- Each predictor can be tagged with a special role such as `contract_date`, `dom`, `concessions`, `latitude`, `longitude`, `living_area`, `lot_size`, `actual_age`, `effective_age`, `area`, `site_dimensions`, or `display_only`. These designations control how the column is handled during fitting, output, and Sales Grid generation. See Chapter 6 for the complete reference.
 - **Rounding of latitude and longitude** --- Columns designated as latitude or longitude are automatically rounded to 3 decimal places to prevent overfitting.
 - **Sale Age column** --- When a column is designated as `contract_date` and an Effective Date is provided, earthUI computes a `sale_age` column (days between sale date and effective date) and substitutes it as a predictor.
-- **RCA computations (appraisal only)** --- In appraisal mode, after fitting the model earthUI can compute Reconciliation by Comparable Adjustment (RCA) output, which produces per-comparable adjustments, net/gross adjustment summaries, and an adjusted sale price for the subject property.
+- **RCA computations (appraisal only)** --- In appraisal mode, after fitting the model earthUI can compute Residual Constraint Approach (RCA) output, which produces per-comparable adjustments, net/gross adjustment summaries, and an adjusted sale price for the subject property.
 - **Sales Comparison Grid (appraisal only)** --- Generates a multi-sheet Excel workbook with formulas for comparable adjustments, residual feature breakdowns, and adjusted sale prices. See Chapter 11.
 
 \begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
@@ -260,9 +261,8 @@ To use earthUI:
 
 1. **Install the package** in R: `install.packages("earthUI")` or install from source.
 2. **Launch the application**: run `earthUI::launch()` in R, or from the command line run `Rscript -e 'earthUI::launch()'`. The app opens in your web browser on port 7878. You can also access the app directly by navigating to `http://localhost:7878` in your browser.
-3. **Choose or create a project** in Section 1 (the Project picker), then **import your data** from the project's input folder in Section 2. earthUI accepts CSV and Excel files.
-4. **Select your Purpose** (General, For Appraisal, or Market Area Analysis).
-5. **Configure variables** --- choose your target(s) and predictors, set data types, and assign any special column roles.
+3. **Choose or create a project** in Section 1 (the Project picker) --- the purpose (General, For Appraisal, or Market Area Analysis) is set when the project is created --- then **import your data** from the project's input folder in Section 2. earthUI accepts CSV and Excel files.
+4. **Configure variables** --- choose your target(s) and predictors, set data types, and assign any special column roles.
 6. **Set Earth parameters** --- degree, nprune, subset filters, and other `earth()` arguments.
 7. **Fit the model** --- click "Fit Earth Model" and review the results in the main panel.
 8. **Export** --- download predictions as Excel, generate reports, or (in appraisal mode) compute RCA adjustments and Sales Comparison Grids.
@@ -364,7 +364,7 @@ For example, your MLS might export living area as "GLA", "Living SqFt", "liv\_ar
 - **Factor columns**: Categorical variables like area ID, style, or condition should contain a manageable number of unique values. earthUI auto-detects factors but you can override the detection.
 
 \begin{tcolorbox}[colback=earthgreen!5, colframe=earthgreen!40, title=]
-\small\textit{\textbf{Tip:} Review the NA column in the predictor table after import. Columns with more than 30\% missing values are flagged in red. Consider excluding high-NA columns or cleaning the data before import.}
+\small\textit{\textbf{Tip:} Review the T/F/NA column in the predictor table after import (the third number is the NA count). Columns with more than 30\% missing values are flagged in red. Consider excluding high-NA columns or cleaning the data before import.}
 \end{tcolorbox}
 
 ## Subject Row Placement
@@ -405,15 +405,17 @@ The sidebar is organized into numbered, collapsible sections that guide you from
 
 **4. Earth Call Parameters** --- All arguments to the `earth()` function: degree, penalty, nk, pruning method, cross-validation, and more. See Chapter 7 for the complete parameter reference.
 
-**5. Fit Earth Model** --- A single green button that runs the model asynchronously. See Chapter 8 for fitting details.
+**Execute Prolog Processing** --- An unnumbered section between 4 and 5 for the optional Prolog/list-column processing step (off by default; enabled via the Settings gear). See "Advanced: Prolog Remarks Processing" in Chapter 6.
 
-**6. Download Output** --- Exports predictions, residuals, CQA scores, and per-g-function contributions as an Excel file. See Chapter 9.
+**5. Fit Earth Model** --- A **Random seed** field (pre-filled with a random value, with a recent-seeds recall dropdown) followed by the blue **Fit Earth Model** button, which runs the model asynchronously. See Chapter 8 for fitting details.
 
-In **appraisal mode**, further numbered sections appear: **7. Calculate RCA Adjustments** and **8. Generate Sales Grid**. Report generation is in **9. Generate Quarto Report** and **10. Convert Quarto Report**, saved to the project's output folder. See the later chapters.
+**6. Download Output** --- Exports predictions, residuals, CQA scores, and per-g-function contributions as an Excel file. The section heading reads "6. Download Estimated Target Variable(s) \& Residuals" (general) or "6. Download Estimated Sale Prices \& Residuals" (appraisal/market). See Chapter 9.
+
+In **appraisal mode**, further numbered sections appear: **7. Calculate RCA Adjustments \& Download** and **8. Generate Sales Grid \& Download**. Report generation is in **9. Generate Quarto Report** and **10. Convert Quarto Report**, saved to the project's output folder. See the later chapters.
 
 ## Main Panel Tabs
 
-After fitting, the main panel provides nine tabs:
+After fitting, the main panel provides ten tabs:
 
 \begin{center}
 \arrayrulecolor{earthaccent}
@@ -434,6 +436,8 @@ Contribution & g-function contribution plots. Select a g-function from the dropd
 Correlation & Heatmap of predictor correlations. \\
 \hline
 Diagnostics & Three plots: Residuals vs Fitted, Normal Q-Q, and Actual vs Predicted. \\
+\hline
+RCA Adjustments & RCA adjustment output, populated once step 7 (Calculate RCA Adjustments \& Download, appraisal mode) has been run; until then the tab shows a notice to run step 7 first. \\
 \hline
 ANOVA & ANOVA decomposition table showing each basis function's contribution to RSS. \\
 \hline
@@ -586,7 +590,7 @@ In appraisal and market modes, a **Special** dropdown appears for each predictor
 \end{tabularx}
 \end{center}
 
-Only one column per special type is allowed (except `display_only`). Assigning a special to a second column automatically clears it from the first. A small blue badge appears next to the variable name showing its assigned special type.
+Only one column per special type is allowed (except `display_only`, `remarks`, and `list`, which allow multiple columns --- the latter two are advanced roles for the optional Prolog step, see Chapter 6). Assigning a single-column special to a second column automatically clears it from the first. A small blue badge appears next to the variable name showing its assigned special type.
 
 ## RCA Adjustments Overview
 
@@ -616,7 +620,7 @@ When you select **Market Area Analysis** as the Purpose, earthUI provides the sa
 
 - **Skip first row is optional** --- a checkbox labeled "Skip first row (subject property)" appears below the Purpose selector. When checked, row 1 is excluded from fitting (like appraisal mode). When unchecked, all rows are included.
 - **No RCA or Sales Grid sections** --- the "Calculate RCA Adjustments \& Download" and "Generate Sales Grid \& Download" steps are not available. Market mode focuses on model fitting and output, not per-comparable adjustments.
-- **Sidebar numbering** --- without the RCA and Sales Grid steps, the Download Report section is numbered 7 instead of 9.
+- **Sidebar numbering** --- without the RCA and Sales Grid steps, the Generate Quarto Report section is numbered 7 instead of 9.
 
 ## When to Use Market Mode
 
@@ -659,11 +663,14 @@ Below the target selector, a table lists every remaining column with the followi
 |:-------|:------------|
 | **Variable** | Column name (full name shown in tooltip if truncated). In appraisal/market modes, a blue badge shows the assigned special type. |
 | **Type** | Data type dropdown: `numeric`, `integer`, `character`, `logical`, `factor`, `Date`, `POSIXct` |
-| **Inc?** | Checkbox --- include this column as a predictor in the model |
-| **Special** | Dropdown (appraisal/market only) --- see Special Column Types Reference below |
+| **Include** | Checkbox --- include this column as a predictor in the model |
 | **Factor** | Checkbox --- treat this column as a categorical variable |
 | **Linear** | Checkbox --- force linear entry only (no hinge functions) |
-| **NAs** | Count of missing values. Shown in red when more than 30\% of values are missing |
+| **Latent** | Checkbox --- hold the column out of the model, reserving it for latent-variable work. Latent-flagged columns are excluded from earth and from the data exported to glmnetUI / mgcvUI |
+| **Special** | Dropdown (appraisal/market only) --- see Special Column Types Reference below |
+| **T/F/NA** | Three counts per column: logicals show TRUE/FALSE/NA, numerics show $\neq$0/$=$0/NA, other types show 0/0/NA. Shown in red when more than 30\% of values are missing |
+
+Each row also has a **$\times$ / $+$ toggle** beside the column name: the red **$\times$** *soft-disables* a column --- it greys out and is held out of the model, but is not deleted --- and flips to a green **$+$** to re-enable it. Columns are never destroyed.
 
 A hint line above the table explains the abbreviations: "Type = column data type, Inc = include as predictor, Factor = treat as categorical, Linear = linear-only (no hinges)."
 
@@ -680,7 +687,7 @@ You can override any detection by changing the **Type** dropdown. When you chang
 
 ## Special Column Types Reference
 
-In appraisal and market modes, the **Special** dropdown provides the following options. Each type can be assigned to at most one column (except `display_only`, which allows multiple):
+In appraisal and market modes, the **Special** dropdown provides the following options. Each type can be assigned to at most one column (except `display_only`, `remarks`, and `list`, which allow multiple):
 
 **Date \& Time Types:**
 
@@ -709,6 +716,26 @@ In appraisal and market modes, the **Special** dropdown provides the following o
 **Display Types:**
 
 - `display_only` --- The column is included in Excel exports but excluded from model fitting entirely. Use this for address fields, MLS numbers, parcel IDs, or other reference data that should not be a predictor. Multiple columns can have this designation.
+
+**Text Extraction Types (advanced, optional):**
+
+- `remarks` --- A free-text column (e.g. `public_remarks`) to be parsed by the optional Prolog step into `pr_*` / `ar_*` feature columns.
+- `list` --- A comma-delimited column (e.g. `existing_structures`) to be split into one-hot `<col>_<value>` TRUE/FALSE columns.
+
+The `remarks` and `list` roles do nothing until the optional Prolog / list column processing step is enabled in Settings (see "Advanced: Prolog Remarks Processing" below); multiple columns may carry each of them.
+
+## Advanced: Prolog Remarks Processing (Optional)
+
+This feature is **off by default** and entirely optional --- earthUI's normal workflow does not depend on it, and it assumes working knowledge of Prolog. Enable it via **Settings (gear icon) $\rightarrow$ Enable Prolog / list column processing**; the choice is remembered per project.
+
+When enabled, an unnumbered **Execute Prolog Processing** section appears in the sidebar between sections 4 and 5, with a two-pass workflow:
+
+1. **Expand lists \& remarks** --- parses `remarks` columns with a Prolog DCG grammar into feature columns such as `pr_condition_score`, `pr_has_workshop`, or `pr_garage_area`, and splits `list` columns into one-hot columns. The pass is incremental: only columns designated since the last expansion are processed. Remarks parsing requires the optional **vProlog** package (a self-contained Trealla Prolog engine, not on CRAN); without it, remarks parsing is skipped and `list` splitting (pure R) still runs.
+2. **Execute derivation rules** --- applies your own Prolog `derive(Col, Val)` rules over the expanded columns (helpers `count_true` / `count_false` / `cell_or` are provided; `drop(Col)` removes a column). Rules live in a per-project `<project>_rules.pl` file, edited in a floating, dockable code editor, and are syntax-checked and dry-run validated before running.
+
+After either pass, the augmented data frame is written to the project's input folder as `<original_name>_<YYMMDD_HHMMSS>.xlsx` and becomes the project's **active** data file --- reopening the project loads the augmented data without recomputing, and the same file is consumed by glmnetUI and mgcvUI. Generated columns you do not want in the regression can be flagged **Latent** or soft-disabled with the **$\times$** toggle.
+
+**Market area profiles (climate-region priors).** Three companion R helpers --- `climate_region_for()`, `market_area_profile()`, and `climate_feature_priors()` --- classify a project's California location (county + city) into one of seven buyer-recognized climate regions and return ordinal contributory-value priors for HVAC/cooling features (heating, A/C, swamp cooler, whole-house fan, filtration) by region. A companion Prolog module (`inst/prolog/climate_regions_ca.pl`) mirrors the same classification for use inside derivation rules. These priors are experimental and intended to inform valuation of thin-data features and sanity-check estimated coefficients; region assignments should be reviewed by the appraiser.
 
 ## Multiple Targets
 
@@ -861,36 +888,35 @@ Recommended: **0.1** when predictors are correlated (e.g., living area with bedr
 
 ### Cross-Validation Parameters
 
-**nfold** (CV folds):
+**nfold** (CV folds) --- recommended from a banded sample-size table:
 
-$$\text{nfold} = \min\!\bigl(15,\; \max(10,\; \lfloor n/100 \rfloor)\bigr)$$
-
-| $n$ | nfold |
+| $n$ (fitting rows) | nfold |
 |----:|------:|
-| 30 | 10 |
-| 100 | 10 |
-| 500 | 10 |
-| 1000 | 10 |
-| 1500 | 15 |
+| 0--299 | 5 |
+| 300--399 | 6 |
+| 400--499 | 7 |
+| 500--599 | 8 |
+| 600--699 | 9 |
+| 700+ | 10 |
 
-With `pmethod = "backward"`, cross-validation does not affect the model --- it only computes the diagnostic CVR\textsuperscript{2} and provides residuals for the variance model. The floor of 10 and cap of 15 reflect this: enough folds for a stable diagnostic without unnecessary computation.
+More folds train each fold on more data (a less biased estimate) but shrink the held-out test fold. The table graduates up to the standard 10-fold as the sample grows while keeping each test fold large enough ($\approx$50+ rows) for a stable per-fold metric, and falls back to 5-fold for small samples. It caps at 10 --- beyond that adds compute (each fold is a full earth fit) for negligible gain. For small samples the recommendation also suggests raising ncross (e.g. 15--20) to stabilise the CVR\textsuperscript{2} estimate. With `pmethod = "backward"`, cross-validation does not affect the model --- it only computes the diagnostic CVR\textsuperscript{2} and provides residuals for the variance model.
 
-**ncross** (CV repetitions):
+**ncross** (CV repetitions) --- also recommended from a banded table:
 
-$$\text{ncross} = \max\!\bigl(3,\; \lceil 100/n \rceil\bigr)$$
+| $n$ (fitting rows) | ncross |
+|----:|-------:|
+| 0--199 | 20 |
+| 200--399 | 16 |
+| 400--699 | 12 |
+| 700--1199 | 10 |
+| 1200--2999 | 7 |
+| 3000+ | 5 |
 
-| $n$ | ncross | total residuals |
-|----:|-------:|----------------:|
-| 30 | 4 | 120 |
-| 50 | 3 | 150 |
-| 100 | 3 | 300 |
-| 1500 | 3 | 4500 |
-
-The variance model (`varmod.method = "lm"`) fits on the cross-validation residuals. The formula targets at least 100 total residuals ($n \times \text{ncross}$) for a stable variance estimate, with a floor of 3 (required by earth when a variance model is enabled).
+Repeats average out fold-partition luck to stabilise CVR\textsuperscript{2}; larger samples need fewer repeats because a single CV pass is already more stable.
 
 ### Variance Model
 
-**varmod.method**: Recommended: **lm**. This fits prediction intervals using a linear regression of absolute CV residuals on the predicted response. It requires `nfold > 0` and `ncross >= 3`.
+**varmod.method**: Recommended: **lm** --- Milborrow's default: a robust linear variance model (spread is estimated from noisy residuals, so a simple model generalises better). If lm fails to converge on your data, try rlm or const (homoscedastic, always converges), or fall back to earth (also handles a nonlinear spread). A variance model requires `nfold > 1` and `ncross > 1`.
 
 ### Earth Output File
 
@@ -916,19 +942,20 @@ A radio button at the top of Section 4 controls how the parameters initialize: r
 
 ## The Fit Button
 
-Section 5 of the sidebar contains a single green button: **Fit Earth Model**. This button is always visible (not inside a collapsible section). Before fitting, earthUI validates your configuration --- a target must be selected and at least one predictor must be included. In appraisal/market modes, latitude and longitude columns are rounded, and sale age is computed from the effective date and contract date (if designated).
+Section 5 of the sidebar contains a **Random seed** field followed by the blue **Fit Earth Model** button. The seed controls the cross-validation fold assignments, making fits reproducible: it is pre-filled with a random value on launch, a dropdown below the field recalls recently used seeds, and the seed used is recorded in the Earth Output after fitting. Before fitting, earthUI validates your configuration --- a target must be selected and at least one predictor must be included. In appraisal/market modes, latitude and longitude columns are rounded, and sale age is computed from the effective date and contract date (if designated).
 
 ## Fitting Modal \& Trace Output
 
 When you click Fit, a dark modal overlay appears with:
 
 - **Header** --- "Fitting Earth Model" with an elapsed timer counting seconds
+- **Abort button** --- cancels the fit; the background process is stopped and "Aborted by user." is logged
 - **Trace log** --- a scrollable, monospace text area showing real-time output from the `earth()` function: dataset info, forward pass progress, cross-validation folds, and completion time
 - **Color coding** --- default lines in green, cross-validation lines in yellow, errors in red
 
 earthUI fits models asynchronously using `callr::r_bg()`, which runs the computation in a separate R process. This keeps the application responsive during long-running fits. A 300ms polling observer reads output from the background process and streams it to the trace log.
 
-When fitting completes, a "Done in X.Xs" message appears and a close button (X) is added to the modal. **The modal does not auto-dismiss** --- you close it when you are ready to review results.
+When fitting completes, a "Done in X.Xs" message appears and a close button (X) is added to the modal, so you can dismiss it immediately --- result tabs render on demand as you click them. The modal then **auto-dismisses** on its own once all outputs have finished rendering.
 
 On success, a green checkmark is appended to the Fit button. If an error occurs, the error message is displayed in the trace log and a notification appears.
 
@@ -956,7 +983,7 @@ Every fit (success or failure) writes a log file to your output folder:
 
 \bigskip
 
-After fitting, download an Excel file with predictions and diagnostics. This output is used in Step 7 (RCA) to assign a CQA (Condition/Quality/Appeal) rating to the subject property. The output is sorted by `residual_sf` and `cqa_sf` to help you assess where the subject falls in the ranking. If the model is good quality, then the properties should be ranked from lowest appealing to most appealing based on residual features that did not go into the regression. The middle value should be approximately 0, the lower half negative values and the upper half positive values. You should find the worst quality homes, or "fixers" near the bottom of the ranking and the nicest homes at the top. There will usually be exceptions for anomalies such as foreclosures, short sales, probate (inheritance related) sales, and quick sales needed for job change or other reasons. Investigation of anomalies usually turns up a pertinent reason for the price anomaly.
+After fitting, download an Excel file with predictions and diagnostics. This output is used in Step 7 (RCA) to assign a CQA (Condition-Quality-Appeal) rating to the subject property. The output is sorted by `residual_sf` and `cqa_sf` to help you assess where the subject falls in the ranking. If the model is good quality, then the properties should be ranked from lowest appealing to most appealing based on residual features that did not go into the regression. The middle value should be approximately 0, the lower half negative values and the upper half positive values. You should find the worst quality homes, or "fixers" near the bottom of the ranking and the nicest homes at the top. There will usually be exceptions for anomalies such as foreclosures, short sales, probate (inheritance related) sales, and quick sales needed for job change or other reasons. Investigation of anomalies usually turns up a pertinent reason for the price anomaly.
 
 The button label adapts to the purpose mode:
 
@@ -973,7 +1000,7 @@ For each target variable, the following columns are appended:
 |:-------|:------------|
 | `est_<target>` | Model prediction, e.g.\ `est_sale_price` (1 decimal place) |
 | `residual` | Actual minus predicted (1 dp) |
-| `cqa` | Comparative Quality Analysis score (2 dp, range 0--10) |
+| `cqa` | Condition-Quality-Appeal score (2 dp, range 0--10) |
 | `residual_sf` | Residual divided by living area (if designated, 1 dp) |
 | `cqa_sf` | CQA calculated from ranking via residual\_sf (2 dp) |
 | `<variable>_contribution` | Per-g-function contribution value (1 dp, one column per g-function) |
@@ -997,7 +1024,7 @@ These columns have Excel number formatting applied:
 
 ## CQA Scores
 
-The CQA (Comparative Quality Analysis) score ranks each row's residual against all other residuals. For a given row, the CQA is the percentage of rows with a smaller signed residual, multiplied by 10. This produces a 0--10 scale where:
+The CQA (Condition-Quality-Appeal) score ranks each row's residual against all other residuals. For a given row, the CQA is the percentage of rows with a smaller signed residual, multiplied by 10. This produces a 0--10 scale where:
 
 - **High CQA** ($\approx$ 9--10) --- the property sold for much more than the model predicted (large positive residual)
 - **Low CQA** ($\approx$ 0--1) --- the property sold for much less than predicted (large negative residual)
@@ -1064,14 +1091,14 @@ If earthUI uses a weight column (e.g., to exclude the subject row with weight=0)
 
 \bigskip
 
-The **Calculate RCA Adjustments \& Download** button appears in sidebar section 7, visible only in appraisal mode after a model has been fitted. RCA (Reconciliation by Comparable Adjustment) produces market-derived, per-comparable adjustments relative to the subject property.
+The **Calculate RCA Adjustments \& Download** button appears in sidebar section 7, visible only in appraisal mode after a model has been fitted. RCA (Residual Constraint Approach) produces market-derived, per-comparable adjustments relative to the subject property.
 
 ## Opening the RCA Dialog
 
 Clicking the button opens a small modal dialog with:
 
 - **Score type** --- radio buttons to choose **CQA** or **CQA per SF** (the SF option is available only when a `living_area` column is designated). If you choose "CQA per SF," then based on the CQA score you assign the subject, its residual score will be its living area times the residual\_sf that matches the given CQA\_SF score.
-- **CQA value** --- numeric input for the subject's CQA score (0.00--9.99, default 5.00). This score represents where you believe the subject falls in the quality distribution of the comparables.
+- **CQA value** --- input for the subject's CQA score (0.00--10.00). The field starts blank, and the Generate button stays disabled until a valid score is entered. This score represents where you believe the subject falls in the quality distribution of the comparables.
 - **Generate** button --- computes the RCA output and downloads it as Excel
 
 ## CQA Score Interpolation
@@ -1125,7 +1152,7 @@ The grid is designed for the appraiser's workfile --- it combines the regression
 
 Clicking "Generate Sales Grid \& Download" opens a modal dialog where you select which comparables to include:
 
-- **Recommended comps** are pre-checked. These are comparables with a gross adjustment percentage below 25\% of sale price, sorted by gross adjustment percentage ascending (smallest adjustments first).
+- **Recommended comps** are pre-checked. These are comparables with a gross adjustment percentage below 25\% of sale price, sorted by sale age ascending (most recent sales first).
 - **Additional comps** are listed below, unchecked by default. These have larger gross adjustments but are still available for selection.
 - A maximum of **30 comps** can be selected, producing up to **10 sheets** (3 comps per sheet).
 
@@ -1251,17 +1278,20 @@ The only **unlocked** (editable) cells are the residual feature Value Contributi
 
 \bigskip
 
-After fitting a model, the Download Report section (sidebar section 7, 8, or 9 depending on the purpose mode) lets you generate a comprehensive formatted report.
+After fitting a model, report generation is a **two-step flow** in the sidebar:
+
+1. **Generate Quarto Report** (section 9 in appraisal mode, 7 otherwise) writes a self-contained Quarto bundle --- the `.qmd` source plus plots, data, and a reference `.docx` --- to the project's output folder. No rendering happens at this step, so the bundle can be edited or combined with other Quarto sources first.
+2. **Convert Quarto Report** (section 10) renders any `.qmd` file to the selected output format(s). The source field is auto-filled with the most recently generated bundle, but you can browse to any `.qmd` --- useful for converting hand-authored or combined reports.
 
 ## Report Formats
 
-Three formats are available via the format dropdown:
+Three formats are available (one or more can be selected in the Convert section):
 
 - **HTML** --- an `.html` file with KaTeX math rendering, embedded images, and a table of contents. Uses the Flatly Bootstrap theme and Roboto Condensed font.
 - **Word** --- a `.docx` file suitable for editing and distribution. Includes a table of contents, page numbers, and uses a custom reference template for consistent styling.
 - **PDF** --- typeset with LuaLaTeX for professional-quality output. Paper size follows the locale setting (Letter or A4). Includes landscape pages for large interaction matrices and uses Roboto Condensed with Latin Modern Math for equations.
 
-Reports are rendered via Quarto and saved directly to the project's output folder as `<datafile>_report_<YYYYMMDD_HHMMSS>.<format>`. Rendering runs in the background --- a modal dialog shows elapsed time and Quarto progress while the app remains responsive. A notification confirms the file location on completion.
+Rendered files are saved next to the `.qmd` in the project's output folder, and a notification confirms the file locations on completion.
 
 All operations (model fitting, data downloads, RCA calculations, sales grid generation, and report rendering) are logged with start/end timestamps and elapsed times to `<datafile>_earthui_log.txt` in the output folder, for troubleshooting and performance monitoring.
 
@@ -1311,7 +1341,7 @@ Or import it directly through the Shiny app file upload.
 
 ## Description
 
-The file contains 1,502 residential sales (plus 1 subject property in row 1) from a simulated MLS export. The data represents single-family home sales in a multi-area market with a range of property sizes, ages, and locations.
+The file contains 1,502 data rows --- 1,501 residential sales plus the subject property in row 1 --- from a simulated MLS export. The data represents single-family home sales in a multi-area market with a range of property sizes, ages, and locations.
 
 This is not real data, but is based on a realistic neighborhood in Northern California. All identification information has been altered or removed.
 
@@ -1406,8 +1436,8 @@ sale\_concessions & numeric & concessions & Seller concessions \\
 
 \begin{enumerate}
 \item Launch earthUI: \texttt{earthUI::launch()}
-\item Import \texttt{Appraisal\_1.csv} via the file upload
-\item Set Purpose to \textbf{For Appraisal}
+\item Create (or open) a project with purpose \textbf{For Appraisal}
+\item Copy \texttt{Appraisal\_1.csv} into the project's input folder and pick it in Section 2
 \item Select \texttt{sale\_price} as the target
 \item Assign special types as shown in the table above
 \item Include predictors: \texttt{sale\_age}, \texttt{living\_sqft}, \texttt{baths\_total}, \texttt{lot\_size}, \texttt{area\_id} (as factor), \texttt{age}, \texttt{latitude}, \texttt{longitude}, \texttt{garage\_spaces}

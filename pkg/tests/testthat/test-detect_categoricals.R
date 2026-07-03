@@ -16,30 +16,29 @@ test_that("detect_categoricals flags logical columns as categorical", {
   expect_true(result[["a"]])
 })
 
-test_that("detect_categoricals flags low-unique numeric as categorical", {
+test_that("detect_categoricals does NOT flag numeric columns", {
+  # A low-cardinality numeric (e.g. bath_count) is a continuous predictor, not
+  # a factor — the appraiser designates numeric factors explicitly.
   df <- data.frame(
     rating = c(1, 2, 3, 1, 2, 3),
     price = c(100, 200, 300, 400, 500, 600)
   )
-  result <- detect_categoricals(df, max_unique = 5)
-  expect_true(result[["rating"]])
+  result <- detect_categoricals(df)
+  expect_false(result[["rating"]])
   expect_false(result[["price"]])
 })
 
-test_that("detect_categoricals uses default max_unique = 10", {
-  df <- data.frame(x = 1:11)
-  result <- detect_categoricals(df)
-  expect_false(result[["x"]])
-
-  df2 <- data.frame(x = 1:10)
-  result2 <- detect_categoricals(df2)
-  expect_true(result2[["x"]])
+test_that("detect_categoricals ignores numeric cardinality", {
+  expect_false(detect_categoricals(data.frame(x = 1:10))[["x"]])
+  expect_false(detect_categoricals(data.frame(x = 1:11))[["x"]])
 })
 
 test_that("detect_categoricals handles NA values", {
-  df <- data.frame(x = c(1, 2, NA, 1, NA))
-  result <- detect_categoricals(df)
-  expect_true(result[["x"]])  # 2 unique non-NA values
+  # numeric with NAs -> not a factor
+  expect_false(detect_categoricals(data.frame(x = c(1, 2, NA, 1, NA)))[["x"]])
+  # character with NAs -> factor
+  expect_true(detect_categoricals(
+    data.frame(x = c("a", NA, "b"), stringsAsFactors = FALSE))[["x"]])
 })
 
 test_that("detect_categoricals returns named logical vector", {

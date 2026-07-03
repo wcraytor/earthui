@@ -1,41 +1,34 @@
-#' Detect likely categorical variables in a data frame
+#' Detect categorical variables in a data frame
 #'
-#' Returns a logical named vector indicating which columns are likely
-#' categorical. Character and factor columns are always flagged. Numeric
-#' columns with fewer than `max_unique` unique values are also flagged.
+#' Flags columns that are categorical **by type** — character, factor, or
+#' logical. These can only be treated as factors in a regression, so they are
+#' the columns to pre-check in the Factor box. Numeric and integer columns are
+#' **not** flagged: a numeric variable is a factor only when the user explicitly
+#' designates it (the Factor checkbox), because by value alone a discrete
+#' continuous predictor (e.g. `bath_count` = 0..5) is indistinguishable from a
+#' numeric category code.
 #'
 #' @param df A data frame.
-#' @param max_unique Integer. Numeric columns with this many or fewer unique
-#'   values are flagged as likely categorical. Default is 10.
 #'
 #' @return A named logical vector with one element per column. `TRUE` indicates
-#'   the column is likely categorical.
+#'   a character, factor, or logical column.
 #'
 #' @export
 #' @examples
 #' df <- data.frame(
-#'   price = c(100, 200, 300, 400),
 #'   pool = c("Y", "N", "Y", "N"),
 #'   bedrooms = c(2, 3, 2, 4),
-#'   sqft = c(1200, 1500, 1300, 1800)
+#'   sqft = c(1200, 1500, 1300, 1800),
+#'   stringsAsFactors = FALSE
 #' )
-#' detect_categoricals(df)
-detect_categoricals <- function(df, max_unique = 10L) {
+#' detect_categoricals(df) # only `pool` is TRUE
+detect_categoricals <- function(df) {
   if (!is.data.frame(df)) {
     stop("`df` must be a data frame.", call. = FALSE)
   }
-  max_unique <- as.integer(max_unique)
 
   result <- vapply(df, function(col) {
-    if (is.character(col) || is.factor(col) || is.logical(col)) {
-      return(TRUE)
-    }
-    if (is.numeric(col)) {
-      n_unique <- length(unique(col[!is.na(col)]))
-      return(n_unique <= max_unique)
-    }
-    # Default: flag as categorical for unknown types
-    TRUE
+    is.character(col) || is.factor(col) || is.logical(col)
   }, logical(1L))
 
   names(result) <- names(df)

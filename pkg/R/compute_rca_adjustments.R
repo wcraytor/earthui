@@ -1,4 +1,4 @@
-#' Compute RCA (Residual Comparable Adjustment) output for an appraisal
+#' Compute RCA (Residual Constraint Approach) output for an appraisal
 #'
 #' Starting from the raw data (subject in row 1, comps in rows 2+) and a
 #' fitted earth model, produces the adjusted comparables data frame used by

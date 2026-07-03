@@ -2,7 +2,7 @@
 % Please edit documentation in R/compute_rca_adjustments.R
 \name{compute_rca_adjustments}
 \alias{compute_rca_adjustments}
-\title{Compute RCA (Residual Comparable Adjustment) output for an appraisal}
+\title{Compute RCA (Residual Constraint Approach) output for an appraisal}
 \usage{
 compute_rca_adjustments(
   data,
@@ -19,7 +19,7 @@ schema. Row 1 is the subject.}
 
 \item{result}{A fit result list as returned by \code{\link[=fit_earth]{fit_earth()}}.}
 
-\item{user_cqa}{Numeric scalar in \verb{[0, 9.99]} — the subject CQA score.}
+\item{user_cqa}{Numeric scalar in \verb{[0, 10]} — the subject CQA score.}
 
 \item{cqa_type}{Character: \code{"cqa"} (default) uses total-residual CQA;
 \code{"cqa_sf"} uses per-SF CQA (requires \code{living_area_col}).}
