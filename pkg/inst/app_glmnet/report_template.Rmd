@@ -1,0 +1,211 @@
+---
+title: "glmnetUI Model Report"
+output:
+  html_document:
+    toc: true
+    self_contained: true
+  pdf_document:
+    toc: true
+    includes:
+      in_header: null
+  word_document:
+    toc: true
+header-includes:
+  - \usepackage{lscape}
+params:
+  appraiser_name: ""
+  property_address: ""
+  report_date: ""
+  file_number: ""
+  lambda: 0
+  lambda_min: NA
+  lambda_1se: NA
+  coef_df: NULL
+  plot_dir: ""
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 8, fig.height = 5)
+
+# Try to load pre-computed assets from plot_dir
+.assets <- NULL
+.plots_dir <- params$plot_dir
+data_file <- file.path(.plots_dir, "report_data.rds")
+if (file.exists(data_file)) {
+  .assets <- readRDS(data_file)
+  .plots_dir <- file.path(dirname(data_file), "plots")
+}
+
+include_plot <- function(name, width = 8, height = 5) {
+  for (ext in c("png", "pdf")) {
+    f <- file.path(.plots_dir, paste0(name, ".", ext))
+    if (file.exists(f)) {
+      cat(sprintf("![](%s)\n\n", f))
+      return(invisible(NULL))
+    }
+  }
+}
+
+# Heading helper: LaTeX for PDF, markdown for HTML/Word
+.is_pdf <- identical(knitr::opts_knit$get("rmarkdown.pandoc.to"), "latex")
+heading <- function(text, level = 2) {
+  if (.is_pdf) {
+    cmd <- switch(as.character(level),
+      "1" = "section", "2" = "section", "3" = "subsection", "subsection")
+    cat(sprintf("\n\\%s{%s}\n\n", cmd, text))
+  } else {
+    cat(sprintf("\n%s %s\n\n", strrep("#", level), text))
+  }
+}
+```
+
+```{r dataset-desc, results='asis', eval=!is.null(.assets)}
+heading("Dataset Description")
+cat("| Property | Value |\n|----------|-------|\n")
+cat(sprintf("| Data file | %s |\n", .assets$data_file_name))
+cat(sprintf("| Observations | %d |\n", .assets$n_obs))
+cat(sprintf("| Response variable | %s |\n", .assets$response))
+cat(sprintf("| Predictors | %s |\n", paste(.assets$predictors, collapse = ", ")))
+cat(sprintf("| Purpose | %s |\n", .assets$purpose))
+```
+
+```{r model-spec, results='asis', eval=!is.null(.assets)}
+heading("Model Specification")
+cat("| Parameter | Value |\n|-----------|-------|\n")
+cat(sprintf("| Alpha | %s |\n", .assets$alpha))
+cat(sprintf("| Lambda | %s |\n", signif(.assets$lambda, 5)))
+cat(sprintf("| Lambda selection | %s |\n", .assets$lambda_method))
+cat(sprintf("| Family | %s |\n", .assets$family))
+cat(sprintf("| Standardize | %s |\n", .assets$standardize))
+cat(sprintf("| Relaxed | %s |\n", .assets$relaxed))
+cat(sprintf("| Non-zero coefficients | %d |\n", .assets$n_nonzero))
+cat(sprintf("| Total predictors | %d |\n", .assets$n_predictors))
+```
+
+```{r results-summary, results='asis', eval=!is.null(.assets)}
+heading("Results Summary")
+cat("| Metric | Value |\n|--------|-------|\n")
+cat(sprintf("| R² | %.4f |\n", .assets$r_squared))
+cat(sprintf("| Adjusted R² | %.4f |\n", .assets$adj_r_squared))
+cat(sprintf("| Generalized R² | %.4f |\n", .assets$gen_r_squared))
+cvr2 <- if (!is.na(.assets$cv_r_squared)) sprintf("%.4f", .assets$cv_r_squared) else "N/A"
+cat(sprintf("| CV R² | %s |\n", cvr2))
+cat(sprintf("| RMSE | %.2f |\n", .assets$rmse))
+cat(sprintf("| MAE | %.2f |\n", .assets$mae))
+```
+
+```{r equation, results='asis', eval=!is.null(.assets)}
+heading("Model Equation")
+cat("$$\n", .assets$equation_latex, "\n$$\n")
+.eq_notation <- .assets$equation_notation
+if (is.null(.eq_notation)) .eq_notation <- "linear"
+if (identical(.eq_notation, "g")) {
+  cat("\nSee the *Notation: Value Contributions* section at the end of this",
+      "report for an explanation of the ${}^{f}g^{j}_{k}$ notation and its",
+      "indexes.\n\n")
+} else {
+  cat("\nSee the *Notation: Value Contributions* section at the end of this",
+      "report for an explanation of the value-contribution terms.\n\n")
+}
+```
+
+## Coefficients
+
+```{r coef-table}
+coef_df <- if (!is.null(.assets)) .assets$coef_df else params$coef_df
+if (!is.null(coef_df)) {
+  knitr::kable(coef_df, digits = 4)
+}
+```
+
+```{r importance, results='asis', eval=!is.null(.assets) && nrow(.assets$importance_df) > 0}
+if (.is_pdf) cat("\n\\begin{landscape}\n\n")
+heading("Variable Importance")
+```
+
+```{r importance-plot, results='asis', eval=!is.null(.assets)}
+include_plot("importance")
+```
+
+```{r importance-table, eval=!is.null(.assets) && nrow(.assets$importance_df) > 0}
+knitr::kable(.assets$importance_df, digits = 4)
+```
+
+```{r importance-end, results='asis', eval=!is.null(.assets) && nrow(.assets$importance_df) > 0}
+cat("\\end{landscape}\n\n")
+```
+
+```{r contributions, results='asis', eval=!is.null(.assets)}
+heading("Contributions")
+contrib_names <- .assets$contrib_names
+for (vname in contrib_names) {
+  safe_name <- gsub("[^a-zA-Z0-9_]", "_", vname)
+  heading(vname, level = 3)
+  is_int <- grepl(":", vname, fixed = TRUE)
+  if (is_int) {
+    include_plot(paste0("contrib_", safe_name, "_scatter"))
+    include_plot(paste0("contrib_", safe_name, "_heatmap"))
+    include_plot(paste0("contrib_", safe_name, "_3d"))
+  } else {
+    include_plot(paste0("contrib_", safe_name))
+  }
+  cat("\n\n")
+}
+```
+
+```{r correlation-heading, results='asis', eval=!is.null(.assets)}
+heading("Correlation Matrix")
+```
+
+```{r correlation-plot, results='asis', eval=!is.null(.assets)}
+include_plot("correlation")
+```
+
+```{r anova, results='asis', eval=!is.null(.assets) && nrow(.assets$anova_df) > 0}
+heading("ANOVA Decomposition")
+knitr::kable(.assets$anova_df, digits = 2)
+```
+
+## Diagnostics
+
+```{r coef-path-plot, results='asis'}
+heading("Coefficient Path", level = 3)
+include_plot("coef_path")
+```
+
+```{r cv-error-plot, results='asis'}
+heading("Cross-Validation Error", level = 3)
+include_plot("cv_error")
+```
+
+```{r avp-plot, results='asis'}
+heading("Actual vs Predicted", level = 3)
+include_plot("actual_vs_predicted")
+```
+
+```{r resid-plot, results='asis'}
+heading("Residuals vs Fitted", level = 3)
+include_plot("residuals_vs_fitted")
+```
+
+```{r qq-plot, results='asis'}
+heading("Normal Q-Q Plot", level = 3)
+include_plot("qq")
+```
+
+```{r model-output, comment="", eval=!is.null(.assets)}
+cat("== glmnet Model ==\n\n")
+print(.assets$model)
+```
+
+```{r g-legend, results='asis', eval=!is.null(.assets)}
+heading("Notation: Value Contributions")
+.notation <- .assets$equation_notation
+if (is.null(.notation)) .notation <- "linear"
+cat(earthUI::g_function_legend_glmnet("markdown", .notation))
+```
+
+---
+
+*Report generated by [glmnetUI](https://github.com/wcraytor/glmnetUI) on `r Sys.time()`*
