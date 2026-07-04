@@ -21,8 +21,10 @@ number of whole days between \code{effective_date} and each contract date.
 \description{
 Given a vector of contract (sale) dates and a single effective date, returns
 the difference in integer days (\code{effective_date - contract_date}). Contract
-dates may be supplied as \code{POSIXct}, \code{Date}, character strings parseable by
-\code{\link[=as.POSIXct]{as.POSIXct()}}, or numeric Excel serial date numbers (origin 1899-12-30).
+dates may be supplied as \code{POSIXct}, \code{Date}, character strings (ISO or any
+format recognized by the locale-aware multi-format parser; two-digit years
+are read as the nearest matching year), or numeric Excel serial date
+numbers (origin 1899-12-30).
 }
 \details{
 This function is the non-Shiny computation kernel used by the

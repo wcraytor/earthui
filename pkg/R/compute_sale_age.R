@@ -2,8 +2,10 @@
 #'
 #' Given a vector of contract (sale) dates and a single effective date, returns
 #' the difference in integer days (`effective_date - contract_date`). Contract
-#' dates may be supplied as `POSIXct`, `Date`, character strings parseable by
-#' [as.POSIXct()], or numeric Excel serial date numbers (origin 1899-12-30).
+#' dates may be supplied as `POSIXct`, `Date`, character strings (ISO or any
+#' format recognized by the locale-aware multi-format parser; two-digit years
+#' are read as the nearest matching year), or numeric Excel serial date
+#' numbers (origin 1899-12-30).
 #'
 #' @param contract_vals A vector of contract/sale dates. Accepted types:
 #'   `POSIXct`, `Date`, `character`, or `numeric` (Excel serial dates).
@@ -39,9 +41,20 @@ compute_sale_age <- function(contract_vals, effective_date) {
   } else if (inherits(contract_vals, "Date")) {
     contract_posix <- as.POSIXct(contract_vals)
   } else if (is.character(contract_vals)) {
-    contract_posix <- suppressWarnings(as.POSIXct(contract_vals))
-    if (all(is.na(contract_posix[!is.na(contract_vals)]))) {
-      stop("Cannot parse contract date values as dates.", call. = FALSE)
+    # as.POSIXct() alone only understands ISO strings and ERRORS (not warns)
+    # on formats like "12/18/2025" or "12/18/25". Try it first for ISO
+    # datetimes, then fall back to the locale-aware multi-format parser
+    # (which also recenters two-digit years onto the floating window).
+    contract_posix <- tryCatch(suppressWarnings(as.POSIXct(contract_vals)),
+                               error = function(e) NULL)
+    if (is.null(contract_posix) ||
+        all(is.na(contract_posix[!is.na(contract_vals)]))) {
+      parsed <- parse_char_dates_(contract_vals)
+      if (all(is.na(parsed[!is.na(contract_vals)]))) {
+        stop("Cannot parse contract date values as dates.", call. = FALSE)
+      }
+      # via format() so midnight is local time, matching the ISO branch
+      contract_posix <- as.POSIXct(format(parsed))
     }
   } else if (is.numeric(contract_vals)) {
     contract_posix <- as.POSIXct(as.Date(contract_vals, origin = "1899-12-30"))

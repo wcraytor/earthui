@@ -161,13 +161,38 @@ coerce_types_ <- function(df, type_map, predictors) {
 }
 
 
+# Internal: recenter two-digit years onto a 100-year window around today.
+#
+# A value like "12/18/25" parsed with a %Y format yields year 0025 — R
+# accepts two digits for %Y. Any parsed year in 0..99 therefore came from a
+# two-digit input; map it to the year with the same last two digits nearest
+# the current date. Unlike the fixed POSIX %y pivot (1969-2068), this window
+# slides with the system clock, so it never needs a manual offset bump.
+# Four-digit years (>= 100) are never touched. A recentered Feb 29 that lands
+# on a non-leap year becomes NA (vanishingly rare for sale/listing dates).
+#
+# @param p A Date vector (possibly with NAs).
+# @return A Date vector with two-digit years recentered.
+recenter_two_digit_years_ <- function(p) {
+  if (!inherits(p, "Date")) return(p)
+  yr <- suppressWarnings(as.integer(format(p, "%Y")))
+  idx <- which(!is.na(yr) & yr >= 0L & yr < 100L)
+  if (length(idx) == 0L) return(p)
+  now_year <- as.integer(format(Sys.Date(), "%Y"))
+  new_year <- yr[idx] + 100L * as.integer(round((now_year - yr[idx]) / 100))
+  p[idx] <- as.Date(sprintf("%04d-%s", new_year, format(p[idx], "%m-%d")))
+  p
+}
+
+
 # Internal: parse a character vector of dates trying multiple formats.
 #
 # Mirrors the format set used by validate_types() so that any column which
 # passes date validation also coerces here. Locale-preferred formats are
 # tried first, then common fallbacks. The first format that parses >= 50%
-# of the non-NA values wins. Returns a Date vector (NA where unparseable);
-# returns all-NA if nothing parses (never errors).
+# of the non-NA values wins. Two-digit years are recentered onto a 100-year
+# window around today (see recenter_two_digit_years_). Returns a Date vector
+# (NA where unparseable); returns all-NA if nothing parses (never errors).
 #
 # @param x A character vector.
 # @return A Date vector the same length as x.
@@ -188,7 +213,7 @@ parse_char_dates_ <- function(x) {
   for (fmt in formats) {
     p <- suppressWarnings(as.Date(x, format = fmt))
     if (sum(!is.na(p[non_na_idx])) / length(non_na_idx) >= 0.5) {
-      return(p)
+      return(recenter_two_digit_years_(p))
     }
   }
   out

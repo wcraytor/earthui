@@ -145,6 +145,33 @@ test_that("parse_char_dates_ parses ISO and US dates, never errors", {
   expect_equal(length(earthUI:::parse_char_dates_(character(0))), 0L)
 })
 
+test_that("two-digit years recenter onto a floating window around today", {
+  now_year <- as.integer(format(Sys.Date(), "%Y"))
+  window_year <- function(yy) yy + 100L * as.integer(round((now_year - yy) / 100))
+
+  # "12/18/25" must not become year 0025 — it maps to the year ending in 25
+  # nearest today (2025 while now_year is in 1976..2075)
+  expect_equal(earthUI:::parse_char_dates_(c("12/18/25", "01/05/99")),
+               as.Date(c(sprintf("%04d-12-18", window_year(25L)),
+                         sprintf("%04d-01-05", window_year(99L)))))
+  # Recentered years are always within +/- 50 of today
+  parsed <- earthUI:::parse_char_dates_(c("06/30/00", "06/30/49", "06/30/50"))
+  yrs <- as.integer(format(parsed, "%Y"))
+  expect_true(all(abs(yrs - now_year) <= 50L))
+  expect_true(all(yrs %% 100L == c(0L, 49L, 50L)))
+
+  # Four-digit years are never touched, however old
+  expect_equal(earthUI:::parse_char_dates_(c("12/18/1975", "01/15/2024")),
+               as.Date(c("1975-12-18", "2024-01-15")))
+
+  # recenter_two_digit_years_ passes non-Date input through and keeps NAs
+  expect_identical(earthUI:::recenter_two_digit_years_("not a date"), "not a date")
+  p <- as.Date(c(NA, "0025-12-18"))
+  r <- earthUI:::recenter_two_digit_years_(p)
+  expect_true(is.na(r[1]))
+  expect_equal(as.integer(format(r[2], "%Y")), window_year(25L))
+})
+
 # --- align_to_training_ (predict-time newdata alignment) -------------------
 
 test_that("align_to_training_ coerces date columns + factor levels to training", {

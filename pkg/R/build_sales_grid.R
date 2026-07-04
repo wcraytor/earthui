@@ -28,8 +28,15 @@ compute_dom_ <- function(df, row) {
   cd <- col_val_(df, row, "contract_date", default = NA)
   ld <- col_val_(df, row, "listing_date", default = NA)
   if (is.na(cd) || is.na(ld)) return(NA_integer_)
-  cd <- tryCatch(as.Date(cd), error = function(e) NA)
-  ld <- tryCatch(as.Date(ld), error = function(e) NA)
+  # as.Date() errors on non-ISO character dates ("12/18/25"); fall back to
+  # the multi-format parser (which also recenters two-digit years)
+  to_date_ <- function(v) {
+    tryCatch(as.Date(v), error = function(e) {
+      if (is.character(v)) parse_char_dates_(v)[1] else NA
+    })
+  }
+  cd <- to_date_(cd)
+  ld <- to_date_(ld)
   if (is.na(cd) || is.na(ld)) return(NA_integer_)
   as.integer(cd - ld)
 }
