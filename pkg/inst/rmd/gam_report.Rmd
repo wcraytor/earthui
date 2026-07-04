@@ -1,0 +1,519 @@
+---
+title: "`r params$title`"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+  pdf_document:
+    toc: true
+  word_document: default
+params:
+  result_path: ""
+  title: "GAM Model Report"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 6.5, fig.height = 4.5,
+                      fig.align = "center", out.width = "100%")
+library(earthUI)
+library(ggplot2)
+gam_result <- readRDS(params$result_path)
+model <- gam_result$model
+summ <- format_gam_summary(gam_result)
+```
+
+## Model Overview
+
+| Metric | Value |
+|--------|-------|
+| R-squared | `r round(summ$r_squared, 4)` |
+| CV R-squared | `r if (!is.null(summ$cv_rsq)) round(summ$cv_rsq, 4) else "N/A"` |
+| Deviance Explained | `r paste0(round(summ$dev_explained * 100, 1), "%")` |
+| AIC | `r round(summ$aic, 1)` |
+| BIC | `r round(summ$bic, 1)` |
+| Observations | `r summ$n_obs` |
+| Smooth Terms | `r summ$n_smooths` |
+| Method | `r summ$method` |
+| Family | `r summ$family` |
+| Fitting Time | `r round(gam_result$elapsed, 2)` sec |
+
+## Equation
+
+```{r equation, results='asis'}
+tryCatch({
+  fam <- model$family
+  link_name <- fam$link
+  response <- gam_result$response
+  xform <- gam_result$response_transform %||% "none"
+
+  # Escape underscores for LaTeX
+  tex_esc <- function(x) gsub("_", "\\\\_", x)
+
+  # LHS
+  resp_tex <- tex_esc(response)
+  if (xform == "log10") {
+    lhs <- paste0("\\log_{10}\\bigl(\\widehat{\\text{", resp_tex, "}}\\bigr)")
+  } else if (xform == "log") {
+    lhs <- paste0("\\ln\\bigl(\\widehat{\\text{", resp_tex, "}}\\bigr)")
+  } else if (link_name == "identity") {
+    lhs <- paste0("\\widehat{\\text{", resp_tex, "}}")
+  } else if (link_name == "log") {
+    lhs <- paste0("\\log\\bigl(\\widehat{\\text{", resp_tex, "}}\\bigr)")
+  } else {
+    lhs <- paste0("\\text{", link_name, "}\\bigl(\\widehat{\\text{",
+                   resp_tex, "}}\\bigr)")
+  }
+
+  # Intercept
+  intercept <- stats::coef(model)[["(Intercept)"]]
+  lhs_eq <- paste0(lhs, " &= ", round(intercept, 4))
+  rhs_terms <- character(0)
+
+  # Smooth terms
+  smooth_defs <- list()
+  for (idx in seq_along(model$smooth)) {
+    sm <- model$smooth[[idx]]
+    var_names <- sm$term
+    fn_label <- paste0("f_{", idx, "}")
+    rhs_terms <- c(rhs_terms,
+      paste0("+ ", fn_label, "(\\text{",
+             paste(tex_esc(var_names), collapse = ", "), "})"))
+    sm_class <- class(sm)[1L]
+    bs_type <- if (grepl("tp", sm_class)) "thin plate regression spline"
+               else if (grepl("cr", sm_class)) "cubic regression spline"
+               else if (grepl("ps", sm_class)) "P-spline"
+               else if (grepl("tensor", sm_class)) "tensor product smooth"
+               else sm_class
+    k_val <- if (length(sm$bs.dim) == 1L) sm$bs.dim
+             else if (length(sm$margin) > 0L)
+               paste(vapply(sm$margin, function(mg) mg$bs.dim, numeric(1)),
+                     collapse = " x ")
+             else "?"
+    smooth_defs[[idx]] <- data.frame(
+      Function = paste0("$f_{", idx, "}$"),
+      Term = sm$label,
+      Description = paste0(bs_type, ", k = ", k_val),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  # Parametric terms
+  sm_obj <- summary(model)
+  if (!is.null(sm_obj$p.table) && nrow(sm_obj$p.table) > 1L) {
+    param_names <- rownames(sm_obj$p.table)
+    param_names <- param_names[param_names != "(Intercept)"]
+    all_coefs <- stats::coef(model)
+    mf <- stats::model.frame(model)
+    factor_vars <- names(mf)[vapply(mf, is.factor, logical(1))]
+    factors_shown <- character(0)
+    for (pn in param_names) {
+      matched_factor <- NULL
+      for (fv in factor_vars) {
+        if (startsWith(pn, fv)) { matched_factor <- fv; break }
+      }
+      if (!is.null(matched_factor)) {
+        if (matched_factor %in% factors_shown) next
+        factors_shown <- c(factors_shown, matched_factor)
+        n_levels <- nlevels(mf[[matched_factor]])
+        rhs_terms <- c(rhs_terms,
+          paste0("+ \\beta_{\\text{", tex_esc(matched_factor),
+                 "}} \\text{ (", n_levels, " levels)}"))
+      } else {
+        coef_val <- all_coefs[[pn]]
+        pn_tex <- tex_esc(pn)
+        if (coef_val >= 0) {
+          rhs_terms <- c(rhs_terms,
+            paste0("+ ", round(coef_val, 4),
+                   " \\cdot \\text{", pn_tex, "}"))
+        } else {
+          rhs_terms <- c(rhs_terms,
+            paste0("- ", round(abs(coef_val), 4),
+                   " \\cdot \\text{", pn_tex, "}"))
+        }
+      }
+    }
+  }
+
+  # Build wrapped equation: 3 terms per line
+  lines <- lhs_eq
+  n_per_line <- 3L
+  for (i in seq_along(rhs_terms)) {
+    if (i %% n_per_line == 1L && i > 1L) {
+      lines <- paste0(lines, " \\\\\n  &\\quad ", rhs_terms[i])
+    } else {
+      lines <- paste0(lines, " ", rhs_terms[i])
+    }
+  }
+  cat("\n$$\n\\begin{aligned}\n", lines, "\n\\end{aligned}\n$$\n\n")
+
+  cat("**Family:**", fam$family, "(link = ", link_name, ")
+**Method:**", model$method, "\n\n")
+
+  if (length(smooth_defs) > 0) {
+    def_df <- do.call(rbind, smooth_defs)
+    cat("**Smooth function definitions:**\n\n")
+    print(knitr::kable(def_df, row.names = FALSE))
+  }
+}, error = function(e) {
+  cat("\n```\n",
+      paste(deparse(gam_result$formula, width.cutoff = 80), collapse = "\n"),
+      "\n```\n")
+})
+```
+
+See the [Notation: Value-Contribution Functions](#sec-gnotation) section at the
+end of this report for an explanation of the $f_i$ smooth-function notation.
+
+## Formula
+
+```
+`r paste(deparse(gam_result$formula, width.cutoff = 80), collapse = "\n")`
+```
+
+## Summary
+
+### Smooth Terms
+
+```{r smooth-terms}
+tryCatch({
+  if (nrow(summ$smooth_table) > 0) {
+    st <- summ$smooth_table
+    st$EDF <- round(st$EDF, 2)
+    st$Ref.df <- round(st$Ref.df, 2)
+    st$F <- round(st$F, 2)
+    st$p_value <- format.pval(st$p_value, digits = 3)
+    knitr::kable(st)
+  }
+}, error = function(e) cat("*Error rendering smooth terms table:*", e$message))
+```
+
+### Parametric Terms
+
+```{r parametric-terms}
+tryCatch({
+  if (nrow(summ$parametric_table) > 0) {
+    pt <- summ$parametric_table
+    pt$Estimate <- round(pt$Estimate, 4)
+    pt$Std_Error <- round(pt$Std_Error, 4)
+    pt$t_value <- round(pt$t_value, 3)
+    pt$p_value <- format.pval(pt$p_value, digits = 3)
+    knitr::kable(pt)
+  }
+}, error = function(e) cat("*Error rendering parametric terms table:*", e$message))
+```
+
+## Variable Importance
+
+```{r importance-plot, fig.height=4}
+imp_df <- data.frame(Term = character(0), Statistic = numeric(0),
+                     Type = character(0), stringsAsFactors = FALSE)
+tryCatch({
+  if (nrow(summ$smooth_table) > 0) {
+    imp_df <- rbind(imp_df, data.frame(
+      Term = summ$smooth_table$Term,
+      Statistic = summ$smooth_table$F,
+      Type = "Smooth", stringsAsFactors = FALSE))
+  }
+
+  if (nrow(summ$parametric_table) > 0) {
+    pt <- summ$parametric_table[summ$parametric_table$Term != "(Intercept)", ,
+                                 drop = FALSE]
+    if (nrow(pt) > 0) {
+      imp_df <- rbind(imp_df, data.frame(
+        Term = pt$Term, Statistic = abs(pt$t_value),
+        Type = "Parametric", stringsAsFactors = FALSE))
+    }
+  }
+
+  if (nrow(imp_df) > 0) {
+    imp_df$Term <- factor(imp_df$Term,
+                          levels = imp_df$Term[order(imp_df$Statistic)])
+    print(ggplot(imp_df, aes(x = .data$Statistic, y = .data$Term,
+                       fill = .data$Type)) +
+      geom_col(alpha = 0.85) +
+      scale_fill_manual(values = c("Smooth" = "#5e81ac",
+                                   "Parametric" = "#a3be8c")) +
+      labs(title = "Variable Importance (F / |t| statistic)",
+           x = "Statistic", y = NULL) +
+      theme_minimal(base_size = 13))
+  }
+}, error = function(e) cat("*Error rendering importance plot:*", e$message))
+```
+
+```{r importance-table}
+tryCatch({
+  if (nrow(imp_df) > 0) {
+    tbl <- imp_df[order(imp_df$Statistic, decreasing = TRUE), ]
+    tbl$Statistic <- round(tbl$Statistic, 4)
+    knitr::kable(tbl, row.names = FALSE)
+  }
+}, error = function(e) cat("*Error rendering importance table:*", e$message))
+```
+
+## Contribution Plots
+
+### Smooth Terms
+
+```{r smooths, fig.width=7, fig.height=4, results='asis'}
+plotted_smooths <- character(0)
+for (spec in gam_result$smooth_specs) {
+  if (spec$type != "s" || length(spec$vars) != 1L) next
+  if (!is.null(spec$by) && nzchar(spec$by)) next
+  var <- spec$vars[1]
+  if (var %in% plotted_smooths) next
+  p <- tryCatch(
+    plot_smooth_single(gam_result, var,
+                       earth_knots = gam_result$earth_knots),
+    error = function(e) NULL
+  )
+  if (!is.null(p)) {
+    cat("\n####", var, "\n\n")
+    print(p)
+    cat("\n")
+    plotted_smooths <- c(plotted_smooths, var)
+  }
+}
+```
+
+### Factor-by-Smooth Terms
+
+```{r by-smooths, fig.width=7, fig.height=4, results='asis'}
+plotted_by <- character(0)
+for (spec in gam_result$smooth_specs) {
+  if (spec$type != "s" || length(spec$vars) != 1L) next
+  if (is.null(spec$by) || !nzchar(spec$by)) next
+  key <- paste0(spec$vars, ":by:", spec$by)
+  if (key %in% plotted_by) next
+  p <- tryCatch(
+    plot_by_smooth_single(gam_result, spec$vars, by_var = spec$by),
+    error = function(e) NULL
+  )
+  if (!is.null(p)) {
+    cat("\n####", paste0("s(", spec$vars, ", by=", spec$by, ")"), "\n\n")
+    print(p)
+    cat("\n")
+    plotted_by <- c(plotted_by, key)
+  }
+}
+```
+
+### Interaction Terms
+
+```{r interactions, fig.width=6.5, fig.height=5.5, results='asis'}
+plotted_int <- character(0)
+for (spec in gam_result$smooth_specs) {
+  if (!spec$type %in% c("ti", "te") || length(spec$vars) != 2L) next
+  key <- paste(sort(spec$vars), collapse = ",")
+  if (key %in% plotted_int) next
+  p <- tryCatch(
+    plot_interaction_single(gam_result, spec$vars, type = spec$type),
+    error = function(e) NULL
+  )
+  if (!is.null(p)) {
+    cat("\n####", paste0(spec$type, "(", paste(spec$vars, collapse=", "), ")"), "\n\n")
+    print(p)
+    cat("\n")
+    plotted_int <- c(plotted_int, key)
+  }
+}
+```
+
+### Parametric Terms
+
+```{r parametric-plots, fig.width=7, fig.height=4, results='asis'}
+tryCatch({
+  pred_cols <- colnames(predict(model, type = "terms"))
+  smooth_labels <- vapply(model$smooth, function(sm) sm$label, character(1))
+  param_terms <- setdiff(pred_cols, smooth_labels)
+  for (term in param_terms) {
+    p <- tryCatch(
+      plot_parametric_single(gam_result, term),
+      error = function(e) NULL
+    )
+    if (!is.null(p)) {
+      cat("\n####", term, "\n\n")
+      print(p)
+      cat("\n")
+    }
+  }
+}, error = function(e) cat("*Error rendering parametric plots:*", e$message))
+```
+
+## Correlation Matrix
+
+```{r correlation, fig.width=6.5, fig.height=6.5}
+tryCatch({
+  mf <- model$model
+  pred_data <- mf[, setdiff(names(mf), gam_result$response), drop = FALSE]
+  num_cols <- vapply(pred_data, is.numeric, logical(1))
+  pred_data <- pred_data[, num_cols, drop = FALSE]
+
+  if (ncol(pred_data) >= 2L) {
+    cor_mat <- cor(pred_data, use = "pairwise.complete.obs")
+    vars <- colnames(cor_mat)
+    cor_long <- expand.grid(Var1 = vars, Var2 = vars, stringsAsFactors = FALSE)
+    cor_long$value <- as.numeric(cor_mat)
+    cor_long$Var1 <- factor(cor_long$Var1, levels = rev(vars))
+    cor_long$Var2 <- factor(cor_long$Var2, levels = vars)
+    n_vars <- length(vars)
+    txt_size <- max(2.5, 5 - n_vars * 0.15)
+
+    print(ggplot(cor_long, aes(x = .data$Var2, y = .data$Var1,
+                         fill = .data$value)) +
+      geom_tile(color = "white", linewidth = 0.5) +
+      geom_text(aes(label = sprintf("%.2f", .data$value)), size = txt_size) +
+      scale_fill_gradient2(low = "#2166AC", mid = "white", high = "#B2182B",
+                           midpoint = 0, limits = c(-1, 1),
+                           name = "Correlation") +
+      coord_fixed() +
+      labs(title = "Correlation Matrix", x = NULL, y = NULL) +
+      theme_minimal(base_size = 11) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1),
+            panel.grid = element_blank(),
+            legend.position = "bottom",
+            legend.key.width = unit(1.5, "cm")))
+  }
+}, error = function(e) cat("*Error rendering correlation matrix:*", e$message))
+```
+
+## Diagnostics
+
+```{r diagnostics, fig.width=6.5, fig.height=6.5}
+tryCatch({
+  p <- plot_diagnostics(gam_result)
+  print(p)
+}, error = function(e) {
+  message("gratia::appraise failed (", e$message, "); falling back to gam.check")
+  tryCatch({
+    par(mfrow = c(2, 2))
+    mgcv::gam.check(model)
+  }, error = function(e2) {
+    message("gam.check also failed (", e2$message, ")")
+    plot.new()
+    text(0.5, 0.5, paste("Diagnostics unavailable:", e$message), cex = 0.8)
+  })
+})
+```
+
+## Actual vs Predicted
+
+```{r avp, fig.width=6, fig.height=5}
+tryCatch(
+  print(plot_actual_vs_predicted_mgcv(gam_result)),
+  error = function(e) cat("*Error rendering actual vs predicted:*", e$message)
+)
+```
+
+## ANOVA
+
+```{r anova}
+tryCatch({
+  aov <- summary(model)
+
+  # Separate parametric and smooth tables for cleaner display
+  if (!is.null(aov$p.table) && nrow(aov$p.table) > 0) {
+    pt <- as.data.frame(aov$p.table, check.names = FALSE)
+    pt <- cbind(Term = rownames(pt), pt)
+    rownames(pt) <- NULL
+    pcol <- grep("Pr\\(", names(pt), value = TRUE)
+    for (pc in pcol) pt[[pc]] <- format.pval(pt[[pc]], digits = 3)
+    cat("### Parametric Terms\n\n")
+    print(knitr::kable(pt, digits = 4, format = "pipe"))
+    cat("\n")
+  }
+
+  if (!is.null(aov$s.table) && nrow(aov$s.table) > 0) {
+    st <- as.data.frame(aov$s.table, check.names = FALSE)
+    st <- cbind(Term = rownames(st), st)
+    rownames(st) <- NULL
+    pcol <- grep("p-value", names(st), value = TRUE)
+    for (pc in pcol) st[[pc]] <- format.pval(st[[pc]], digits = 3)
+    cat("\n### Smooth Terms\n\n")
+    print(knitr::kable(st, digits = 4, format = "pipe"))
+    cat("\n")
+  }
+}, error = function(e) cat("*Error rendering ANOVA table:*", e$message))
+```
+
+## Concurvity
+
+### Overall
+
+```{r concurvity-full, results='asis'}
+tryCatch({
+  if (length(model$smooth) > 0L) {
+    con <- mgcv::concurvity(model, full = TRUE)
+    con_df <- as.data.frame(round(con, 4))
+    # Transpose: rows=smooth terms, cols=worst/observed/estimate
+    con_t <- as.data.frame(t(con_df))
+    con_t <- cbind(Term = rownames(con_t), con_t)
+    rownames(con_t) <- NULL
+    print(knitr::kable(con_t, format = "pipe"))
+  }
+}, error = function(e) cat("*Error rendering concurvity:*", e$message))
+```
+
+### Pairwise (worst case)
+
+```{r concurvity-pairwise, results='asis'}
+tryCatch({
+  if (length(model$smooth) >= 2L) {
+    con_pw <- mgcv::concurvity(model, full = FALSE)
+    if (is.list(con_pw) && "worst" %in% names(con_pw)) {
+      pw_mat <- round(con_pw$worst, 2)
+      # Shorten labels: s(living_sqft) -> living_sqft, ti(a,b) -> ti(a,b)
+      short <- gsub("^s\\(([^,)]+)\\)$", "\\1", colnames(pw_mat))
+      colnames(pw_mat) <- short
+      rownames(pw_mat) <- short
+      pw_df <- as.data.frame(pw_mat)
+      pw_df <- cbind(Term = rownames(pw_df), pw_df)
+      rownames(pw_df) <- NULL
+      print(knitr::kable(pw_df, format = "pipe"))
+    }
+  }
+}, error = function(e) cat("*Error rendering pairwise concurvity:*", e$message))
+```
+
+```{r sign-check, results='asis'}
+tryCatch({
+  signs <- check_sign_consistency(gam_result)
+  if (!is.null(signs)) {
+    cat("\n## Earth vs GAM Sign Consistency\n\n")
+    knitr::kable(signs[, c("variable", "earth_direction",
+                           "gam_direction", "consistent")])
+  }
+}, error = function(e) NULL)
+```
+
+## Basis Dimension Check
+
+```{r gam-check}
+tryCatch(
+  mgcv::gam.check(model),
+  error = function(e) cat("*Error in gam.check:*", e$message)
+)
+```
+
+## Mgcv Output
+
+```{r mgcv-output, comment=""}
+cat(sprintf("== Timing: %.2f seconds ==\n\n", gam_result$elapsed))
+cat("== Formula ==\n\n")
+print(gam_result$formula)
+cat("\n\n== Summary ==\n\n")
+print(summary(model))
+cat("\n\n== Family ==\n\n")
+print(model$family)
+```
+
+## Notation: Value-Contribution Functions {#sec-gnotation}
+
+```{r g-legend, results='asis'}
+cat(earthUI::g_function_legend_mgcv("markdown"))
+```
+
+---
+
+*Report generated by mgcvUI on `r Sys.time()`*

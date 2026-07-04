@@ -46,43 +46,43 @@ test_that("to_snake_case collapses multiple underscores", {
   expect_equal(to_snake_case("foo---bar"), "foo_bar")
 })
 
-# --- detect_column_types ---
-test_that("detect_column_types classifies numeric correctly", {
+# --- detect_column_types_glmnet ---
+test_that("detect_column_types_glmnet classifies numeric correctly", {
   df <- data.frame(x = c(1.5, 2.5, 3.5))
-  expect_equal(detect_column_types(df)[["x"]], "numeric")
+  expect_equal(detect_column_types_glmnet(df)[["x"]], "numeric")
 })
 
-test_that("detect_column_types classifies integer correctly", {
+test_that("detect_column_types_glmnet classifies integer correctly", {
   df <- data.frame(x = 1L:5L)
-  expect_equal(detect_column_types(df)[["x"]], "integer")
+  expect_equal(detect_column_types_glmnet(df)[["x"]], "integer")
 })
 
-test_that("detect_column_types classifies factor correctly", {
+test_that("detect_column_types_glmnet classifies factor correctly", {
   df <- data.frame(x = factor(c("a", "b", "a")))
-  expect_equal(detect_column_types(df)[["x"]], "factor")
+  expect_equal(detect_column_types_glmnet(df)[["x"]], "factor")
 })
 
-test_that("detect_column_types classifies Date correctly", {
+test_that("detect_column_types_glmnet classifies Date correctly", {
   df <- data.frame(x = as.Date("2024-01-01") + 0:4)
-  expect_equal(detect_column_types(df)[["x"]], "Date")
+  expect_equal(detect_column_types_glmnet(df)[["x"]], "Date")
 })
 
-test_that("detect_column_types classifies POSIXct correctly", {
+test_that("detect_column_types_glmnet classifies POSIXct correctly", {
   df <- data.frame(x = as.POSIXct("2024-01-01") + 0:4)
-  expect_equal(detect_column_types(df)[["x"]], "POSIXct")
+  expect_equal(detect_column_types_glmnet(df)[["x"]], "POSIXct")
 })
 
-test_that("detect_column_types classifies character correctly", {
+test_that("detect_column_types_glmnet classifies character correctly", {
   df <- data.frame(x = paste0("val_", 1:20), stringsAsFactors = FALSE)
-  expect_equal(detect_column_types(df)[["x"]], "character")
+  expect_equal(detect_column_types_glmnet(df)[["x"]], "character")
 })
 
-test_that("detect_column_types auto-detects low-cardinality character as factor", {
+test_that("detect_column_types_glmnet auto-detects low-cardinality character as factor", {
   df <- data.frame(x = rep(c("A", "B"), 10), stringsAsFactors = FALSE)
-  expect_equal(detect_column_types(df)[["x"]], "factor")
+  expect_equal(detect_column_types_glmnet(df)[["x"]], "factor")
 })
 
-test_that("detect_column_types handles multiple columns", {
+test_that("detect_column_types_glmnet handles multiple columns", {
   df <- data.frame(
     num = c(1.5, 2.5, 3.5, 4.5, 5.5),
     int = 1L:5L,
@@ -92,7 +92,7 @@ test_that("detect_column_types handles multiple columns", {
     ts = as.POSIXct("2024-01-01 12:00:00") + 0:4,
     stringsAsFactors = FALSE
   )
-  types <- detect_column_types(df)
+  types <- detect_column_types_glmnet(df)
   expect_equal(types[["num"]], "numeric")
   expect_equal(types[["int"]], "integer")
   expect_equal(types[["fac"]], "factor")

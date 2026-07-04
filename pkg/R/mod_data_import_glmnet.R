@@ -244,7 +244,7 @@ dataImportServer <- function(id, purpose = shiny::reactiveVal("general"),
       rv$file_name <- name
       names(rv$data) <- to_snake_case(names(rv$data))
       rv$data <- auto_parse_dates_(rv$data)
-      rv$col_types <- detect_column_types(rv$data)
+      rv$col_types <- detect_column_types_glmnet(rv$data)
       all_cols <- names(rv$data)
 
       default_response <- if (length(all_cols) > 0) all_cols[1] else NULL
@@ -1103,8 +1103,8 @@ to_snake_case <- function(nms) {
 #' @examples
 #' df <- data.frame(x = 1:10, y = letters[1:10],
 #'                  d = Sys.Date() + 1:10, stringsAsFactors = FALSE)
-#' detect_column_types(df)
-detect_column_types <- function(df) {
+#' detect_column_types_glmnet(df)
+detect_column_types_glmnet <- function(df) {
   vapply(df, function(col) {
     if (inherits(col, "POSIXct") || inherits(col, "POSIXlt")) {
       "POSIXct"
