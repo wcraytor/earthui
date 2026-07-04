@@ -1064,11 +1064,16 @@ mod_model_server <- function(id, data_r, var_config_r,
       cor_long$Var2 <- factor(cor_long$Var2, levels = vars)
 
       n_vars <- length(vars)
-      txt_size <- max(2.5, 5 - n_vars * 0.15)
-      # Axis label sizing matches earthUI's correlation matrix (adaptive to
-      # the number of variables so long name lists still fit)
+      # Sizing and label color match earthUI's correlation matrix. The cell
+      # label color is chosen PER CELL by tile luminance (white on saturated
+      # red/blue, black on pale tiles) and set explicitly — the tile fills
+      # never change with the app theme, so the labels must not follow the
+      # dark-mode text color either (light grey on a white tile is invisible).
+      txt_size <- if (n_vars <= 6) 7 else if (n_vars <= 10) 5
+                  else if (n_vars <= 15) 4 else 3.2
       axis_size <- if (n_vars <= 6) 14 else if (n_vars <= 10) 13
                    else if (n_vars <= 15) 11 else 9
+      text_color <- ifelse(abs(cor_long$value) > 0.65, "white", "black")
 
       ggplot2::ggplot(cor_long,
                       ggplot2::aes(x = .data$Var2, y = .data$Var1,
@@ -1076,7 +1081,7 @@ mod_model_server <- function(id, data_r, var_config_r,
         ggplot2::geom_tile(color = "white", linewidth = 0.5) +
         ggplot2::geom_text(
           ggplot2::aes(label = sprintf("%.2f", .data$value)),
-          size = txt_size
+          size = txt_size, color = text_color
         ) +
         ggplot2::scale_fill_gradient2(
           low = "#2166AC", mid = "white", high = "#B2182B",
