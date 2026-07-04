@@ -614,9 +614,15 @@ dataImportServer <- function(id, purpose = shiny::reactiveVal("general"),
                 `data-col` = col_name,
                 disabled = lock_attr
               ),
-              # Pre-check only unambiguous (non-numeric) categoricals. Numeric
-              # columns are factors only if the appraiser ticks this box.
-              if (isTRUE(fac_auto[[col_name]]))
+              # With an earth import active, show the EARTH model's factor
+              # treatment: checked only for the earth model's own categorical
+              # predictors. A variable earth did not use plays no role in the
+              # fit -- a checked-but-locked box would falsely imply it did.
+              # Without an import, pre-check unambiguous (non-numeric)
+              # categoricals; numeric columns are factors only if the
+              # appraiser ticks this box.
+              if (if (earth_active) in_earth && (col_name %in% ek$categoricals)
+                  else isTRUE(fac_auto[[col_name]]))
                 list(checked = NA)
             ))
           ),
@@ -863,10 +869,10 @@ dataImportServer <- function(id, purpose = shiny::reactiveVal("general"),
             "Predictor set is determined by the imported earth model. ",
             "<b>Include</b>, <b>Type</b> and <b>Factor</b> are locked; you ",
             "can still set <b>Force</b> and <b>Sign</b> for earth's ",
-            "predictors. Dimmed variables are ones the earth model did not ",
-            "use. Factor boxes come pre-checked for text/factor/logical ",
-            "variables (e.g. the TRUE/FALSE columns produced by remarks ",
-            "expansion) — for those, factor treatment is automatic."))
+            "predictors. <b>Factor</b> shows the earth model's treatment: ",
+            "checked only for the earth model's categorical predictors. ",
+            "Dimmed variables are ones the earth model did not use — they ",
+            "play no role in this fit, so their boxes stay empty."))
         )
       }
 
