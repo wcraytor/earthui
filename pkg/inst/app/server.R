@@ -4347,11 +4347,15 @@ function(input, output, session) {
             if (length(brks) < 2L) brks <- c(brks[1], brks[1] + bin_width)
             hist_data <- graphics::hist(pct_vals, breaks = brks, plot = FALSE)
             y_max <- max(hist_data$counts) * 1.25
-            graphics::par(mar = c(5, 4, 4, 2) + 0.1)
+            # wider left/bottom margins so the doubled labels don't clip
+            graphics::par(mar = c(5.5, 6, 4, 2) + 0.1)
+            # cex.* = 2: axis/label/title fonts doubled from the base-R
+            # defaults, which are too small to read at this panel size
             graphics::hist(pct_vals, breaks = brks, col = "#4A90D9", border = "white",
                            main = plot_label,
                            xlab = "Percentage (%)", ylab = "Frequency",
-                           las = 1, ylim = c(0, y_max))
+                           las = 1, ylim = c(0, y_max),
+                           cex.axis = 2, cex.lab = 2, cex.main = 2)
             graphics::abline(v = avg_val, col = "#E74C3C", lwd = 2, lty = 2)
             graphics::abline(v = med_val, col = "#2ECC71", lwd = 2, lty = 2)
             graphics::legend("topright",
@@ -4362,7 +4366,7 @@ function(input, output, session) {
                              ),
                              col = c("#E74C3C", "#2ECC71", NA),
                              lwd = c(2, 2, NA), lty = c(2, 2, NA),
-                             bty = "n", cex = 1.1)
+                             bty = "n", cex = 1.6)
           }, width = d_$width, height = d_$height, res = 96)
         })
         plot_tags <- c(plot_tags, list(
