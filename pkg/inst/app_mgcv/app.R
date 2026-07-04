@@ -2201,11 +2201,18 @@ server <- function(input, output, session) {
                                   labels = paste0(breaks, "%")) +
       ggplot2::labs(title = title, subtitle = subtitle,
                     x = xlab, y = "Frequency") +
-      ggplot2::theme_minimal(base_family = font_fam) +
+      ggplot2::theme_minimal(base_size = 15, base_family = font_fam) +
+      # The plot canvas stays white in both light and dark mode, so all text
+      # is forced dark explicitly — theme-following text turns light grey in
+      # dark mode and becomes unreadable on the white panel.
       ggplot2::theme(
-        plot.title = ggplot2::element_text(size = 14, face = "bold"),
-        plot.subtitle = ggplot2::element_text(size = 11, color = "#4c566a"),
-        axis.text.x = ggplot2::element_text(angle = 0)
+        plot.title = ggplot2::element_text(size = 16, face = "bold",
+                                           color = "black"),
+        plot.subtitle = ggplot2::element_text(size = 12, color = "#4c566a"),
+        axis.text  = ggplot2::element_text(size = 15, color = "black"),
+        axis.title = ggplot2::element_text(size = 16, color = "black"),
+        axis.text.x = ggplot2::element_text(angle = 0, size = 15,
+                                            color = "black")
       )
   }
 
