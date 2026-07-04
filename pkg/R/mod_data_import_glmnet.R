@@ -861,8 +861,12 @@ dataImportServer <- function(id, purpose = shiny::reactiveVal("general"),
                          " background:var(--bs-tertiary-bg, #eceff4);"),
           shiny::HTML(paste0(
             "Predictor set is determined by the imported earth model. ",
-            "<b>Include</b> and <b>Type</b> are locked; you can still set ",
-            "<b>Force</b> and <b>Sign</b> for earth's predictors."))
+            "<b>Include</b>, <b>Type</b> and <b>Factor</b> are locked; you ",
+            "can still set <b>Force</b> and <b>Sign</b> for earth's ",
+            "predictors. Dimmed rows are columns the earth model did not ",
+            "use. Factor boxes come pre-checked for text/factor/logical ",
+            "columns (e.g. the TRUE/FALSE columns produced by remarks ",
+            "expansion) — for those, factor treatment is automatic."))
         )
       }
 

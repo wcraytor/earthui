@@ -64,7 +64,12 @@ special_default_for_ <- function(name, tags) {
                         "saleconcessions"),
     weight          = c("wt", "wgt")
   )
-  generic <- c("area", "age")  # match whole-name only, never a sub-token
+  # Match whole-name only, never a sub-token. "sqft" is here because many
+  # derived/auxiliary columns carry it as a token (pr_sqft from the remarks
+  # parser, outbuilding_sqft, garage_sqft, ...) without being the living
+  # area; a column literally NAMED "sqft" still matches via the whole-name
+  # rule below.
+  generic <- c("area", "age", "sqft")
 
   keys_for <- function(tag) {
     k <- unique(c(norm(tag), norm(syn[[tag]])))
