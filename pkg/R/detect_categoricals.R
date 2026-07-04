@@ -8,10 +8,17 @@
 #' continuous predictor (e.g. `bath_count` = 0..5) is indistinguishable from a
 #' numeric category code.
 #'
+#' Identifier-like text columns are not flagged either: when a character or
+#' factor column has more than 10 unique values **and** more than half of its
+#' non-NA values are distinct (street addresses, parcel numbers, MLS listing
+#' ids), it is a per-row label rather than a usable categorical — one factor
+#' level per data row carries no information. Logical columns are always
+#' flagged (two values by construction).
+#'
 #' @param df A data frame.
 #'
 #' @return A named logical vector with one element per column. `TRUE` indicates
-#'   a character, factor, or logical column.
+#'   a character, factor, or logical column that is usable as a categorical.
 #'
 #' @export
 #' @examples
@@ -28,7 +35,12 @@ detect_categoricals <- function(df) {
   }
 
   result <- vapply(df, function(col) {
-    is.character(col) || is.factor(col) || is.logical(col)
+    if (is.logical(col)) return(TRUE)
+    if (!(is.character(col) || is.factor(col))) return(FALSE)
+    v <- col[!is.na(col)]
+    n_u <- length(unique(v))
+    # Identifier guard: (nearly) all-distinct text is a per-row label
+    !(n_u > 10L && n_u > 0.5 * length(v))
   }, logical(1L))
 
   names(result) <- names(df)

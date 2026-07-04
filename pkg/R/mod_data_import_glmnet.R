@@ -1143,11 +1143,19 @@ detect_column_types_glmnet <- function(df) {
 # Special is unrelated — it is a downstream role, e.g. for the Sales Grid).
 # Counting unique values can't distinguish a discrete continuous predictor
 # (e.g. bath_count 0-5) from a numeric category code, so it must not drive the
-# default. Used to pre-check the Factor box in Predictor Settings.
+# default. Identifier guard: text where (nearly) every value is distinct
+# (street addresses, parcel/MLS ids) is a per-row label, not a usable
+# categorical — one level per data row — so it is not pre-checked either.
+# Used to pre-check the Factor box in Predictor Settings. Must stay
+# behaviorally identical to the exported detect_categoricals().
 #' @noRd
 detect_categoricals_ <- function(df) {
   res <- vapply(df, function(col) {
-    is.character(col) || is.factor(col) || is.logical(col)
+    if (is.logical(col)) return(TRUE)
+    if (!(is.character(col) || is.factor(col))) return(FALSE)
+    v <- col[!is.na(col)]
+    n_u <- length(unique(v))
+    !(n_u > 10L && n_u > 0.5 * length(v))
   }, logical(1))
   names(res) <- names(df)
   res

@@ -11,7 +11,7 @@ detect_categoricals(df)
 }
 \value{
 A named logical vector with one element per column. \code{TRUE} indicates
-a character, factor, or logical column.
+a character, factor, or logical column that is usable as a categorical.
 }
 \description{
 Flags columns that are categorical \strong{by type} — character, factor, or
@@ -21,6 +21,14 @@ the columns to pre-check in the Factor box. Numeric and integer columns are
 designates it (the Factor checkbox), because by value alone a discrete
 continuous predictor (e.g. \code{bath_count} = 0..5) is indistinguishable from a
 numeric category code.
+}
+\details{
+Identifier-like text columns are not flagged either: when a character or
+factor column has more than 10 unique values \strong{and} more than half of its
+non-NA values are distinct (street addresses, parcel numbers, MLS listing
+ids), it is a per-row label rather than a usable categorical — one factor
+level per data row carries no information. Logical columns are always
+flagged (two values by construction).
 }
 \examples{
 df <- data.frame(

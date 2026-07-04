@@ -51,3 +51,28 @@ test_that("detect_categoricals returns named logical vector", {
 test_that("detect_categoricals rejects non-data.frame", {
   expect_error(detect_categoricals(list()), "must be a data frame")
 })
+
+test_that("identifier-like text columns are not flagged", {
+  n <- 40
+  df <- data.frame(
+    street_address = paste(seq_len(n), "Main St Apt", seq_len(n)),  # all unique
+    mls_id   = sprintf("ML%06d", seq_len(n)),                        # all unique
+    city     = sample(c("pacifica", "daly_city", "brisbane"), n, TRUE),
+    style    = sample(c("ranch", "colonial"), n, TRUE),
+    has_pool = sample(c(TRUE, FALSE), n, TRUE),
+    stringsAsFactors = FALSE
+  )
+  out <- detect_categoricals(df)
+  expect_false(out[["street_address"]])   # per-row label
+  expect_false(out[["mls_id"]])           # per-row label
+  expect_true(out[["city"]])              # genuine categorical
+  expect_true(out[["style"]])
+  expect_true(out[["has_pool"]])          # logicals always flagged
+
+  # small data protection: <= 10 uniques stays flagged even if all distinct
+  small <- data.frame(zone = paste0("z", 1:8), stringsAsFactors = FALSE)
+  expect_true(detect_categoricals(small)[["zone"]])
+
+  # internal twin must agree (parity across the three routines)
+  expect_identical(earthUI:::detect_categoricals_(df), detect_categoricals(df))
+})
