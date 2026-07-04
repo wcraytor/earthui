@@ -62,7 +62,7 @@ mod_data_server <- function(id, active_project_r = reactive(NULL)) {
     refresh_token <- reactiveVal(0L)
 
     # --- Restore saved import locale on startup ---
-    locale_defaults <- settings_db_read_locale__mgcv()
+    locale_defaults <- settings_db_read_locale_mgcv()
     if (!is.null(locale_defaults) && length(locale_defaults) > 0L) {
       ld <- locale_defaults
       if (!is.null(ld$locale_import))

@@ -13,7 +13,7 @@ NULL
 #' Path to the settings database
 #' @return Character path.
 #' @noRd
-settings_db_path__mgcv <- function() {
+settings_db_path_mgcv <- function() {
   # Allow tests to redirect to a temp DB
   override <- getOption("mgcvUI.settings_db_path")
   if (!is.null(override)) return(override)
@@ -30,12 +30,12 @@ settings_db_path__mgcv <- function() {
 #' Open (or create) the settings database
 #' @return A DBI connection, or NULL if RSQLite not available.
 #' @noRd
-settings_db_connect__mgcv <- function() {
+settings_db_connect_mgcv <- function() {
   if (!requireNamespace("RSQLite", quietly = TRUE)) return(NULL)
   if (!requireNamespace("DBI", quietly = TRUE)) return(NULL)
 
   con <- tryCatch(
-    DBI::dbConnect(RSQLite::SQLite(), settings_db_path__mgcv()),
+    DBI::dbConnect(RSQLite::SQLite(), settings_db_path_mgcv()),
     error = function(e) {
       message("mgcvUI: settings database unavailable (", e$message,
               "). Settings will not persist.")
@@ -107,8 +107,8 @@ settings_db_connect__mgcv <- function() {
 #' @param config List with response, variables (named list of per-var
 #'   settings), family, method, select, gamma.
 #' @noRd
-settings_db_write__mgcv <- function(filename, config) {
-  con <- settings_db_connect__mgcv()
+settings_db_write_mgcv <- function(filename, config) {
+  con <- settings_db_connect_mgcv()
   if (is.null(con)) return(invisible(NULL))
   on.exit(DBI::dbDisconnect(con), add = TRUE)
 
@@ -165,7 +165,7 @@ settings_db_write__mgcv <- function(filename, config) {
                    as.integer(config$discrete %||% FALSE),
                    as.integer(config$nthreads %||% 1)))
 
-  settings_db_evict__mgcv(con, max_files = 100L)
+  settings_db_evict_mgcv(con, max_files = 100L)
   invisible(NULL)
 }
 
@@ -175,8 +175,8 @@ settings_db_write__mgcv <- function(filename, config) {
 #' @param filename Character -- the original file name (basename).
 #' @return A list with the saved config, or NULL if not found.
 #' @noRd
-settings_db_read__mgcv <- function(filename) {
-  con <- settings_db_connect__mgcv()
+settings_db_read_mgcv <- function(filename) {
+  con <- settings_db_connect_mgcv()
   if (is.null(con)) return(NULL)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
 
@@ -225,7 +225,7 @@ settings_db_read__mgcv <- function(filename) {
 #' @param con A DBI connection.
 #' @param max_files Integer.
 #' @noRd
-settings_db_evict__mgcv <- function(con, max_files = 100L) {
+settings_db_evict_mgcv <- function(con, max_files = 100L) {
   n <- DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM settings_v2")$n
   if (n > max_files) {
     DBI::dbExecute(con, "
@@ -240,8 +240,8 @@ settings_db_evict__mgcv <- function(con, max_files = 100L) {
 #' Save locale defaults (not per-file, global user preference)
 #' @param locale_settings Named list with locale_country, locale_paper, etc.
 #' @noRd
-settings_db_write_locale__mgcv <- function(locale_settings) {
-  con <- settings_db_connect__mgcv()
+settings_db_write_locale_mgcv <- function(locale_settings) {
+  con <- settings_db_connect_mgcv()
   if (is.null(con)) return(invisible(NULL))
   on.exit(DBI::dbDisconnect(con), add = TRUE)
 
@@ -261,8 +261,8 @@ settings_db_write_locale__mgcv <- function(locale_settings) {
 #' Load locale defaults
 #' @return Named list with locale settings, or NULL if not found.
 #' @noRd
-settings_db_read_locale__mgcv <- function() {
-  con <- settings_db_connect__mgcv()
+settings_db_read_locale_mgcv <- function() {
+  con <- settings_db_connect_mgcv()
   if (is.null(con)) return(NULL)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
 

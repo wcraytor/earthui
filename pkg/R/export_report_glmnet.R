@@ -199,7 +199,7 @@ prepare_report_assets_glmnet <- function(model, lambda, gamma, x_mat, y_vec,
     coef_df        = coef_df,
     importance_df  = imp_df,
     anova_df       = anova_df,
-    interaction_matrix = build_interaction_matrix__glmnet(coef_df, predictors),
+    interaction_matrix = build_interaction_matrix_glmnet(coef_df, predictors),
     contrib_names  = names(contrib_info$contribs)
   ), file.path(assets_dir, "report_data.rds"))
   message("[glmnetUI ASSETS] report_data.rds saved to: ",
@@ -1036,7 +1036,7 @@ generate_quarto_report_glmnet <- function(assets_args, dest_dir,
 # columns contain ":" (e.g. "x1:x2" or "x1:x2Level"); each part is mapped back
 # to its parent predictor. Mirrors earthUI's allowed-interaction matrix.
 #' @noRd
-build_interaction_matrix__glmnet <- function(coef_df, predictors) {
+build_interaction_matrix_glmnet <- function(coef_df, predictors) {
   n <- length(predictors)
   mat <- matrix(FALSE, n, n, dimnames = list(predictors, predictors))
   if (n < 2L || is.null(coef_df) || !"Variable" %in% names(coef_df)) {

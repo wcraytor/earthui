@@ -224,7 +224,7 @@ prepare_report_assets_mgcv <- function(gam_result, assets_dir = NULL) {
     equation_defs = if (!is.null(eq_parts)) eq_parts$defs else NULL,
     importance    = importance,
     summary_text  = summary_text,
-    interaction_matrix = build_interaction_matrix__mgcv(gam_result),
+    interaction_matrix = build_interaction_matrix_mgcv(gam_result),
     n_smooth_chunks = n_smooth_chunks
   ), file.path(assets_dir, "report_data.rds"), compress = "xz")
 
@@ -398,7 +398,7 @@ generate_quarto_report_mgcv <- function(gam_result, dest_dir, base = "gam_report
 # `by` factor). Returns NULL when there are no interactions. Mirrors earthUI's
 # allowed-interaction matrix.
 #' @noRd
-build_interaction_matrix__mgcv <- function(gam_result) {
+build_interaction_matrix_mgcv <- function(gam_result) {
   specs <- gam_result$smooth_specs
   if (is.null(specs) || length(specs) == 0L) return(NULL)
   pairs <- list()

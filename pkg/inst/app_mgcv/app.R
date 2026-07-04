@@ -895,7 +895,7 @@ server <- function(input, output, session) {
   locale_ready <- reactiveVal(FALSE)
 
   # Load user's locale defaults from SQLite on startup
-  locale_defaults <- earthUI:::settings_db_read_locale__mgcv()
+  locale_defaults <- earthUI:::settings_db_read_locale_mgcv()
   if (!is.null(locale_defaults) && length(locale_defaults) > 0L) {
     ld <- locale_defaults
     if (!is.null(ld$locale_country))
@@ -927,7 +927,7 @@ server <- function(input, output, session) {
       locale_paper   = input$locale_paper,
       locale_import  = input[["data-locale_import"]]
     )
-    earthUI:::settings_db_write_locale__mgcv(locale_settings)
+    earthUI:::settings_db_write_locale_mgcv(locale_settings)
     # 2) regProj root -> per-user prefs (only if a non-empty, usable path)
     p <- trimws(input$regproj_root %||% "")
     root_msg <- ""
@@ -988,7 +988,7 @@ server <- function(input, output, session) {
     earthUI:::set_locale_(country)
     # Only persist if startup restoration is done
     if (isTRUE(isolate(locale_ready()))) {
-      earthUI:::settings_db_write_locale__mgcv(list(
+      earthUI:::settings_db_write_locale_mgcv(list(
         locale_country = country,
         locale_paper   = preset$paper,
         locale_import  = country
@@ -1014,7 +1014,7 @@ server <- function(input, output, session) {
                          paper = paper)
     # Only persist if startup restoration is done
     if (isTRUE(isolate(locale_ready()))) {
-      earthUI:::settings_db_write_locale__mgcv(list(
+      earthUI:::settings_db_write_locale_mgcv(list(
         locale_country = settings_country,
         locale_paper   = paper,
         locale_import  = import_country
@@ -1027,9 +1027,9 @@ server <- function(input, output, session) {
     if (!isTRUE(locale_ready())) return()
     ed <- input$effective_date
     if (is.null(ed)) return()
-    ld <- earthUI:::settings_db_read_locale__mgcv() %||% list()
+    ld <- earthUI:::settings_db_read_locale_mgcv() %||% list()
     ld$effective_date <- as.character(ed)
-    earthUI:::settings_db_write_locale__mgcv(ld)
+    earthUI:::settings_db_write_locale_mgcv(ld)
   })
 
   # ===== regProj project state (shared root + DBs with earthUI/glmnetUI) =====

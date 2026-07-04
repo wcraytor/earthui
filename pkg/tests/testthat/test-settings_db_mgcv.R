@@ -15,8 +15,8 @@ test_that("settings_db round-trips data", {
     gamma = 1.5
   )
 
-  earthUI:::settings_db_write__mgcv(fname, settings)
-  result <- earthUI:::settings_db_read__mgcv(fname)
+  earthUI:::settings_db_write_mgcv(fname, settings)
+  result <- earthUI:::settings_db_read_mgcv(fname)
 
   expect_equal(result$response, "price")
   expect_equal(result$family, "gaussian")
@@ -24,10 +24,10 @@ test_that("settings_db round-trips data", {
   expect_true(result$variables$sqft$inc)
 })
 
-test_that("settings_db_read__mgcv returns NULL for unknown file", {
+test_that("settings_db_read_mgcv returns NULL for unknown file", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("RSQLite")
 
-  result <- earthUI:::settings_db_read__mgcv("nonexistent_file_xyz.csv")
+  result <- earthUI:::settings_db_read_mgcv("nonexistent_file_xyz.csv")
   expect_null(result)
 })
