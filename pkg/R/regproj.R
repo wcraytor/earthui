@@ -493,9 +493,15 @@ is_project_dir <- function(path, root = default_regproj_root()) {
   if (!is.character(path) || length(path) != 1L || !dir.exists(path)) {
     return(FALSE)
   }
-  rel <- sub(paste0("^", path.expand(root), "/?"), "",
-             path.expand(path), perl = TRUE)
-  if (rel == path.expand(path)) return(FALSE)  # not under root
+  # Normalize separators to "/" and compare as plain strings. The root path
+  # must NOT be used as a regex: on Windows it contains backslashes, which are
+  # regex metacharacters (and aren't the "/" this function splits on).
+  to_fwd <- function(p) gsub("\\\\", "/", path.expand(p))
+  root_n <- sub("/+$", "", to_fwd(root))   # drop any trailing slash
+  path_n <- to_fwd(path)
+  prefix <- paste0(root_n, "/")
+  if (!startsWith(path_n, prefix)) return(FALSE)  # not under root
+  rel <- substring(path_n, nchar(prefix) + 1L)
   parts <- strsplit(rel, "/", fixed = TRUE)[[1L]]
   if (length(parts) != 2L) return(FALSE)
   if (!parts[1L] %in% c("gen", "appr", "mktarea")) return(FALSE)

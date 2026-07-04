@@ -128,3 +128,21 @@ test_that("city_abbreviation handles all-non-alpha names", {
   expect_match(city_abbreviation("---"), "^city")
   expect_equal(city_abbreviation("123 Main"), "123mai")
 })
+
+test_that("is_project_dir treats the root as a plain string, not a regex", {
+  # Roots containing regex metacharacters (Windows backslashes, "+", "(")
+  # must not break the under-root check
+  root <- file.path(tempfile("regproj (x+y)_"), "r+d")
+  proj <- file.path(root, "appr", "us_ca_081_burlin_MyProj")
+  dir.create(proj, recursive = TRUE)
+
+  expect_true(is_project_dir(proj, root = root))
+  # trailing slash on root is tolerated
+  expect_true(is_project_dir(proj, root = paste0(root, "/")))
+  # not under root / wrong depth / bad purpose / bad segment
+  expect_false(is_project_dir(tempdir(), root = root))
+  expect_false(is_project_dir(file.path(root, "appr"), root = root))
+  bad <- file.path(root, "nope", "us_ca_081_burlin_MyProj")
+  dir.create(bad, recursive = TRUE)
+  expect_false(is_project_dir(bad, root = root))
+})
