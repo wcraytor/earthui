@@ -345,3 +345,36 @@ test_that("interrupted migration leaving only _old is recovered on next connect"
   expect_equal(earthUI:::project_file_settings_read_(con2, "proj",
                purpose = "appraisal")$variables, '{"recovered":true}')
 })
+
+test_that("register_project inserts and upserts a project row", {
+  root <- new_temp_root()
+  proj <- file.path(root, "appr", "us_ca_081_burlin_MyProj")
+  dir.create(proj, recursive = TRUE)
+
+  flat <- register_project(proj, "appr", "US", c("ca", "081", "burlin"),
+                           "MyProj", last_file = "sales.csv", root = root)
+  expect_equal(flat, "us_ca_081_burlin_MyProj")
+
+  con <- regproj_projects_db_connect(root)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  row <- DBI::dbGetQuery(con, "SELECT * FROM projects WHERE flat_segment = ?",
+                         params = list(flat))
+  expect_equal(nrow(row), 1L)
+  expect_equal(row$country, "us")   # lowercased
+  expect_equal(row$state, "ca")
+  expect_equal(row$county, "081")
+  expect_equal(row$city, "burlin")
+  expect_equal(row$project_name, "MyProj")
+  expect_equal(row$last_file, "sales.csv")
+  created_first <- row$created_at
+
+  # Upsert: created_at survives, last_used_at refreshes, NULL last_file
+  # preserves the existing value
+  register_project(proj, "appr", "US", c("ca", "081", "burlin"),
+                   "MyProj", last_file = NULL, root = root)
+  row2 <- DBI::dbGetQuery(con, "SELECT * FROM projects WHERE flat_segment = ?",
+                          params = list(flat))
+  expect_equal(nrow(row2), 1L)
+  expect_equal(row2$created_at, created_first)
+  expect_equal(row2$last_file, "sales.csv")
+})

@@ -605,10 +605,17 @@ function(input, output, session) {
 
     # Copy initial data file (if provided) into the current OS's in/ folder
     fi <- input$np_data_file
+    last_file <- NULL
     if (!is.null(fi) && nrow(fi) >= 1L && !is.null(in_dir)) {
       orig_name <- fi$name[1L]
+      last_file <- orig_name
       file.copy(fi$datapath[1L], file.path(in_dir, orig_name), overwrite = FALSE)
     }
+
+    # Register the project row in projects.sqlite (shared with glmnetUI/mgcvUI)
+    tryCatch(register_project(proj_root, pur, cc, levels, proj,
+                              last_file = last_file),
+             error = function(e) NULL)
 
     np_prefill_(NULL)
 
@@ -727,6 +734,15 @@ function(input, output, session) {
       message("earthUI: project '", p$project_name,
               "' active — all per-file state cleared, output_folder=",
               out_dir)
+      # Keep the projects DB row fresh (shared with glmnetUI/mgcvUI)
+      parsed <- tryCatch(regproj_parse_flat(basename(p$project_path)),
+                         error = function(e) NULL)
+      if (!is.null(parsed)) {
+        tryCatch(
+          register_project(p$project_path, p$purpose, parsed$country,
+                           parsed$levels, parsed$project_name),
+          error = function(e) NULL)
+      }
       # Auto-load the project's last-used file (if any)
       last <- regproj_last_file_get(p$project_path)
       if (!is.null(last)) {

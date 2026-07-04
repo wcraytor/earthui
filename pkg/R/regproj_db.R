@@ -474,3 +474,51 @@ set_project_settings <- function(project_path,
                                 interactions = interactions, method = method,
                                 purpose = purpose)
 }
+
+#' Register or update a project row in projects.sqlite
+#'
+#' Upserts the project's metadata (purpose, geo codes, name, timestamps,
+#' last-used file) so the shared projects DB stays consistent regardless of
+#' which app (earthUI, glmnetUI, mgcvUI) created or last used the project.
+#'
+#' @param project_path Absolute path to the project root.
+#' @param purpose regProj purpose code: `"gen"`, `"appr"`, or `"mktarea"`.
+#' @param country Lowercase ISO country code.
+#' @param levels Character vector of admin codes (state/county/city).
+#' @param project_name Project leaf name.
+#' @param last_file Optional basename of the last-used input file.
+#' @param root regProj root. Defaults to [default_regproj_root()].
+#' @return Invisibly, the flat segment.
+#' @export
+register_project <- function(project_path, purpose, country, levels,
+                             project_name, last_file = NULL,
+                             root = default_regproj_root()) {
+  flat <- basename(path.expand(project_path))
+  st <- if (length(levels) >= 1L) levels[[1L]] else NA_character_
+  cn <- if (length(levels) >= 2L) levels[[2L]] else NA_character_
+  ci <- if (length(levels) >= 3L) levels[[3L]] else NA_character_
+  ts <- as.integer(Sys.time())
+  con <- regproj_projects_db_connect(root)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  existing <- DBI::dbGetQuery(con,
+    "SELECT created_at FROM projects WHERE flat_segment = ?",
+    params = list(flat))
+  created <- if (nrow(existing) > 0L && !is.na(existing$created_at[1L]))
+    existing$created_at[1L] else ts
+  # DBI params must be length-1; a NULL last_file becomes SQL NULL via NA.
+  if (is.null(last_file) || !nzchar(last_file)) last_file <- NA_character_
+  DBI::dbExecute(con,
+    "INSERT INTO projects
+       (flat_segment, purpose, country, state, county, city, project_name,
+        created_at, last_used_at, last_file)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (flat_segment) DO UPDATE SET
+       purpose = excluded.purpose, country = excluded.country,
+       state = excluded.state, county = excluded.county, city = excluded.city,
+       project_name = excluded.project_name,
+       last_used_at = excluded.last_used_at,
+       last_file = COALESCE(excluded.last_file, projects.last_file)",
+    params = list(flat, purpose, tolower(country), st, cn, ci, project_name,
+                  created, ts, last_file))
+  invisible(flat)
+}
