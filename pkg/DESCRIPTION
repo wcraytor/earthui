@@ -16,7 +16,6 @@ BugReports: https://github.com/wcraytor/earthUI/issues
 Depends:
     R (>= 4.1.0)
 Imports:
-    valengrCore,
     DBI,
     earth (>= 5.3.0),
     ggplot2,
@@ -42,6 +41,7 @@ Suggests:
     sysfonts,
     testthat (>= 3.0.0),
     tinytex,
+    vProlog,
     withr,
     writexl
 Config/testthat/edition: 3

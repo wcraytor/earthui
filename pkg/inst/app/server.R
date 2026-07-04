@@ -2383,10 +2383,9 @@ function(input, output, session) {
 
     appraiser <- input$purpose %in% c("appraisal", "market")
 
-    # Special column options + default-guesser are shared via valengrCore
-    # across the three sibling apps. Covers appraisal and Market Area Analysis
-    # (appraiser) modes; see valengrCore::special_roles_().
-    special_options <- valengrCore::special_roles_(appraiser)
+    # Special column options + default-guesser (specials.R). Covers appraisal
+    # and Market Area Analysis (appraiser) modes; see special_roles_().
+    special_options <- earthUI::special_roles_(appraiser)
     # earthUI-only roles driving the optional "Execute Prolog Processing" step:
     # "remarks" columns are DCG-parsed via vProlog; "list" columns are split
     # into one-hot columns. Both allow multiple columns (see the special JS).
@@ -2453,7 +2452,7 @@ function(input, output, session) {
       lin_checked <- isTRUE(sv$lin) && !dis_checked
       lat_checked <- isTRUE(sv$lat) && !dis_checked
       sel_special <- if (!is.null(sv) && !is.null(sv$special)) sv$special
-                     else valengrCore::special_default_for_(col, special_options)
+                     else earthUI::special_default_for_(col, special_options)
 
       # Build <option> tags with the saved (or auto-detected) type selected
       option_tags <- lapply(type_options, function(opt) {
