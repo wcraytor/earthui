@@ -32,13 +32,23 @@ pkg/
                               #   project_file_settings_*, get/set_project_settings
     select_sales_grid_comps.R # Sales-grid comp selection (sort + threshold)
   inst/
-    app/
-      server.R                # Shiny server (async fitting, project picker,
+    app_earth/
+      server.R                # earth Shiny server (async fitting, project picker,
                               #   New Project modal, Generate/Convert flow)
-      ui.R                    # Shiny UI (Bootstrap 5, MathJax, dark mode)
+      ui.R                    # earth Shiny UI (Bootstrap 5, MathJax, dark mode)
+    app_glmnet/               # elastic net companion app (launch_glmnet(), port 7879)
+    app_mgcv/                 # GAM companion app (launch_mgcv(), port 7880)
+                              # NOTE: since 0.11.0 earthUI CONTAINS the former
+                              # glmnetUI/mgcvUI packages; their method code lives
+                              # in R/*_glmnet.R and R/*_mgcv.R with _glmnet/_mgcv
+                              # suffixes on colliding names. Shared infra
+                              # (regproj/trilogy/locale/specials/carryforward)
+                              # exists ONCE. See docs/merge_collision_inventory.md.
     quarto/
       earth_report.qmd        # Quarto report template (HTML/PDF/Word).
                               # Self-renders if `report_data.rds` is a sibling.
+      glmnet_report.qmd       # glmnet routine's report template
+      gam_report.qmd          # mgcv routine's report template
     extdata/
       regproj_reference.json  # Countries + US states + US counties (Census FIPS)
       regproj_geo.rds         # Shipped admin_entries: US incorp. places + 6
@@ -414,7 +424,7 @@ Modal-based comp selection with auto-recommendation:
   launchd, or some shells, the R process may not have `/usr/local/bin`
   or `/opt/homebrew/bin` on PATH — so `quarto`, `pandoc`, `xelatex`
   fail with "Error running quarto CLI from R" or similar. Server
-  startup in `inst/app/server.R` extends PATH explicitly with
+  startup in `inst/app_earth/server.R` extends PATH explicitly with
   `/usr/local/bin`, `/opt/homebrew/bin`, and TinyTeX bin paths.
 - **Settings restore overrides project-derived state**: the JS
   localStorage/SQLite restore on file load WILL overwrite UI inputs.

@@ -10,7 +10,7 @@
 #'   standalone run. When non-`NULL`, the app runs in "trilogy mode": it shows
 #'   "(Trilogy Mode)" after the title and (in future steps) reads the locked
 #'   earth model + settings for the run. Normally set by the Trilogy UI, not by
-#'   hand. The value is exposed to the app via `getOption("glmnetUI.trilogy")`.
+#'   hand. The value is exposed to the app via `getOption("earthUI.trilogy")`.
 #' @param ... Additional arguments passed to [shiny::runApp()].
 #'
 #' @return This function does not return a value; it launches a Shiny
@@ -47,7 +47,7 @@ launch_glmnet <- function(port = 7879L, trilogy = NULL, ...) {
 
   # Expose the trilogy context to the app (ui.R/server.R read it via
   # getOption); restore on exit so a standalone run later is unaffected.
-  op <- options(glmnetUI.trilogy = trilogy)
+  op <- options(earthUI.trilogy = trilogy)
   on.exit(options(op), add = TRUE)
 
   shiny::runApp(app_dir, port = port, ...)

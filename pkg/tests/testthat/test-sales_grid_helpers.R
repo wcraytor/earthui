@@ -4,7 +4,7 @@
 # without generating full Excel output (which requires openxlsx).
 
 # Source the sales grid helper functions
-sg_path <- system.file("app", "sales_grid.R", package = "earthUI")
+sg_path <- system.file("app_earth", "sales_grid.R", package = "earthUI")
 if (nzchar(sg_path)) {
   # Only define helpers if not already sourced; avoid library() side effects
   sg_env <- new.env(parent = globalenv())

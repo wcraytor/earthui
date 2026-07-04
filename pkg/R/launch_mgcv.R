@@ -9,7 +9,7 @@
 #'   standalone run. When non-`NULL`, the app runs in "trilogy mode": it shows
 #'   "(Trilogy Mode)" after the title and (in future steps) reads the locked
 #'   earth model + settings for the run. Normally set by the Trilogy UI, not by
-#'   hand. Exposed to the app via `getOption("mgcvUI.trilogy")`.
+#'   hand. Exposed to the app via `getOption("earthUI.trilogy")`.
 #' @param ... Additional arguments passed to [shiny::runApp()].
 #' @return Called for its side effect (launches the app). Returns the
 #'   value of [shiny::runApp()] invisibly.
@@ -31,7 +31,7 @@ launch_mgcv <- function(port = 7880L, launch.browser = interactive(),
   }
   # Expose the trilogy context to the app (app.R reads it via getOption);
   # restore on exit so a standalone run later is unaffected.
-  op <- options(mgcvUI.trilogy = trilogy)
+  op <- options(earthUI.trilogy = trilogy)
   on.exit(options(op), add = TRUE)
 
   shiny::runApp(app_dir, port = port, launch.browser = launch.browser, ...)

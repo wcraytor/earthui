@@ -1,3 +1,50 @@
+# earthUI 0.11.0
+
+## One package, three routines
+
+* earthUI now **contains** its two companion modeling applications, formerly
+  the separate packages glmnetUI and mgcvUI. Launchers:
+  - `launch()` — the earth (MARS) application (port 7878), unchanged.
+  - `launch_glmnet()` — the elastic net companion (port 7879), which imports
+    the earth model's basis functions and re-estimates them under
+    lasso/elastic-net regularization.
+  - `launch_mgcv()` — the GAM companion (port 7880), which uses the earth
+    model's knot locations as starting points for `mgcv` smooth terms.
+* The three routines share ONE copy of the supporting infrastructure
+  (regProj project system, settings databases, trilogy coordination, locale,
+  Special-column roles) and one prefs file. Method-specific functions carry
+  `_glmnet` / `_mgcv` suffixes. The in-process trilogy lock option is unified
+  as `earthUI.trilogy`.
+* `earth_carryforward_()` (Effective Date / Response / RCA CQA flowing from
+  the earth model to the companions) and `register_project()` (projects.sqlite
+  upsert) are now part of earthUI.
+* The earth app moved to `inst/app_earth/` (companions: `inst/app_glmnet/`,
+  `inst/app_mgcv/`).
+
+## Fixes
+
+* Two-digit years (e.g. `06/15/25`) are read as the nearest matching year
+  (a self-recentering 100-year window) in data columns, `sale_age`
+  computation, and sales-grid DOM.
+* `is_project_dir()` no longer breaks on roots containing regex
+  metacharacters (Windows paths).
+* `convert_quarto_file()` hardened: QUARTO_R pinned to the running R,
+  Windows Quarto PATH fallback, generic `execute_params` passthrough.
+* The Special-role guesser no longer tags `pr_sqft`-style derived columns as
+  `living_area`; identifier-like text columns (street addresses, MLS ids) are
+  no longer pre-checked as factors.
+* mgcv/glmnet S3 methods are registered whenever earthUI loads (previously a
+  GAM fit's results could fail to display).
+* Readability: mgcv Variable Importance / Correlation / Diagnostics axis
+  fonts sized to the earthUI standard; correlation cell labels pick black or
+  white per tile; RCA histograms use larger, explicitly dark fonts in all
+  three routines.
+
+## Packaging
+
+* vProlog is served from https://wcraytor.r-universe.dev (see
+  `Additional_repositories`); earthUI installs and runs without it.
+
 # earthUI 0.10.0
 
 ## Advanced (optional): Prolog-based remarks & list processing

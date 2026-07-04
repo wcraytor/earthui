@@ -13,7 +13,7 @@ launch_glmnet(port = 7879L, trilogy = NULL, ...)
 standalone run. When non-\code{NULL}, the app runs in "trilogy mode": it shows
 "(Trilogy Mode)" after the title and (in future steps) reads the locked
 earth model + settings for the run. Normally set by the Trilogy UI, not by
-hand. The value is exposed to the app via \code{getOption("glmnetUI.trilogy")}.}
+hand. The value is exposed to the app via \code{getOption("earthUI.trilogy")}.}
 
 \item{...}{Additional arguments passed to \code{\link[shiny:runApp]{shiny::runApp()}}.}
 }

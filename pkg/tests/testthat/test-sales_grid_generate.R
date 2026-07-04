@@ -8,7 +8,7 @@ skip_if_not_installed("readxl")
 skip_if_not_installed("writexl")
 
 # Source the sales grid generator
-sg_path <- system.file("app", "sales_grid.R", package = "earthUI")
+sg_path <- system.file("app_earth", "sales_grid.R", package = "earthUI")
 skip_if(!nzchar(sg_path), "sales_grid.R not found in installed package")
 
 sg_env <- new.env(parent = globalenv())

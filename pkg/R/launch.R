@@ -121,7 +121,7 @@ launch <- function(port = 7878L, trilogy = NULL, ...) {
     }
   }
 
-  app_dir <- system.file("app", package = "earthUI")
+  app_dir <- system.file("app_earth", package = "earthUI")
   if (app_dir == "") {
     stop("Could not find the Shiny app directory. ",
          "Try reinstalling the 'earthUI' package.", call. = FALSE)

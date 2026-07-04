@@ -4,9 +4,9 @@
 \name{earthUI-package}
 \alias{earthUI}
 \alias{earthUI-package}
-\title{earthUI: Interactive 'shiny' GUI for the 'earth' Package}
+\title{earthUI: Interactive 'shiny' GUIs for 'earth' (MARS) with 'glmnet' and 'mgcv' Companion Routines}
 \description{
-Provides a 'shiny'-based graphical user interface for the 'earth' package, enabling interactive building and exploration of Multivariate Adaptive Regression Splines (MARS) models. Features include data import from CSV and 'Excel' files, automatic detection of categorical variables, interactive control of interaction terms via an allowed matrix, comprehensive model diagnostics with variable importance and partial dependence plots, and publication-quality report generation via 'Quarto'.
+Provides 'shiny'-based graphical user interfaces for building and exploring Multivariate Adaptive Regression Splines (MARS) models with the 'earth' package, plus two companion routines that corroborate the earth model: an elastic net application ('glmnet') that re-estimates the earth basis under regularization, and a generalized additive model application ('mgcv') seeded from the earth model's knots. The three routines share one project system and settings database. Features include data import from CSV and 'Excel' files, automatic detection of categorical variables, interactive control of interaction terms via an allowed matrix, comprehensive model diagnostics with variable importance and partial dependence plots, and publication-quality report generation via 'Quarto'.
 }
 \seealso{
 Useful links:

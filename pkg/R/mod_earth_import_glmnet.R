@@ -104,7 +104,7 @@ earthImportServer <- function(id) {
     # trilogy.json (set by earthUI's "Lock Model Output"). The existing
     # earth-import lock on the variable table then applies automatically.
     local({
-      ctx <- getOption("glmnetUI.trilogy")
+      ctx <- getOption("earthUI.trilogy")
       if (is.null(ctx)) return(invisible())
       pp <- ctx$project_path %||% NULL
       lock <- if (!is.null(pp)) trilogy_get_lock(pp) else NULL

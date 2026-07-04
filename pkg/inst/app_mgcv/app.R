@@ -328,7 +328,7 @@ ui <- fluidPage(
       tags$img(src = "logo.png"),
       "mgcvUI",
       tags$small(" - GAM Builder"),
-      if (!is.null(getOption("mgcvUI.trilogy")))
+      if (!is.null(getOption("earthUI.trilogy")))
         tags$span(" (Trilogy Mode)",
           style = paste0("font-size: 0.55em; font-weight: bold;",
                          " color: #5e81ac; margin-left: 8px;")),
@@ -1232,7 +1232,7 @@ server <- function(input, output, session) {
   # Trilogy mode: auto-open the trilogy project at startup, so the project's
   # data is available and the fit registers to the right project.
   observeEvent(TRUE, {
-    ctx <- getOption("mgcvUI.trilogy")
+    ctx <- getOption("earthUI.trilogy")
     pp <- ctx$project_path %||% NULL
     if (is.null(pp)) return()
     df <- tryCatch(regproj_list_projects(sort_by = "recent"),
@@ -1535,7 +1535,7 @@ server <- function(input, output, session) {
   # Trilogy mode: after each fit, register this method's fit-stamp in the
   # project's trilogy.json so the combined report can group the run's files.
   observeEvent(gam_result_r(), {
-    ctx <- getOption("mgcvUI.trilogy")
+    ctx <- getOption("earthUI.trilogy")
     if (is.null(ctx)) return()
     pp <- ctx$project_path %||% NULL
     res <- gam_result_r()
@@ -1804,7 +1804,7 @@ server <- function(input, output, session) {
         rv_proj$active_project$project_path, input$purpose)
       cqa_type_pre  <- cf_cqa$cqa_type
       cqa_value_pre <- cf_cqa$cqa_value
-      if (is.null(cqa_type_pre) && !is.null(getOption("mgcvUI.trilogy"))) {
+      if (is.null(cqa_type_pre) && !is.null(getOption("earthUI.trilogy"))) {
         tl <- trilogy_get_lock(rv_proj$active_project$project_path)$shared
         cqa_type_pre  <- tl$cqa_mode
         tlv <- suppressWarnings(as.numeric(tl$cqa))
@@ -2146,7 +2146,7 @@ server <- function(input, output, session) {
       writexl::write_xlsx(export_df, out_path)
       # Trilogy mode: emit this method's value conclusion (subject's indicated
       # value, row 1 of adjusted_sale_price) for the combined report.
-      if (!is.null(getOption("mgcvUI.trilogy"))) {
+      if (!is.null(getOption("earthUI.trilogy"))) {
         m <- earthUI:::trilogy_fit_metrics_(export_df[[response]][-1L],
                                            residuals_val[-1L])
         try(earthUI::trilogy_write_conclusion(

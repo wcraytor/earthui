@@ -165,7 +165,7 @@ function(input, output, session) {
   # Trilogy mode: after each fit, register this method's fit-stamp in the
   # project's trilogy.json so the combined report can group the run's files.
   shiny::observeEvent(model_out$fit_count(), {
-    ctx <- getOption("glmnetUI.trilogy")
+    ctx <- getOption("earthUI.trilogy")
     if (is.null(ctx) || !isTRUE(model_out$fit_count() > 0L)) return()
     pp <- ctx$project_path %||% NULL
     ts <- model_out$fit_ts()
@@ -405,7 +405,7 @@ function(input, output, session) {
   # Trilogy mode: auto-open the trilogy project at startup, so the project's
   # data is available and the fit registers to the right project.
   shiny::observeEvent(TRUE, {
-    ctx <- getOption("glmnetUI.trilogy")
+    ctx <- getOption("earthUI.trilogy")
     pp <- ctx$project_path %||% NULL
     if (is.null(pp)) return()
     df <- tryCatch(regproj_list_projects(sort_by = "recent"),
@@ -1137,7 +1137,7 @@ function(input, output, session) {
         rv_proj$active_project$project_path, purpose())
       cqa_type_pre  <- cf_cqa$cqa_type
       cqa_value_pre <- cf_cqa$cqa_value
-      if (is.null(cqa_type_pre) && !is.null(getOption("glmnetUI.trilogy"))) {
+      if (is.null(cqa_type_pre) && !is.null(getOption("earthUI.trilogy"))) {
         tl <- trilogy_get_lock(rv_proj$active_project$project_path)$shared
         cqa_type_pre  <- tl$cqa_mode
         tlv <- suppressWarnings(as.numeric(tl$cqa))
@@ -1485,7 +1485,7 @@ function(input, output, session) {
       writexl::write_xlsx(export_df, out_path)
       # Trilogy mode: emit this method's value conclusion (the subject's
       # indicated value, row 1 of adjusted_sale_price) for the combined report.
-      if (!is.null(getOption("glmnetUI.trilogy"))) {
+      if (!is.null(getOption("earthUI.trilogy"))) {
         m <- earthUI:::trilogy_fit_metrics_(export_df[[response]][-1L],
                                              residuals_val[-1L])
         try(earthUI::trilogy_write_conclusion(
