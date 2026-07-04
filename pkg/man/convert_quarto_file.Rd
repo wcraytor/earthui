@@ -8,7 +8,8 @@ convert_quarto_file(
   qmd_path,
   formats = c("html"),
   output_dir = NULL,
-  paper_size = "letter"
+  paper_size = "letter",
+  execute_params = NULL
 )
 }
 \arguments{
@@ -22,6 +23,11 @@ to the same directory as \code{qmd_path}.}
 
 \item{paper_size}{Character: \code{"letter"} or \code{"a4"}. Used only for PDF
 output. Default \code{"letter"}.}
+
+\item{execute_params}{Optional named list of Quarto \verb{params:} values
+passed through to \code{quarto::quarto_render()}. earthUI's own template
+self-locates a sibling \code{report_data.rds}, so this is normally \code{NULL};
+it exists for hand-written templates that take parameters.}
 }
 \value{
 Invisibly, a character vector of output file paths.

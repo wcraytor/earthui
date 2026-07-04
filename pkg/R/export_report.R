@@ -307,6 +307,10 @@ generate_quarto_report <- function(earth_result, dest_dir, base = "earth_report"
 #'   to the same directory as `qmd_path`.
 #' @param paper_size Character: `"letter"` or `"a4"`. Used only for PDF
 #'   output. Default `"letter"`.
+#' @param execute_params Optional named list of Quarto `params:` values
+#'   passed through to `quarto::quarto_render()`. earthUI's own template
+#'   self-locates a sibling `report_data.rds`, so this is normally `NULL`;
+#'   it exists for hand-written templates that take parameters.
 #'
 #' @return Invisibly, a character vector of output file paths.
 #'
@@ -314,7 +318,8 @@ generate_quarto_report <- function(earth_result, dest_dir, base = "earth_report"
 convert_quarto_file <- function(qmd_path,
                                 formats = c("html"),
                                 output_dir = NULL,
-                                paper_size = "letter") {
+                                paper_size = "letter",
+                                execute_params = NULL) {
   if (!requireNamespace("quarto", quietly = TRUE)) {
     stop("The 'quarto' package is required. ",
          "Install it with: install.packages('quarto')", call. = FALSE)
@@ -330,15 +335,43 @@ convert_quarto_file <- function(qmd_path,
   if (!dir.exists(output_dir))
     dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
+  # Ensure QUARTO_R points to the running R; restore on exit.
+  old_quarto_r <- Sys.getenv("QUARTO_R", unset = NA)
+  Sys.setenv(QUARTO_R = file.path(R.home("bin"), "R"))
+  on.exit({
+    if (is.na(old_quarto_r)) Sys.unsetenv("QUARTO_R")
+    else Sys.setenv(QUARTO_R = old_quarto_r)
+  }, add = TRUE)
+
+  # On Windows, Quarto CLI may not be on PATH. Search common locations.
+  if (.Platform$OS.type == "windows" && !nzchar(Sys.which("quarto"))) {
+    for (qdir in c(
+      file.path(Sys.getenv("LOCALAPPDATA"), "Programs", "Quarto", "bin"),
+      file.path(Sys.getenv("ProgramFiles"), "Quarto", "bin"),
+      "C:/Program Files/Quarto/bin")) {
+      qexe <- file.path(qdir, "quarto.exe")
+      if (file.exists(qexe)) {
+        old_path <- Sys.getenv("PATH")
+        Sys.setenv(PATH = paste(normalizePath(qdir, winslash = "/"),
+                                old_path, sep = ";"))
+        on.exit(Sys.setenv(PATH = old_path), add = TRUE)
+        break
+      }
+    }
+  }
+
   base <- tools::file_path_sans_ext(basename(qmd_path))
   out_paths <- character(0)
   for (fmt in formats) {
     out_file <- file.path(output_dir, paste0(base, ".", fmt))
     message(sprintf("earthUI: rendering %s -> %s", fmt, out_file))
+    # quiet = TRUE: avoid the `quarto` package's cli formatter choking on
+    # `{captions}` in the PDF metadata ("object 'captions' not found").
     quarto::quarto_render(input = qmd_path,
                           output_format = fmt,
                           output_file   = basename(out_file),
-                          quiet         = FALSE)
+                          execute_params = execute_params,
+                          quiet         = TRUE)
     # quarto_render writes to the qmd's directory; move if different
     src <- file.path(dirname(qmd_path), basename(out_file))
     if (normalizePath(src, mustWork = FALSE) !=
