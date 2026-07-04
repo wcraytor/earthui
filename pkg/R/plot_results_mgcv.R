@@ -840,8 +840,16 @@ plot_parametric_single <- function(gam_result, term) {
 #' plot_diagnostics(res)
 plot_diagnostics <- function(gam_result) {
   tryCatch(
-    gratia::appraise(gam_result$model) +
-      ggplot2::theme_minimal(base_size = 11),
+    # appraise() returns a patchwork of four panels; theme with `&` so every
+    # panel is styled (`+` hits only the last one). Axis fonts sized for a
+    # 2x2 grid — a step below the single-panel 15/16 standard to avoid
+    # crowding, but far above ggplot's ~9pt default the tab used to show.
+    gratia::appraise(gam_result$model) &
+      ggplot2::theme_minimal(base_size = 13) &
+      ggplot2::theme(
+        axis.text  = ggplot2::element_text(size = 13),
+        axis.title = ggplot2::element_text(size = 14)
+      ),
     error = function(e) {
       message("gratia::appraise failed: ", e$message,
               "; returning placeholder")

@@ -974,7 +974,8 @@ mod_model_server <- function(id, data_r, var_config_r,
         ) +
         ggplot2::labs(title = "Variable Importance (F / |t| statistic)",
                       x = "Statistic", y = NULL) +
-        ggplot2::theme_minimal(base_size = 13)
+        ggplot2::theme_minimal(base_size = 15) +
+        mgcv_axis_fonts_()
     })
 
     output$importance_table <- DT::renderDT({
@@ -1064,6 +1065,10 @@ mod_model_server <- function(id, data_r, var_config_r,
 
       n_vars <- length(vars)
       txt_size <- max(2.5, 5 - n_vars * 0.15)
+      # Axis label sizing matches earthUI's correlation matrix (adaptive to
+      # the number of variables so long name lists still fit)
+      axis_size <- if (n_vars <= 6) 14 else if (n_vars <= 10) 13
+                   else if (n_vars <= 15) 11 else 9
 
       ggplot2::ggplot(cor_long,
                       ggplot2::aes(x = .data$Var2, y = .data$Var1,
@@ -1079,10 +1084,15 @@ mod_model_server <- function(id, data_r, var_config_r,
         ) +
         ggplot2::coord_fixed() +
         ggplot2::labs(title = "Correlation Matrix", x = NULL, y = NULL) +
-        ggplot2::theme_minimal(base_size = 12) +
+        ggplot2::theme_minimal(base_size = 14) +
         ggplot2::theme(
-          axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
-          panel.grid = ggplot2::element_blank()
+          plot.title = ggplot2::element_text(face = "bold", size = 16),
+          axis.text.x = ggplot2::element_text(angle = 45, hjust = 1,
+                                              size = axis_size),
+          axis.text.y = ggplot2::element_text(size = axis_size),
+          panel.grid = ggplot2::element_blank(),
+          legend.text = ggplot2::element_text(size = 11),
+          legend.title = ggplot2::element_text(size = 12)
         )
     }, res = 120)
 
