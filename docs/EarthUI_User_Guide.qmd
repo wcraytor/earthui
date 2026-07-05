@@ -439,6 +439,8 @@ Diagnostics & Three plots: Residuals vs Fitted, Normal Q-Q, and Actual vs Predic
 \hline
 RCA Adjustments & RCA adjustment output, populated once step 7 (Calculate RCA Adjustments \& Download, appraisal mode) has been run; until then the tab shows a notice to run step 7 first. \\
 \hline
+Residual Contribution & Estimates the market contribution of rare or excluded features (e.g. a workshop present in only 3 sales) by regressing model residuals on columns the model never used. See \textit{Residual Contribution (Rare-Feature Estimation)} below. \\
+\hline
 ANOVA & ANOVA decomposition table showing each basis function's contribution to RSS. \\
 \hline
 Earth Output & Raw text output from `earth::summary()`, including the pruning pass details. \\
@@ -591,6 +593,47 @@ In appraisal and market modes, a **Special** dropdown appears for each predictor
 \end{center}
 
 Only one column per special type is allowed (except `display_only`, `remarks`, and `list`, which allow multiple columns --- the latter two are advanced roles for the optional Prolog step, see Chapter 6). Assigning a single-column special to a second column automatically clears it from the first. A small blue badge appears next to the variable name showing its assigned special type.
+
+## Residual Contribution (Rare-Feature Estimation)
+
+Some value-bearing features are too rare for the regression channel: a
+workshop present in 3 of 780 sales cannot earn a defensible coefficient, and
+the forward pass will usually pass it over entirely. In the RCA two-channel
+system such features belong to the \textbf{residual layer}, and the
+\textbf{Residual Contribution} tab prices them there.
+
+\textbf{Method.} The model is fit \emph{without} the feature (either
+excluded in the predictor table, or offered but never selected by the forward
+pass --- both qualify). Its value then sits in the residuals of the flagged
+sales, and the tab regresses the model's residuals on the selected columns by
+ordinary least squares. A binary flag yields a lump-sum contribution; a
+numeric column (e.g. \texttt{outbuilding\_sqft}) yields a per-unit
+contribution.
+
+\textbf{Select correlated amenities together.} With several columns selected
+(e.g. \texttt{outbuilding\_sqft} \emph{plus} \texttt{pr\_has\_workshop})
+the regression is joint, so overlapping amenities split the credit instead of
+each claiming the same dollars --- essential when the flagged sales overlap.
+
+\textbf{Reading the output.} \texttt{estimate} is the contribution;
+\texttt{std\_error} is one standard error (estimate $\pm$ 2\,SE $\approx$
+95\% band; $t \geq 2$ is the usual ``probably real'' yardstick). For each
+binary flag the tab lists the flagged sales' individual residuals --- read
+these as the receipts: consistent same-sign residuals support the estimate,
+while one outlier carrying it means discount heavily. Terms with $n < 10$
+get an automatic \textsc{caution} in the generated workfile note; corroborate
+them with depreciated cost or a remarks-widened sample.
+
+\textbf{Selection discipline.} (1) cluster correlated amenities in one run;
+(2) exclude proxies of predictors the model used (the tab refuses features
+the model actually used); (3) keep the column set small and causally
+plausible; (4) verify flag coverage --- unflagged workshops in the control
+pool dilute the estimate; (5) audit the flagged-sale residuals before
+believing the estimate.
+
+The generated \textbf{workfile note} documents method, estimates, standard
+errors, and cautions in one paragraph suitable for the report and the
+residual breakdown documentation.
 
 ## RCA Adjustments Overview
 

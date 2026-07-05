@@ -190,7 +190,8 @@ The sidebar is organized into numbered sections:
     generated bundle) to HTML, Word, and/or PDF
 
 After fitting, the main panel shows ten tabs: Data, Equation, Summary,
-Variable Importance, Contribution, Correlation, Diagnostics, RCA Adjustments
+Variable Importance, Contribution, Correlation, Diagnostics, RCA Adjustments,
+Residual Contribution
 (appraisal only), ANOVA, and Earth Output.
 
 ## Variable Selection
@@ -418,6 +419,19 @@ smooth terms, enabling a seamless transition from MARS to GAM modeling.
 Models with `degree > 2` are skipped because mgcvUI only supports pairwise
 interactions. A manual **Export for mgcvUI** button is also available in the
 sidebar for on-demand export.
+
+## Residual Contribution (Rare-Feature Estimation)
+
+Features too rare for the regression channel (a workshop present in 3 of 780
+sales) belong to the RCA residual layer. The **Residual Contribution** tab
+estimates their market contribution by regressing the fitted model's
+residuals on columns the model never used (OLS; joint when several columns
+are selected, so correlated amenities split the credit). Binary flags yield
+lump sums with each flagged sale's residual shown as evidence; numeric
+columns yield per-unit contributions; terms with n < 10 carry an automatic
+CAUTION in the generated workfile note. Only predictors the model *used* are
+off-limits -- a rare flag that was offered but never selected by the forward
+pass is eligible.
 
 ## RCA Calculations (Step 7, Appraisal Only)
 
