@@ -41,7 +41,12 @@ include_plot <- function(name, width = 8, height = 5) {
   for (ext in c("png", "pdf")) {
     f <- file.path(.plots_dir, paste0(name, ".", ext))
     if (file.exists(f)) {
-      cat(sprintf("![](%s)\n\n", f))
+      # Reference a local, LaTeX-safe copy: the absolute temp path contains
+      # underscores, which older pandoc/LaTeX template combinations pass
+      # through unescaped ("Missing $ inserted").
+      safe <- paste0(gsub("_", "-", name), ".", ext)
+      file.copy(f, safe, overwrite = TRUE)
+      cat(sprintf("![](%s)\n\n", safe))
       return(invisible(NULL))
     }
   }
