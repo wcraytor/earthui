@@ -5280,7 +5280,8 @@ function(input, output, session) {
   observe({
     req(rv$result, rv$data)
     excluded <- setdiff(names(rv$data),
-                        c(rv$result$predictors, rv$result$target))
+                        c(earthUI::used_predictors_(rv$result),
+                          rv$result$target))
     # rare flags first: columns with few non-zero / TRUE values
     nz <- vapply(excluded, function(f) {
       v <- rv$data[[f]]

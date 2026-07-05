@@ -58,7 +58,8 @@ test_that("model predictors and unknown columns are rejected", {
   df <- make_planted_data()
   r <- fit_earth(df, "price", c("gla", "lot", "beds"), nfold = 0)
   expect_error(estimate_residual_contribution(r, df, "gla"),
-               "Already model predictors")
+               "Used by the fitted model")
+  expect_true("gla" %in% used_predictors_(r))
   expect_error(estimate_residual_contribution(r, df, "no_such_col"),
                "Not in data")
 })

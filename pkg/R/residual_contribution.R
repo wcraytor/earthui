@@ -40,9 +40,10 @@ estimate_residual_contribution <- function(result, df, features) {
   if (length(missing_cols) > 0L) {
     stop("Not in data: ", paste(missing_cols, collapse = ", "), call. = FALSE)
   }
-  overlap <- intersect(features, result$predictors)
+  overlap <- intersect(features, used_predictors_(result))
   if (length(overlap) > 0L) {
-    stop("Already model predictors (residual method needs them excluded): ",
+    stop("Used by the fitted model (refit without them first; the residual ",
+         "method needs the model blind to them): ",
          paste(overlap, collapse = ", "), call. = FALSE)
   }
 
@@ -109,4 +110,23 @@ estimate_residual_contribution <- function(result, df, features) {
   structure(list(table = tab, flagged = flagged, n = nrow(dat),
                  fit = fit, note = note),
             class = "earthUI_residual_contribution")
+}
+
+
+#' Predictors actually used by the fitted earth model
+#'
+#' A predictor can be offered to [fit_earth()] yet never selected by the
+#' forward pass (typical for rare flags). Only predictors that entered the
+#' model are off-limits to the residual method.
+#' @param result An `earthUI_result`.
+#' @return Character vector of used predictor names.
+#' @export
+used_predictors_ <- function(result) {
+  ev <- tryCatch(earth::evimp(result$model, trim = TRUE),
+                 error = function(e) NULL)
+  if (is.null(ev) || nrow(ev) == 0L) return(character(0))
+  used_terms <- rownames(ev)
+  result$predictors[vapply(result$predictors, function(p) {
+    any(startsWith(used_terms, p))
+  }, logical(1))]
 }
