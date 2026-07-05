@@ -123,7 +123,7 @@ glance_gam <- function(gam_result) {
 format_gam_equation_ <- function(model, response, response_transform = "none") {
   fam <- model$family
   link_name <- fam$link
-  # Escape LaTeX specials inside \text{} — a raw '_' (e.g. sale_price) renders
+  # Escape LaTeX specials inside \text{} -- a raw '_' (e.g. sale_price) renders
   # fine in MathJax (the tab) but breaks real LaTeX/PDF ("Missing $ inserted").
   esc_ <- function(x) gsub("([_&%#$])", "\\\\\\1", x)
   resp_tex <- esc_(response)
@@ -218,9 +218,9 @@ format_gam_equation_ <- function(model, response, response_transform = "none") {
 #' Legend explaining the model-equation notation
 #'
 #' Returns a short, self-contained explanation of the notation used in the
-#' Model Equation produced by `format_gam_equation_()` — the smooth functions
+#' Model Equation produced by `format_gam_equation_()` -- the smooth functions
 #' \eqn{f_i} and parametric coefficients \eqn{\beta} as value-contribution
-#' functions — together with a citation to the RCA protocol. Used both by the
+#' functions -- together with a citation to the RCA protocol. Used both by the
 #' Shiny app's Equation tab and at the bottom of the Quarto report.
 #'
 #' @param format Either `"html"` (MathJax markup, for the Shiny app and the
@@ -239,7 +239,7 @@ g_function_legend_mgcv <- function(format = c("html", "markdown")) {
   if (format == "markdown") {
     ref <- paste0(
       "Craytor, W. B. (2025). *Residual Constraint Approach (RCA): ",
-      "Framework & Protocol*, §10. Zenodo. ",
+      "Framework & Protocol*, \u00a710. Zenodo. ",
       "[doi:10.5281/zenodo.14787917](", doi_url, ").")
     paste0(
       "Each term of the equation above is a **value-contribution function**. ",
@@ -248,7 +248,7 @@ g_function_legend_mgcv <- function(format = c("html", "markdown")) {
       "function definitions listed with the equation give each one's spline ",
       "type and basis dimension $k$. Parametric and categorical predictors ",
       "enter as linear coefficients $\\beta$. The fitted response is the ",
-      "intercept plus the sum of all smooth and parametric terms — shown on ",
+      "intercept plus the sum of all smooth and parametric terms \u2014 shown on ",
       "the model's link scale when a non-identity link or a response transform ",
       "is used:\n\n",
       "$$g(\\hat{y}) = \\beta_0 + \\sum_i f_i(\\cdot) + \\sum_p \\beta_p\\,x_p$$\n\n",
@@ -256,7 +256,7 @@ g_function_legend_mgcv <- function(format = c("html", "markdown")) {
   } else {
     ref <- paste0(
       "Craytor, W. B. (2025). <em>Residual Constraint Approach (RCA): ",
-      "Framework &amp; Protocol</em>, §10. Zenodo. ",
+      "Framework &amp; Protocol</em>, \u00a710. Zenodo. ",
       "<a href=\"", doi_url, "\">doi:10.5281/zenodo.14787917</a>.")
     paste0(
       "<div class=\"mui-gfn-legend\" style=\"margin-top:14px;padding:10px ",
@@ -269,7 +269,7 @@ g_function_legend_mgcv <- function(format = c("html", "markdown")) {
       "definitions listed with the equation give each one's spline type and ",
       "basis dimension \\(k\\). Parametric and categorical predictors enter as ",
       "linear coefficients \\(\\beta\\). The fitted response is the intercept ",
-      "plus the sum of all smooth and parametric terms — shown on the ",
+      "plus the sum of all smooth and parametric terms \u2014 shown on the ",
       "model's link scale when a non-identity link or a response transform is ",
       "used:</p>",
       "\\[g(\\hat{y}) = \\beta_0 + \\sum_i f_i(\\cdot) + \\sum_p \\beta_p\\,x_p\\]",

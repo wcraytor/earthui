@@ -28,9 +28,9 @@ of the Quarto report.
 \details{
 Two notations occur:
 \itemize{
-\item \code{"g"} — an elastic-net model fit on \code{earth} basis functions, displayed in
+\item \code{"g"} -- an elastic-net model fit on \code{earth} basis functions, displayed in
 the RCA value-contribution notation \eqn{{}^{f}g^{j}_{k}}.
-\item \code{"linear"} — a plain elastic-net (glmnet) fit, displayed as ordinary linear
+\item \code{"linear"} -- a plain elastic-net (glmnet) fit, displayed as ordinary linear
 \eqn{\beta x} terms.
 }
 }

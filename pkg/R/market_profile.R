@@ -1,8 +1,8 @@
-#' Market Area Profile — Climate Zones (California)
+#' Market Area Profile -- Climate Zones (California)
 #'
 #' The first market-area profile. Maps a project's location (county + city) to
-#' one of seven buyer-recognized climate regions — reduced from the California
-#' Energy Commission's official 16 building-climate zones — and supplies ordinal
+#' one of seven buyer-recognized climate regions -- reduced from the California
+#' Energy Commission's official 16 building-climate zones -- and supplies ordinal
 #' contributory-value priors for HVAC / cooling features by region.
 #'
 #' These tables are the CANONICAL source for both R and Prolog:
@@ -10,7 +10,7 @@
 #' \code{inst/prolog/climate_regions_ca.pl} from them, so the two never drift.
 #'
 #' County defaults are the dominant-population region for the county; many
-#' California counties span 3–4 regions, so split counties rely on the city
+#' California counties span 3-4 regions, so split counties rely on the city
 #' overrides and need appraiser review.
 #'
 #' @name market_profile
@@ -128,7 +128,7 @@ climate_region_for <- function(county, city = NULL) {
 #'
 #' @param region A region atom (see \code{climate_region_for}).
 #' @return A data frame with columns \code{feature}, \code{ordinal}, \code{rank}
-#'   (0–6), or \code{NULL} if the region is unknown.
+#'   (0-6), or \code{NULL} if the region is unknown.
 #' @export
 climate_feature_priors <- function(region) {
   m <- climate_matrix_[[region]]
@@ -159,7 +159,7 @@ write_climate_prolog_ <- function(path = system.file("prolog", "climate_regions_
   esc <- function(x) x
   lines <- c(
     "/* California climate-region classification + feature-value priors.",
-    " * GENERATED from R/market_profile.R via write_climate_prolog_() — DO NOT",
+    " * GENERATED from R/market_profile.R via write_climate_prolog_() \u2014 DO NOT",
     " * hand-edit; edit the R tables and regenerate. 7 buyer-recognized regions",
     " * reduced from the CEC 16-zone system. County defaults are dominant-region;",
     " * split counties rely on city overrides and need appraiser review.",

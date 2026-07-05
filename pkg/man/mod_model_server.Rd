@@ -23,6 +23,9 @@ mod_model_server(
 \item{earth_knots_r}{A reactive returning earth knots (or \code{NULL}).}
 
 \item{dark_mode_r}{A reactive returning \code{TRUE} when dark mode is active.}
+
+\item{purpose_r}{A reactive giving the modeling purpose: \code{"general"},
+\code{"appraisal"}, or \code{"market"}.}
 }
 \value{
 A list with \code{result} (reactive containing the \code{mgcvUI_result} or

@@ -145,6 +145,8 @@ mod_model_results_ui <- function(id) {
 #' @param var_config_r A reactive returning the variable configuration.
 #' @param earth_knots_r A reactive returning earth knots (or `NULL`).
 #' @param dark_mode_r A reactive returning `TRUE` when dark mode is active.
+#' @param purpose_r A reactive giving the modeling purpose: `"general"`,
+#'   `"appraisal"`, or `"market"`.
 #' @return A list with `result` (reactive containing the `mgcvUI_result` or
 #'   `NULL`) and `reset` (function to clear model state).
 #' @export

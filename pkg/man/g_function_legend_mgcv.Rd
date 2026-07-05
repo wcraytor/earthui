@@ -16,9 +16,9 @@ A length-one character string.
 }
 \description{
 Returns a short, self-contained explanation of the notation used in the
-Model Equation produced by \code{format_gam_equation_()} — the smooth functions
+Model Equation produced by \code{format_gam_equation_()} -- the smooth functions
 \eqn{f_i} and parametric coefficients \eqn{\beta} as value-contribution
-functions — together with a citation to the RCA protocol. Used both by the
+functions -- together with a citation to the RCA protocol. Used both by the
 Shiny app's Equation tab and at the bottom of the Quarto report.
 }
 \examples{

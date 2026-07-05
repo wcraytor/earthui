@@ -63,7 +63,7 @@ format_summary <- function(earth_result) {
     })
   )))
 
-  # Cross-validated R-squared — use earth's pre-computed cv.rsq field
+  # Cross-validated R-squared -- use earth's pre-computed cv.rsq field
   cv_rsq <- NA_real_
   if (earth_result$cv_enabled && !is.null(model$cv.rsq)) {
     if (multi) {
@@ -143,7 +143,7 @@ format_anova <- function(earth_result) {
     stringsAsFactors = FALSE
   )
 
-  # Add coefficient column(s) — one per response
+  # Add coefficient column(s) -- one per response
   for (tgt in targets) {
     result[[tgt]] <- round(as.numeric(coef_mat[, tgt]), 6)
   }
@@ -418,7 +418,7 @@ format_model_equation <- function(earth_result, digits = 7L,
     "\n\\end{array}"
   )
 
-  # --- Native LaTeX (PDF) — same structure, extra vertical space, PDF escaping ---
+  # --- Native LaTeX (PDF) -- same structure, extra vertical space, PDF escaping ---
   latex_pdf <- paste0(
     "\\small\n\\begin{array}{lrl}\n",
     paste(lines, collapse = " \\\\[4pt]\n"),
@@ -426,7 +426,7 @@ format_model_equation <- function(earth_result, digits = 7L,
   )
   latex_pdf <- latex_escape_for_pdf_(latex_pdf)
 
-  # --- Word (Pandoc OMML) — \begin{array}{lrl} for 3-column layout
+  # --- Word (Pandoc OMML) -- \begin{array}{lrl} for 3-column layout
   word_lines <- character(0)
   for (ld in line_data) {
     if (ld$is_first) {
@@ -458,8 +458,8 @@ format_model_equation <- function(earth_result, digits = 7L,
 #' Legend explaining the value-contribution \eqn{g} functions
 #'
 #' Returns a short, self-contained explanation of the
-#' \eqn{{}^{f}g^{j}_{k}} notation produced by [format_model_equation()] — what
-#' each index means and how it determines the graphing dimension — together
+#' \eqn{{}^{f}g^{j}_{k}} notation produced by [format_model_equation()] -- what
+#' each index means and how it determines the graphing dimension -- together
 #' with a citation to the RCA protocol. Used both by the Shiny app's Equation
 #' tab and at the bottom of the Quarto report.
 #'
@@ -479,17 +479,17 @@ g_function_legend <- function(format = c("html", "markdown")) {
   if (format == "markdown") {
     ref <- paste0(
       "Craytor, W. B. (2025). *Residual Constraint Approach (RCA): ",
-      "Framework & Protocol*, §10. Zenodo. ",
+      "Framework & Protocol*, \u00a710. Zenodo. ",
       "[doi:10.5281/zenodo.14787917](", doi_url, ").")
     paste0(
       "Each line of the equation above is a **value-contribution function** ",
       "written ${}^{f}g^{\\,j}_{k}$:\n\n",
-      "- $j$ — the **group**, i.e. the number of variables the term ",
+      "- $j$ \u2014 the **group**, i.e. the number of variables the term ",
       "involves: $j=0$ base constant, $j=1$ one variable, $j=2$ two-variable ",
       "interaction, $j=3$ three-variable interaction.\n",
-      "- $k$ — the **position** of the function within group $j$ (its ",
+      "- $k$ \u2014 the **position** of the function within group $j$ (its ",
       "$k$-th term).\n",
-      "- $f$ (the leading superscript) — the number of **categorical ",
+      "- $f$ (the leading superscript) \u2014 the number of **categorical ",
       "(factor)** variables in the term.\n\n",
       "A term needs $d = j - f$ axes to graph, because each factor variable ",
       "removes one dimension. The price estimate is the base constant plus ",
@@ -502,7 +502,7 @@ g_function_legend <- function(format = c("html", "markdown")) {
   } else {
     ref <- paste0(
       "Craytor, W. B. (2025). <em>Residual Constraint Approach (RCA): ",
-      "Framework &amp; Protocol</em>, §10. Zenodo. ",
+      "Framework &amp; Protocol</em>, \u00a710. Zenodo. ",
       "<a href=\"", doi_url, "\">doi:10.5281/zenodo.14787917</a>.")
     paste0(
       "<div class=\"eui-gfn-legend\" style=\"margin-top:14px;padding:10px 14px;",
@@ -511,13 +511,13 @@ g_function_legend <- function(format = c("html", "markdown")) {
       "<strong>value-contribution function</strong> written ",
       "\\({}^{f}g^{\\,j}_{k}\\):</p>",
       "<ul style=\"margin:0 0 6px;padding-left:1.2em;\">",
-      "<li>\\(j\\) — the <strong>group</strong>, i.e. the number of ",
+      "<li>\\(j\\) \u2014 the <strong>group</strong>, i.e. the number of ",
       "variables the term involves (\\(j=0\\) base constant, \\(j=1\\) one ",
       "variable, \\(j=2\\) two-variable interaction, \\(j=3\\) three-variable ",
       "interaction).</li>",
-      "<li>\\(k\\) — the <strong>position</strong> of the function ",
+      "<li>\\(k\\) \u2014 the <strong>position</strong> of the function ",
       "within group \\(j\\).</li>",
-      "<li>\\(f\\) (the leading superscript) — the number of ",
+      "<li>\\(f\\) (the leading superscript) \u2014 the number of ",
       "<strong>categorical (factor)</strong> variables in the term.</li>",
       "</ul>",
       "<p style=\"margin:0 0 6px;\">A term needs \\(d = j - f\\) axes to ",
@@ -580,7 +580,7 @@ resolve_columns_ <- function(col_names, categoricals, data) {
   }
 
   # Fallback: columns not present in the actual data that remain unresolved
-  # are likely dummy variables — try startsWith matching
+  # are likely dummy variables -- try startsWith matching
   actual_cols <- names(data)
   for (i in which(!info$is_factor)) {
     cn <- info$col_name[i]

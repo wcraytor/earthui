@@ -59,9 +59,9 @@ equationServer <- function(id, model_module, data_module) {
 #' of the Quarto report.
 #'
 #' Two notations occur:
-#' * `"g"` — an elastic-net model fit on `earth` basis functions, displayed in
+#' * `"g"` -- an elastic-net model fit on `earth` basis functions, displayed in
 #'   the RCA value-contribution notation \eqn{{}^{f}g^{j}_{k}}.
-#' * `"linear"` — a plain elastic-net (glmnet) fit, displayed as ordinary linear
+#' * `"linear"` -- a plain elastic-net (glmnet) fit, displayed as ordinary linear
 #'   \eqn{\beta x} terms.
 #'
 #' @param format Either `"html"` (MathJax markup, for the Shiny app and the
@@ -83,18 +83,18 @@ g_function_legend_glmnet <- function(format = c("html", "markdown"),
   if (format == "markdown") {
     ref <- paste0(
       "Craytor, W. B. (2025). *Residual Constraint Approach (RCA): ",
-      "Framework & Protocol*, §10. Zenodo. ",
+      "Framework & Protocol*, \u00a710. Zenodo. ",
       "[doi:10.5281/zenodo.14787917](", doi_url, ").")
     if (notation == "g") {
       paste0(
         "Each line of the equation above is a **value-contribution function** ",
         "written ${}^{f}g^{\\,j}_{k}$:\n\n",
-        "- $j$ — the **group**, i.e. the number of variables the term ",
+        "- $j$ \u2014 the **group**, i.e. the number of variables the term ",
         "involves: $j=0$ base constant, $j=1$ one variable, $j=2$ ",
         "two-variable interaction, $j=3$ three-variable interaction.\n",
-        "- $k$ — the **position** of the function within group $j$ (its ",
+        "- $k$ \u2014 the **position** of the function within group $j$ (its ",
         "$k$-th term).\n",
-        "- $f$ (the leading superscript) — the number of **categorical ",
+        "- $f$ (the leading superscript) \u2014 the number of **categorical ",
         "(factor)** variables in the term.\n\n",
         "A term needs $d = j - f$ axes to graph, because each factor variable ",
         "removes one dimension. The estimate is the base constant plus every ",
@@ -119,7 +119,7 @@ g_function_legend_glmnet <- function(format = c("html", "markdown"),
   } else {
     ref <- paste0(
       "Craytor, W. B. (2025). <em>Residual Constraint Approach (RCA): ",
-      "Framework &amp; Protocol</em>, §10. Zenodo. ",
+      "Framework &amp; Protocol</em>, \u00a710. Zenodo. ",
       "<a href=\"", doi_url, "\">doi:10.5281/zenodo.14787917</a>.")
     head_ <- paste0(
       "<div class=\"gui-gfn-legend\" style=\"margin-top:14px;padding:10px ",
@@ -132,13 +132,13 @@ g_function_legend_glmnet <- function(format = c("html", "markdown"),
         "<strong>value-contribution function</strong> written ",
         "\\({}^{f}g^{\\,j}_{k}\\):</p>",
         "<ul style=\"margin:0 0 6px;padding-left:1.2em;\">",
-        "<li>\\(j\\) — the <strong>group</strong>, i.e. the number of ",
+        "<li>\\(j\\) \u2014 the <strong>group</strong>, i.e. the number of ",
         "variables the term involves (\\(j=0\\) base constant, \\(j=1\\) one ",
         "variable, \\(j=2\\) two-variable interaction, \\(j=3\\) ",
         "three-variable interaction).</li>",
-        "<li>\\(k\\) — the <strong>position</strong> of the function ",
+        "<li>\\(k\\) \u2014 the <strong>position</strong> of the function ",
         "within group \\(j\\).</li>",
-        "<li>\\(f\\) (the leading superscript) — the number of ",
+        "<li>\\(f\\) (the leading superscript) \u2014 the number of ",
         "<strong>categorical (factor)</strong> variables in the term.</li>",
         "</ul>",
         "<p style=\"margin:0 0 6px;\">A term needs \\(d = j - f\\) axes to ",

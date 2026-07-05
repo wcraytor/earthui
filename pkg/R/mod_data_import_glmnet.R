@@ -248,7 +248,7 @@ dataImportServer <- function(id, purpose = shiny::reactiveVal("general"),
       all_cols <- names(rv$data)
 
       default_response <- if (length(all_cols) > 0) all_cols[1] else NULL
-      # earthUI is the source of truth for the Response (its §3 target). If it
+      # earthUI is the source of truth for the Response (its Sec.3 target). If it
       # saved a target that exists in this data, use it instead of column 1.
       p_cf <- tryCatch(active_project_r(), error = function(e) NULL)
       cf <- earth_carryforward_(
@@ -805,7 +805,7 @@ dataImportServer <- function(id, purpose = shiny::reactiveVal("general"),
           $(document).off("change.glmnetspecial").on("change.glmnetspecial",
             ".glmnet-special-sel", function() {
               // Special is a column role only (area, contract_date, ...). It
-              // does NOT imply factor — factor designation is the Factor box.
+              // does NOT imply factor \u2014 factor designation is the Factor box.
               gatherState();
               saveState();
             });
@@ -871,7 +871,7 @@ dataImportServer <- function(id, purpose = shiny::reactiveVal("general"),
             "can still set <b>Force</b> and <b>Sign</b> for earth's ",
             "predictors. <b>Factor</b> shows the earth model's treatment: ",
             "checked only for the earth model's categorical predictors. ",
-            "Dimmed variables are ones the earth model did not use — they ",
+            "Dimmed variables are ones the earth model did not use \u2014 they ",
             "play no role in this fit, so their boxes stay empty."))
         )
       }
@@ -1120,7 +1120,7 @@ to_snake_case <- function(nms) {
 # "factor" because the glmnet variable table's Type dropdown has no factor
 # entry (factor treatment is the Factor checkbox); the mgcv detector keeps
 # logical and never reclassifies text. Each is coupled to its own UI's type
-# vocabulary — do not unify without re-verifying both variable tables.
+# vocabulary -- do not unify without re-verifying both variable tables.
 detect_column_types_glmnet <- function(df) {
   vapply(df, function(col) {
     if (inherits(col, "POSIXct") || inherits(col, "POSIXlt")) {
@@ -1145,14 +1145,14 @@ detect_column_types_glmnet <- function(df) {
 }
 
 # Flag columns that are UNAMBIGUOUSLY categorical by type: character, factor,
-# and logical. Numeric columns are NOT auto-flagged — a numeric variable is a
+# and logical. Numeric columns are NOT auto-flagged -- a numeric variable is a
 # factor only if the appraiser ticks the Factor box (the sole factor control;
-# Special is unrelated — it is a downstream role, e.g. for the Sales Grid).
+# Special is unrelated -- it is a downstream role, e.g. for the Sales Grid).
 # Counting unique values can't distinguish a discrete continuous predictor
 # (e.g. bath_count 0-5) from a numeric category code, so it must not drive the
 # default. Identifier guard: text where (nearly) every value is distinct
 # (street addresses, parcel/MLS ids) is a per-row label, not a usable
-# categorical — one level per data row — so it is not pre-checked either.
+# categorical -- one level per data row -- so it is not pre-checked either.
 # Used to pre-check the Factor box in Predictor Settings. Must stay
 # behaviorally identical to the exported detect_categoricals().
 #' @noRd

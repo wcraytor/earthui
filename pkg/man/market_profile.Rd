@@ -2,11 +2,11 @@
 % Please edit documentation in R/market_profile.R
 \name{market_profile}
 \alias{market_profile}
-\title{Market Area Profile — Climate Zones (California)}
+\title{Market Area Profile -- Climate Zones (California)}
 \description{
 The first market-area profile. Maps a project's location (county + city) to
-one of seven buyer-recognized climate regions — reduced from the California
-Energy Commission's official 16 building-climate zones — and supplies ordinal
+one of seven buyer-recognized climate regions -- reduced from the California
+Energy Commission's official 16 building-climate zones -- and supplies ordinal
 contributory-value priors for HVAC / cooling features by region.
 }
 \details{
@@ -15,6 +15,6 @@ These tables are the CANONICAL source for both R and Prolog:
 \code{inst/prolog/climate_regions_ca.pl} from them, so the two never drift.
 
 County defaults are the dominant-population region for the county; many
-California counties span 3–4 regions, so split counties rely on the city
+California counties span 3-4 regions, so split counties rely on the city
 overrides and need appraiser review.
 }

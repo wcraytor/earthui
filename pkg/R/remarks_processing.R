@@ -263,7 +263,7 @@ encode_row_cells_ <- function(df, i) {
 #' @export
 validate_rules_ <- function(rules_text, df = NULL) {
   if (!vProlog_available())
-    return(list(ok = TRUE, message = "vProlog not installed — rules not validated."))
+    return(list(ok = TRUE, message = "vProlog not installed \u2014 rules not validated."))
   if (is.null(rules_text) || !nzchar(trimws(rules_text)))
     return(list(ok = TRUE, message = "No rules."))
 
@@ -317,7 +317,7 @@ validate_rules_ <- function(rules_text, df = NULL) {
                   else "Runtime error while applying rules (see console)."))
     }
   }
-  list(ok = TRUE, message = sprintf("Rules OK — %s clause(s)%s.", nc,
+  list(ok = TRUE, message = sprintf("Rules OK \u2014 %s clause(s)%s.", nc,
     if (n_drop > 0L) sprintf(" (%d drop)", n_drop) else ""))
 }
 

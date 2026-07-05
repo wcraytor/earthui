@@ -11,7 +11,7 @@ climate_feature_priors(region)
 }
 \value{
 A data frame with columns \code{feature}, \code{ordinal}, \code{rank}
-(0–6), or \code{NULL} if the region is unknown.
+(0-6), or \code{NULL} if the region is unknown.
 }
 \description{
 Feature-value priors for a climate region

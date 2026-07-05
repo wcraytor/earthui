@@ -16,8 +16,8 @@ A length-one character string.
 }
 \description{
 Returns a short, self-contained explanation of the
-\eqn{{}^{f}g^{j}_{k}} notation produced by \code{\link[=format_model_equation]{format_model_equation()}} — what
-each index means and how it determines the graphing dimension — together
+\eqn{{}^{f}g^{j}_{k}} notation produced by \code{\link[=format_model_equation]{format_model_equation()}} -- what
+each index means and how it determines the graphing dimension -- together
 with a citation to the RCA protocol. Used both by the Shiny app's Equation
 tab and at the bottom of the Quarto report.
 }
