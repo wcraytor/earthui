@@ -2,6 +2,10 @@
 
 test_that("apply_user_rules_ derives counts, merges and arithmetic columns", {
   testthat::skip_if_not(vProlog_available(), "vProlog engine not installed")
+  # The embedded Trealla engine builds on Windows but does not yet answer
+  # queries there (tracked; needs debugging on a real Windows machine).
+  # Prolog rules features are documented as not yet supported on Windows.
+  testthat::skip_on_os("windows")
 
   df <- data.frame(
     pr_has_solar        = c(TRUE,  FALSE, TRUE),

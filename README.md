@@ -71,3 +71,13 @@ This software is provided for analytical, research, and educational purposes onl
 No warranty. This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE, as set out in the GNU Affero General Public License v3.0. To the maximum extent permitted by law, the authors accept no liability for any loss or damage arising from use of, or reliance on, this software or its output. You use it at your own risk and are solely responsible for verifying all inputs, assumptions, and results.
 
 For technical assistance or to report a bug, use the Help button in the app or email support@valuation-engineer.com.
+## Platform support
+
+Linux and macOS are fully supported and CI-checked. On **Windows**, the
+package installs and the core modeling workflow runs, but the embedded
+Prolog engine (vProlog/Trealla) that powers the experimental remarks-rules
+features does not yet answer queries — those features are documented as
+not yet supported on Windows, and their tests are skipped there. PDF
+report rendering is CI-skipped on Windows pending a TinyTeX repro; it
+works with a full LaTeX installation.
+
