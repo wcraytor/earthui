@@ -157,6 +157,122 @@ function(input, output, session) {
     if (!is.null(projects_con_)) try(DBI::dbDisconnect(projects_con_), silent = TRUE)
   })
 
+  # --- Support Fits: launch the glmnet / mgcv companions on this project ---
+  # Each companion runs in its OWN background R process (callr::r_bg with
+  # supervise = TRUE, so they die with this R process but deliberately
+  # outlive this browser session — the user may still be working in them).
+  # The shared project tree / settings DB / earth carry-forward connect the
+  # routines; the trilogy context hands the companion the active project so
+  # it opens on it directly.
+  support_procs_   <- reactiveValues(glmnet = NULL, mgcv = NULL)
+  support_pending_ <- reactiveValues(glmnet = FALSE, mgcv = FALSE)
+  support_ports_   <- c(glmnet = 7879L, mgcv = 7880L)
+
+  support_port_open_ <- function(port) {
+    con <- suppressWarnings(tryCatch(
+      socketConnection("127.0.0.1", port = port, timeout = 1, open = "r+"),
+      error = function(e) NULL))
+    if (is.null(con)) return(FALSE)
+    close(con)
+    TRUE
+  }
+
+  launch_support_ <- function(key) {
+    port <- support_ports_[[key]]
+    url  <- sprintf("http://127.0.0.1:%d", port)
+    # Already serving (our child, or a standalone instance)? Just open a tab.
+    proc <- support_procs_[[key]]
+    if ((!is.null(proc) && proc$is_alive()) || support_port_open_(port)) {
+      session$sendCustomMessage("eui_open_url", list(url = url))
+      return(invisible())
+    }
+    if (!requireNamespace("callr", quietly = TRUE)) {
+      showNotification(
+        "Package 'callr' is required to launch the companions from here.",
+        type = "error", duration = 8)
+      return(invisible())
+    }
+    p   <- rv$active_project
+    ctx <- if (!is.null(p)) list(project_path = p$project_path) else NULL
+    support_procs_[[key]] <- callr::r_bg(
+      function(key, port, ctx) {
+        fn <- if (key == "glmnet") earthUI::launch_glmnet else earthUI::launch_mgcv
+        fn(port = port, trilogy = ctx)
+      },
+      args = list(key = key, port = port, ctx = ctx),
+      supervise = TRUE, stdout = "|", stderr = "|")
+    support_pending_[[key]] <- TRUE
+    showNotification(sprintf("Starting the %s companion…", key),
+                     type = "message", duration = 4)
+  }
+
+  observeEvent(input$support_glmnet_btn, launch_support_("glmnet"))
+  observeEvent(input$support_mgcv_btn,   launch_support_("mgcv"))
+  observeEvent(input$support_stop_glmnet, {
+    proc <- support_procs_$glmnet
+    if (!is.null(proc) && proc$is_alive()) try(proc$kill(), silent = TRUE)
+    support_procs_$glmnet <- NULL; support_pending_$glmnet <- FALSE
+  })
+  observeEvent(input$support_stop_mgcv, {
+    proc <- support_procs_$mgcv
+    if (!is.null(proc) && proc$is_alive()) try(proc$kill(), silent = TRUE)
+    support_procs_$mgcv <- NULL; support_pending_$mgcv <- FALSE
+  })
+
+  # Readiness poll: once the companion's port answers, open the browser tab
+  # (the status line below always carries a clickable link as the popup-
+  # blocker fallback). If the child died before serving, surface its stderr.
+  observe({
+    if (!isTRUE(support_pending_$glmnet) && !isTRUE(support_pending_$mgcv)) {
+      return()
+    }
+    invalidateLater(500)
+    for (key in c("glmnet", "mgcv")) {
+      if (!isTRUE(support_pending_[[key]])) next
+      port <- support_ports_[[key]]
+      proc <- support_procs_[[key]]
+      if (support_port_open_(port)) {
+        support_pending_[[key]] <- FALSE
+        session$sendCustomMessage(
+          "eui_open_url", list(url = sprintf("http://127.0.0.1:%d", port)))
+      } else if (is.null(proc) || !proc$is_alive()) {
+        support_pending_[[key]] <- FALSE
+        err <- if (!is.null(proc))
+          tryCatch(paste(proc$read_all_error_lines(), collapse = " "),
+                   error = function(e) "") else ""
+        support_procs_[[key]] <- NULL
+        showNotification(
+          sprintf("The %s companion failed to start. %s",
+                  key, substr(err, 1, 300)),
+          type = "error", duration = 12)
+      }
+    }
+  })
+
+  output$support_fit_status <- renderUI({
+    # re-evaluate every few seconds so externally-stopped companions clear
+    invalidateLater(4000)
+    line_ <- function(key, label) {
+      port <- support_ports_[[key]]
+      url  <- sprintf("http://127.0.0.1:%d", port)
+      proc <- isolate(support_procs_[[key]])
+      running <- (!is.null(proc) && proc$is_alive()) || support_port_open_(port)
+      if (isTRUE(isolate(support_pending_[[key]]))) {
+        tags$div(style = "font-size:0.85em;", sprintf("%s: starting…", label))
+      } else if (running) {
+        tags$div(style = "font-size:0.85em;",
+          sprintf("%s: running — ", label),
+          tags$a(href = url, target = "_blank", url),
+          if (!is.null(proc)) tagList(" | ",
+            actionLink(paste0("support_stop_", key), "stop"))
+        )
+      } else {
+        NULL
+      }
+    }
+    tagList(line_("glmnet", "glmnet"), line_("mgcv", "mgcv"))
+  })
+
   # --- Output folder directory browser ---
   volumes <- c(Home = path.expand("~"), shinyFiles::getVolumes()())
   # Add /Volumes on macOS so external/NVMe drives appear
