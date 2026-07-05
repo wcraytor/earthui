@@ -39,9 +39,10 @@ find_nested_fns_ <- function(e) {
         out[[length(out) + 1]] <<- list(name = as.character(x[[2]]),
                                         fcall = x[[3]])
       }
-      for (a in as.list(x)) {
-        if (identical(a, quote(expr = ))) next
-        rec(a)
+      lst <- as.list(x)
+      for (j in seq_along(lst)) {
+        if (identical(lst[[j]], quote(expr = ))) next
+        rec(lst[[j]])
       }
     }
   }
@@ -76,9 +77,10 @@ internals_of <- function(fn) {
         while (is.call(t)) t <- t[[2]]   # x$y <- / x[[i]] <- -> x
         if (is.name(t)) found <<- c(found, as.character(t))
       }
-      for (a in as.list(e)) {
-        if (identical(a, quote(expr = ))) next
-        walk(a)
+      lst <- as.list(e)
+      for (j in seq_along(lst)) {
+        if (identical(lst[[j]], quote(expr = ))) next
+        walk(lst[[j]])
       }
     } else if (is.function(e)) {
       walk(body(e))
@@ -100,9 +102,10 @@ both_dir_params <- function(fn) {
         if (is.name(t) && as.character(t) %in% ps)
           found <<- c(found, as.character(t))
       }
-      for (a in as.list(e)) {
-        if (identical(a, quote(expr = ))) next
-        walk(a)
+      lst <- as.list(e)
+      for (j in seq_along(lst)) {
+        if (identical(lst[[j]], quote(expr = ))) next
+        walk(lst[[j]])
       }
     }
   }
