@@ -15,10 +15,14 @@ format:
         </style>
   pdf:
     toc: true
-    mainfont: "Roboto Condensed"
-    sansfont: "Roboto Condensed"
     include-in-header:
       text: |
+        % Use Roboto Condensed when installed; otherwise fall back to the
+        % default Latin Modern so rendering never fails on a missing font.
+        \IfFontExistsTF{Roboto Condensed}{%
+          \setmainfont{Roboto Condensed}%
+          \setsansfont{Roboto Condensed}%
+        }{}
         \usepackage{unicode-math}
         % Use a Times-like serif math font (matches the RCA document) so math
         % italics such as `j` are unambiguous. The previous Roboto Condensed
