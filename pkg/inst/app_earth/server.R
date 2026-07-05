@@ -3942,6 +3942,11 @@ function(input, output, session) {
           result <- proc$get_result()
           # Store captured trace lines from polling
           result$trace_output <- rv$trace_lines
+          # Canonical fit time (same as the sync path): artifact names, the
+          # trilogy fit registration, and the Combined report all key on it.
+          # Without this the async path never fired the registration observer.
+          rv$fit_ts <- Sys.time()
+          result$fit_ts <- rv$fit_ts
           rv$result <- result
           eui_log_$end("5. Fit Earth Model")
           session$sendCustomMessage("fitting_done",
