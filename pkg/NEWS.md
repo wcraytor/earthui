@@ -2,13 +2,13 @@
 
 ## One package, three routines
 
-* earthUI now **contains** its two companion modeling applications, formerly
-  the separate packages glmnetUI and mgcvUI. Launchers:
+* earthUI now **contains** its two **Post Processing Modules**, formerly the
+  separate packages glmnetUI and mgcvUI. Launchers:
   - `launch()` — the earth (MARS) application (port 7878), unchanged.
-  - `launch_glmnet()` — the elastic net companion (port 7879), which imports
+  - `launch_glmnet()` — the elastic net Post Processing Module (port 7879), which imports
     the earth model's basis functions and re-estimates them under
     lasso/elastic-net regularization.
-  - `launch_mgcv()` — the GAM companion (port 7880), which uses the earth
+  - `launch_mgcv()` — the GAM Post Processing Module (port 7880), which uses the earth
     model's knot locations as starting points for `mgcv` smooth terms.
 * The three routines share ONE copy of the supporting infrastructure
   (regProj project system, settings databases, trilogy coordination, locale,
@@ -16,9 +16,9 @@
   `_glmnet` / `_mgcv` suffixes. The in-process trilogy lock option is unified
   as `earthUI.trilogy`.
 * `earth_carryforward_()` (Effective Date / Response / RCA CQA flowing from
-  the earth model to the companions) and `register_project()` (projects.sqlite
+  the earth model to the Post Processing Modules) and `register_project()` (projects.sqlite
   upsert) are now part of earthUI.
-* The earth app moved to `inst/app_earth/` (companions: `inst/app_glmnet/`,
+* The earth app moved to `inst/app_earth/` (modules: `inst/app_glmnet/`,
   `inst/app_mgcv/`).
 
 ## Fixes

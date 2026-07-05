@@ -1,4 +1,4 @@
-#' Launch the mgcvUI Shiny Application
+#' Launch the mgcv Post Processing Module
 #'
 #' Opens the interactive GAM builder in your default web browser.
 #'

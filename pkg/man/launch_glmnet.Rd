@@ -2,7 +2,7 @@
 % Please edit documentation in R/launch_glmnet.R
 \name{launch_glmnet}
 \alias{launch_glmnet}
-\title{Launch the glmnetUI Shiny Application}
+\title{Launch the glmnet Post Processing Module}
 \usage{
 launch_glmnet(port = 7879L, trilogy = NULL, ...)
 }

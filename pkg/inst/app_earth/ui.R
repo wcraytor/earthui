@@ -183,8 +183,8 @@ fluidPage(
       if (el) el.classList.remove('open');
     });
 
-    // Open a companion app (glmnet/mgcv) in a new browser tab. If the popup
-    // is blocked, the Support Fits status line still shows a clickable link.
+    // Open a Post Processing Module (glmnet/mgcv) in a new browser tab. If
+    // the popup is blocked, the status line still shows a clickable link.
     Shiny.addCustomMessageHandler('eui_open_url', function(msg) {
       try { window.open(msg.url, '_blank'); } catch (e) {}
     });
@@ -1453,7 +1453,7 @@ fluidPage(
           )
         ),
 
-        # --- Support Fits: launch the glmnet / mgcv companions on this
+        # --- Post Processing Modules: launch glmnet / mgcv on this
         #     project. Each runs as its own app in its own R process (crash
         #     isolation); the shared project tree, settings DB, and earth
         #     carry-forward connect them. ---
@@ -1461,10 +1461,10 @@ fluidPage(
           condition = "output.has_active_project",
           hr(),
           tags$details(class = "eui-section",
-            tags$summary(h4("Support Fits: glmnet & mgcv"),
+            tags$summary(h4("Post Processing: glmnet & mgcv"),
               tags$span(class = "eui-section-info",
                         `data-bs-toggle` = "popover", `data-bs-trigger` = "hover focus",
-                        `data-bs-content` = "Opens the elastic net (glmnet) or GAM (mgcv) companion application on the current project, each in its own process and browser tab. Fit the earth model first — its auto-exported result is what the companions import to corroborate the value conclusion.",
+                        `data-bs-content` = "Opens the elastic net (glmnet) or GAM (mgcv) Post Processing Module on the current project, each in its own process and browser tab. Fit the earth model first — its auto-exported result is what the modules import to produce independent corroborating fits of the value conclusion.",
                         `data-bs-placement` = "left", onclick = "event.stopPropagation();",
                         "?")),
             tags$div(style = "display:flex; gap:6px;",

@@ -1,12 +1,12 @@
 Package: earthUI
 Title: Interactive 'shiny' GUIs for 'earth' (MARS) with 'glmnet' and
-    'mgcv' Companion Routines
+    'mgcv' Post Processing Modules
 Version: 0.11.0
 Authors@R:
     person("William", "Craytor", , "bcraytor@proton.me", role = c("aut", "cre"))
 Description: Provides 'shiny'-based graphical user interfaces for building
     and exploring Multivariate Adaptive Regression Splines (MARS) models with
-    the 'earth' package, plus two companion routines that corroborate the
+    the 'earth' package, plus two Post Processing Modules that corroborate the
     earth model: an elastic net application ('glmnet') that re-estimates the
     earth basis under regularization, and a generalized additive model
     application ('mgcv') seeded from the earth model's knots. The three

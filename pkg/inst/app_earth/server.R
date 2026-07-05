@@ -157,12 +157,12 @@ function(input, output, session) {
     if (!is.null(projects_con_)) try(DBI::dbDisconnect(projects_con_), silent = TRUE)
   })
 
-  # --- Support Fits: launch the glmnet / mgcv companions on this project ---
-  # Each companion runs in its OWN background R process (callr::r_bg with
+  # --- Post Processing Modules: launch glmnet / mgcv on this project ---
+  # Each module runs in its OWN background R process (callr::r_bg with
   # supervise = TRUE, so they die with this R process but deliberately
   # outlive this browser session — the user may still be working in them).
   # The shared project tree / settings DB / earth carry-forward connect the
-  # routines; the trilogy context hands the companion the active project so
+  # routines; the trilogy context hands the module the active project so
   # it opens on it directly.
   support_procs_   <- reactiveValues(glmnet = NULL, mgcv = NULL)
   support_pending_ <- reactiveValues(glmnet = FALSE, mgcv = FALSE)
@@ -188,7 +188,7 @@ function(input, output, session) {
     }
     if (!requireNamespace("callr", quietly = TRUE)) {
       showNotification(
-        "Package 'callr' is required to launch the companions from here.",
+        "Package 'callr' is required to launch the Post Processing Modules from here.",
         type = "error", duration = 8)
       return(invisible())
     }
@@ -202,7 +202,7 @@ function(input, output, session) {
       args = list(key = key, port = port, ctx = ctx),
       supervise = TRUE, stdout = "|", stderr = "|")
     support_pending_[[key]] <- TRUE
-    showNotification(sprintf("Starting the %s companion…", key),
+    showNotification(sprintf("Starting the %s Post Processing Module…", key),
                      type = "message", duration = 4)
   }
 
@@ -219,7 +219,7 @@ function(input, output, session) {
     support_procs_$mgcv <- NULL; support_pending_$mgcv <- FALSE
   })
 
-  # Readiness poll: once the companion's port answers, open the browser tab
+  # Readiness poll: once the module's port answers, open the browser tab
   # (the status line below always carries a clickable link as the popup-
   # blocker fallback). If the child died before serving, surface its stderr.
   observe({
@@ -242,7 +242,7 @@ function(input, output, session) {
                    error = function(e) "") else ""
         support_procs_[[key]] <- NULL
         showNotification(
-          sprintf("The %s companion failed to start. %s",
+          sprintf("The %s Post Processing Module failed to start. %s",
                   key, substr(err, 1, 300)),
           type = "error", duration = 12)
       }
@@ -250,7 +250,7 @@ function(input, output, session) {
   })
 
   output$support_fit_status <- renderUI({
-    # re-evaluate every few seconds so externally-stopped companions clear
+    # re-evaluate every few seconds so externally-stopped modules clear
     invalidateLater(4000)
     line_ <- function(key, label) {
       port <- support_ports_[[key]]

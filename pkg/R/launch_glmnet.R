@@ -1,4 +1,4 @@
-#' Launch the glmnetUI Shiny Application
+#' Launch the glmnet Post Processing Module
 #'
 #' Starts an interactive Shiny application for elastic net regression
 #' modeling using \pkg{glmnet}. The application provides point-and-click

@@ -2,7 +2,7 @@
 % Please edit documentation in R/launch_mgcv.R
 \name{launch_mgcv}
 \alias{launch_mgcv}
-\title{Launch the mgcvUI Shiny Application}
+\title{Launch the mgcv Post Processing Module}
 \usage{
 launch_mgcv(port = 7880L, launch.browser = interactive(), trilogy = NULL, ...)
 }
