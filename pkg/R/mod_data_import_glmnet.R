@@ -1114,6 +1114,13 @@ to_snake_case <- function(nms) {
 #' df <- data.frame(x = 1:10, y = letters[1:10],
 #'                  d = Sys.Date() + 1:10, stringsAsFactors = FALSE)
 #' detect_column_types_glmnet(df)
+# RECONCILIATION NOTE (merge pass 4b): detect_column_types_glmnet and
+# detect_column_types_mgcv (detect_types_mgcv.R) stay separate ON PURPOSE.
+# This one has no "logical" branch and labels low-cardinality text as
+# "factor" because the glmnet variable table's Type dropdown has no factor
+# entry (factor treatment is the Factor checkbox); the mgcv detector keeps
+# logical and never reclassifies text. Each is coupled to its own UI's type
+# vocabulary — do not unify without re-verifying both variable tables.
 detect_column_types_glmnet <- function(df) {
   vapply(df, function(col) {
     if (inherits(col, "POSIXct") || inherits(col, "POSIXlt")) {

@@ -2,33 +2,21 @@
 % Please edit documentation in R/import_data_mgcv.R
 \name{import_data_mgcv}
 \alias{import_data_mgcv}
-\title{Import Data from CSV or Excel}
+\title{Import Data from CSV or Excel (mgcv routine)}
 \usage{
 import_data_mgcv(filepath, sheet = 1L, sep = ",", dec = ".")
 }
 \arguments{
-\item{filepath}{Character path to a \code{.csv}, \code{.xlsx}, or \code{.xls} file.}
+\item{filepath}{Path to a \code{.csv}, \code{.xlsx}, or \code{.xls} file.}
 
-\item{sheet}{Integer or character sheet identifier for Excel files.
-Ignored for CSV.}
+\item{sheet}{For Excel files, the sheet to read. Default first sheet.}
 
-\item{sep}{Character. Field separator for CSV files. Default \code{","}.
-Use \code{";"} for European-style CSVs.}
-
-\item{dec}{Character. Decimal separator for CSV files. Default \code{"."}.
-Use \code{","} for European-style CSVs.}
+\item{sep, dec}{CSV field and decimal separators.}
 }
 \value{
-A data frame.
+A data frame with snake_case column names.
 }
 \description{
-Reads a CSV or Excel file and returns a data frame with cleaned column
-names (snake_case, no special characters).
-}
-\examples{
-tmp <- tempfile(fileext = ".csv")
-write.csv(mtcars, tmp, row.names = FALSE)
-df <- import_data_mgcv(tmp)
-head(df)
-unlink(tmp)
+Thin wrapper around \code{\link[=import_data]{import_data()}}, kept for the mgcv routine's call
+sites and scripts. See \code{\link[=import_data]{import_data()}} for details.
 }

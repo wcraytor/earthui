@@ -15,6 +15,8 @@
 #'   t = Sys.time() + 1:5
 #' )
 #' detect_column_types_mgcv(df)
+# RECONCILIATION NOTE (merge pass 4b): deliberately separate from
+# detect_column_types_glmnet — see the note in mod_data_import_glmnet.R.
 detect_column_types_mgcv <- function(df) {
   vapply(df, function(col) {
     if (inherits(col, "POSIXct") || inherits(col, "POSIXlt")) return("POSIXct")

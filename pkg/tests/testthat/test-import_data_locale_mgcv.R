@@ -89,7 +89,7 @@ test_that("import_data_mgcv errors on unsupported format with locale params", {
   tmp <- tempfile(fileext = ".json")
   file.create(tmp)
   on.exit(unlink(tmp))
-  expect_error(import_data_mgcv(tmp, sep = ";", dec = ","), "Unsupported file type")
+  expect_error(import_data_mgcv(tmp, sep = ";", dec = ","), "Unsupported file format")
 })
 
 test_that("import_data_mgcv handles empty CSV", {

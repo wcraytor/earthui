@@ -109,6 +109,20 @@ Already distinct per app (`earthUI_*`/`glmnetUI_*`/`mgcvUI_*`; `eui-`/`glmnet-`/
 
 **Phase 2 — suffix pass (mechanical):** glmnet files -> `_glmnet` renames + `launch_glmnet`; mgcv files -> `_mgcv` renames incl. whole settings_db + `launch_mgcv`.
 
-**Phase 3 — manual merges:** `import_data` (fold mgcv guard + clean_names into earth's), `detect_column_types`/`detect_types`/`detect_categoricals*` family reconciliation, unify the trilogy option name.
+**Phase 3 — manual merges (RESOLVED in pass 4b, 2026-07-04):**
+- `import_data`: FOLDED. earth's reader is the single implementation and now
+  carries mgcv's memory guard (`check_memory_for_file_`, moved to
+  import_data.R); `import_data_mgcv()` is a thin delegating wrapper keeping
+  the mgcv routine's name/signature. `clean_names_` retained (tested,
+  used independently). Error message unified to "Unsupported file format".
+- `detect_column_types_glmnet` / `_mgcv`: DELIBERATE DIVERGENCE, documented
+  in both files — each is coupled to its own variable table's type
+  vocabulary (glmnet: no logical, low-cardinality text -> "factor" label;
+  mgcv: logical branch, text stays character).
+- trilogy option: unified to `earthUI.trilogy` (pass 4a).
+- Correlation/report plot dedupe: DEFERRED into the user's planned
+  readability pass (three near-identical implementations noted).
+
+Original plan text: `import_data` (fold mgcv guard + clean_names into earth's), `detect_column_types`/`detect_types`/`detect_categoricals*` family reconciliation, unify the trilogy option name.
 
 **Phase 4 — inst/ + tests reshuffle:** per-method app dirs, single-copy shared assets, test file dedupe/suffixing.

@@ -14,7 +14,7 @@ test_that("import_data_mgcv errors on unsupported format", {
   tmp <- tempfile(fileext = ".json")
   file.create(tmp)
   on.exit(unlink(tmp))
-  expect_error(import_data_mgcv(tmp), "Unsupported file type")
+  expect_error(import_data_mgcv(tmp), "Unsupported file format")
 })
 
 test_that("clean_names_ converts camelCase to snake_case", {

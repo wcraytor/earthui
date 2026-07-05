@@ -319,7 +319,7 @@ test_that("import_data_mgcv errors on unsupported file extension", {
   tmp <- tempfile(fileext = ".parquet")
   file.create(tmp)
   on.exit(unlink(tmp))
-  expect_error(import_data_mgcv(tmp), "Unsupported file type")
+  expect_error(import_data_mgcv(tmp), "Unsupported file format")
 })
 
 test_that("import_data_mgcv reads CSV with single column", {
