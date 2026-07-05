@@ -11,16 +11,42 @@ hdr <- function(title, ch = "-") paste0(title, "\n", strrep(ch, nchar(title)))
 
 # ---- R files ----------------------------------------------------------------
 
-# roxygen block immediately above a line index
+# comment block (roxygen or plain #) immediately above a line index
 roxy_above <- function(lines, i) {
   j <- i - 1
   block <- character(0)
-  while (j >= 1 && (grepl("^\\s*#'", lines[j]) || grepl("^\\s*$", lines[j]))) {
-    if (grepl("^\\s*#'", lines[j])) block <- c(sub("^\\s*#'\\s?", "", lines[j]), block)
-    if (grepl("^\\s*#[^']", lines[j])) break
+  while (j >= 1 && grepl("^\\s*#", lines[j])) {
+    block <- c(sub("^\\s*#'?\\s?", "", lines[j]), block)
     j <- j - 1
   }
   block
+}
+
+# build an analyzable closure from an UNevaluated `function` call
+mk_fn_ <- function(fcall) {
+  tryCatch(eval(call("function", fcall[[2]], fcall[[3]]), baseenv()),
+           error = function(e) NULL)
+}
+
+# named `x <- function(...)` definitions anywhere inside an expression
+find_nested_fns_ <- function(e) {
+  out <- list()
+  rec <- function(x) {
+    if (is.call(x)) {
+      if (as.character(x[[1]])[1] %in% c("<-", "=") && length(x) >= 3 &&
+          is.name(x[[2]]) && is.call(x[[3]]) &&
+          identical(x[[3]][[1]], as.name("function"))) {
+        out[[length(out) + 1]] <<- list(name = as.character(x[[2]]),
+                                        fcall = x[[3]])
+      }
+      for (a in as.list(x)) {
+        if (identical(a, quote(expr = ))) next
+        rec(a)
+      }
+    }
+  }
+  rec(e)
+  out
 }
 roxy_title <- function(block) {
   block <- block[!grepl("^@", block)]
@@ -50,7 +76,10 @@ internals_of <- function(fn) {
         while (is.call(t)) t <- t[[2]]   # x$y <- / x[[i]] <- -> x
         if (is.name(t)) found <<- c(found, as.character(t))
       }
-      for (a in as.list(e)) walk(a)
+      for (a in as.list(e)) {
+        if (identical(a, quote(expr = ))) next
+        walk(a)
+      }
     } else if (is.function(e)) {
       walk(body(e))
     }
@@ -71,7 +100,10 @@ both_dir_params <- function(fn) {
         if (is.name(t) && as.character(t) %in% ps)
           found <<- c(found, as.character(t))
       }
-      for (a in as.list(e)) walk(a)
+      for (a in as.list(e)) {
+        if (identical(a, quote(expr = ))) next
+        walk(a)
+      }
     }
   }
   try(walk(body(fn)), silent = TRUE)
@@ -89,6 +121,37 @@ type_guess <- function(default) {
   else "<type?>"
 }
 
+fn_section_ <- function(nm, val, block, nested_names = character(0)) {
+  ps <- formals(val)
+  both <- both_dir_params(val)
+  param_lines <- if (length(ps)) vapply(names(ps), function(p) {
+    desc <- roxy_param(block, p)
+    sprintf("    %-16s (%s, %s) — %s", p, type_guess(ps[[p]]),
+            if (p %in% both) "both" else "input",
+            if (nzchar(desc)) desc else "TODO")
+  }, character(1)) else "    (none)"
+  iv <- setdiff(internals_of(val), c(names(ps), nested_names))
+  iv_lines <- if (length(iv)) paste0("    ", sort(iv), " — TODO")
+              else "    (none)"
+  nested_note <- if (length(nested_names))
+    paste0("  Nested functions (documented in their own sections): ",
+           paste(sort(nested_names), collapse = ", "), "\n") else ""
+  title <- roxy_title(block)
+  paste0(
+    nm, "(", paste(names(ps), collapse = ", "), ")\n",
+    "  Description: ", if (nzchar(title)) title else "TODO", "\n",
+    "  Parameters:\n", paste(param_lines, collapse = "\n"), "\n",
+    "  Returns: TODO\n", nested_note,
+    "  Internal variables:\n", paste(iv_lines, collapse = "\n"), "\n",
+    "  References: (none)\n")
+}
+
+# comment block above the first line matching a nested definition header
+nested_block_ <- function(lines, nm) {
+  hit <- grep(paste0("^\\s*", nm, "\\s*(<-|=)\\s*function"), lines)
+  if (length(hit)) roxy_above(lines, hit[1]) else character(0)
+}
+
 cmt_for_r <- function(path) {
   lines <- readLines(path, warn = FALSE)
   exprs <- tryCatch(parse(path, keep.source = TRUE),
@@ -100,39 +163,45 @@ cmt_for_r <- function(path) {
   globals <- character(0)
   fun_sections <- character(0)
 
+  emit_fn_and_nested <- function(nm, fcall, block) {
+    val <- mk_fn_(fcall)
+    if (is.null(val)) return(invisible())
+    nested <- find_nested_fns_(fcall[[3]])
+    nested_names <- vapply(nested, function(x) x$name, character(1))
+    fun_sections <<- c(fun_sections,
+                       fn_section_(nm, val, block, unique(nested_names)))
+    for (nf in nested) {
+      nval <- mk_fn_(nf$fcall)
+      if (is.null(nval)) next
+      sub_nested <- vapply(find_nested_fns_(nf$fcall[[3]]),
+                           function(x) x$name, character(1))
+      fun_sections <<- c(fun_sections,
+        fn_section_(paste0(nm, " > ", nf$name), nval,
+                    nested_block_(lines, nf$name), unique(sub_nested)))
+    }
+  }
+
   for (k in seq_along(exprs)) {
     e <- exprs[[k]]
+    line1 <- utils::getSrcLocation(refs[[k]], "line")
+
+    # bare top-level function literal (classic ui.R/server.R app files)
+    if (is.call(e) && identical(e[[1]], as.name("function"))) {
+      emit_fn_and_nested(paste0("(", basename(path), " top-level function)"),
+                         e, roxy_above(lines, line1))
+      next
+    }
     if (!(is.call(e) && as.character(e[[1]])[1] %in% c("<-", "=") &&
           is.name(e[[2]]))) next
     nm <- as.character(e[[2]])
-    val <- tryCatch(eval(e[[3]], env), error = function(err) NULL)
-    assign(nm, val, envir = env)
-    line1 <- utils::getSrcLocation(refs[[k]], "line")
 
-    if (is.function(val)) {
-      block <- roxy_above(lines, line1)
-      ps <- formals(val)
-      both <- both_dir_params(val)
-      param_lines <- if (length(ps)) vapply(names(ps), function(p) {
-        desc <- roxy_param(block, p)
-        sprintf("    %-16s (%s, %s) — %s", p, type_guess(ps[[p]]),
-                if (p %in% both) "both" else "input",
-                if (nzchar(desc)) desc else "TODO")
-      }, character(1)) else "    (none)"
-      iv <- setdiff(internals_of(val), names(ps))
-      iv_lines <- if (length(iv)) paste0("    ", sort(iv), " — TODO")
-                  else "    (none)"
-      title <- roxy_title(block)
-      fun_sections <- c(fun_sections, paste0(
-        nm, "(", paste(names(ps), collapse = ", "), ")\n",
-        "  Description: ", if (nzchar(title)) title else "TODO", "\n",
-        "  Parameters:\n", paste(param_lines, collapse = "\n"), "\n",
-        "  Returns: TODO\n",
-        "  Internal variables:\n", paste(iv_lines, collapse = "\n"), "\n",
-        "  References: (none)\n"))
+    if (is.call(e[[3]]) && identical(e[[3]][[1]], as.name("function"))) {
+      emit_fn_and_nested(nm, e[[3]], roxy_above(lines, line1))
     } else {
+      val <- tryCatch(eval(e[[3]], env), error = function(err) NULL)
+      assign(nm, val, envir = env)
       globals <- c(globals, sprintf("%-24s — %s%s", nm,
-        paste(class(val), collapse = "/"),
+        if (is.null(val)) "<unevaluated>" else paste(class(val), collapse = "/"),
         if (is.environment(val)) " (package-level state environment)" else ""))
     }
   }
