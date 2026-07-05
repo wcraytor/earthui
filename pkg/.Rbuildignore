@@ -12,3 +12,4 @@
 ^cran-comments\.md$
 ^Output$
 ^demo_mls$
+^.*\.cmt$
