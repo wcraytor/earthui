@@ -292,18 +292,26 @@ fit_earth <- function(df, target, predictors, categoricals = NULL,
     }
   }
   if (!is.null(fast.beta))       earth_args$fast.beta        <- fast.beta
-  if (!is.null(ncross)) {
-    # Auto-increase ncross when variance model is enabled and ncross < 3
-    if (needs_cv && !is.null(varmod.method) && varmod.method != "none" &&
+  if (!is.null(ncross) && cv_enabled) {
+    # ncross is meaningful only with folds; an explicit nfold = 0 wins and
+    # ncross is dropped entirely (earth errors on ncross > 1 with nfold = 0).
+    # Auto-increase ncross when variance model is enabled and ncross < 3.
+    if (!is.null(varmod.method) && varmod.method != "none" &&
         as.integer(ncross) < 3L) {
       earth_args$ncross <- 3L
-    } else {
+    } else if (as.integer(ncross) >= 1L) {
       earth_args$ncross <- as.integer(ncross)
     }
   }
   if (!is.null(stratify))        earth_args$stratify         <- stratify
   if (!is.null(varmod.method) && varmod.method != "none") {
-    earth_args$varmod.method <- varmod.method
+    if (cv_enabled) {
+      earth_args$varmod.method <- varmod.method
+    } else {
+      warning("varmod.method requires cross-validation (nfold >= 2); ",
+              "variance model disabled because nfold = 0.", call. = FALSE)
+      varmod.method <- "none"
+    }
   }
   if (!is.null(varmod.exponent)) earth_args$varmod.exponent  <- varmod.exponent
   if (!is.null(varmod.conv))     earth_args$varmod.conv      <- varmod.conv
