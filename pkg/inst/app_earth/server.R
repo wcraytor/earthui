@@ -5276,4 +5276,65 @@ function(input, output, session) {
     })
   })
 
+  # --- Residual Contribution tab (rare / excluded features) ---------------
+  observe({
+    req(rv$result, rv$data)
+    excluded <- setdiff(names(rv$data),
+                        c(rv$result$predictors, rv$result$target))
+    # rare flags first: columns with few non-zero / TRUE values
+    nz <- vapply(excluded, function(f) {
+      v <- rv$data[[f]]
+      if (is.logical(v)) sum(v, na.rm = TRUE)
+      else if (is.numeric(v)) sum(v != 0, na.rm = TRUE)
+      else NA_real_
+    }, numeric(1))
+    lab <- ifelse(is.na(nz), excluded, sprintf("%s (%d)", excluded, nz))
+    ord <- order(is.na(nz), nz)
+    updateSelectizeInput(session, "rescontrib_features",
+                         choices = stats::setNames(excluded[ord], lab[ord]))
+  })
+
+  rescontrib_r <- eventReactive(input$rescontrib_go, {
+    req(rv$result, rv$data, length(input$rescontrib_features) > 0)
+    tryCatch(
+      estimate_residual_contribution(rv$result, rv$data,
+                                     input$rescontrib_features),
+      error = function(e) {
+        showNotification(conditionMessage(e), type = "error", duration = 10)
+        NULL
+      })
+  })
+
+  output$rescontrib_table <- DT::renderDataTable({
+    rc <- rescontrib_r(); req(rc)
+    tab <- rc$table
+    tab$estimate  <- round(tab$estimate)
+    tab$std_error <- round(tab$std_error)
+    tab$t_value   <- round(tab$t_value, 2)
+    DT::datatable(tab, rownames = FALSE,
+                  options = list(dom = "t", paging = FALSE)) |>
+      DT::formatCurrency(c("estimate", "std_error"), digits = 0)
+  })
+
+  output$rescontrib_flagged <- renderUI({
+    rc <- rescontrib_r(); req(rc)
+    if (length(rc$flagged) == 0) return(NULL)
+    blocks <- lapply(names(rc$flagged), function(f) {
+      fd <- rc$flagged[[f]]
+      tags$div(
+        tags$h5(sprintf("%s - flagged sales (%d)", f, nrow(fd))),
+        tags$pre(paste(sprintf("  row %-8s residual %12s", fd$row,
+                               formatC(fd$residual, format = "f",
+                                       big.mark = ",", digits = 0)),
+                       collapse = "
+")))
+    })
+    do.call(tagList, c(list(br()), blocks))
+  })
+
+  output$rescontrib_note <- renderText({
+    rc <- rescontrib_r(); req(rc)
+    rc$note
+  })
+
 }
