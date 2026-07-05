@@ -1535,9 +1535,15 @@ server <- function(input, output, session) {
   # Trilogy mode: after each fit, register this method's fit-stamp in the
   # project's trilogy.json so the combined report can group the run's files.
   observeEvent(gam_result_r(), {
+    # Register against the trilogy ctx project when launched as a Post
+    # Processing Module, else against the app's own active project — every
+    # fit registers, so the combined report can always group the run.
     ctx <- getOption("earthUI.trilogy")
-    if (is.null(ctx)) return()
     pp <- ctx$project_path %||% NULL
+    if (is.null(pp)) {
+      ap <- rv_proj$active_project
+      pp <- if (!is.null(ap)) ap$project_path else NULL
+    }
     res <- gam_result_r()
     ts <- res$fit_ts %||% NULL
     if (!is.null(pp) && !is.null(ts)) {

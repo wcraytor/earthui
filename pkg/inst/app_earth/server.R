@@ -206,6 +206,35 @@ function(input, output, session) {
                      type = "message", duration = 4)
   }
 
+  # Every earth fit registers its stamp against the active project, so the
+  # combined report can group the run without requiring trilogy lock mode.
+  observeEvent(rv$fit_ts, {
+    p <- rv$active_project
+    if (is.null(p) || is.null(rv$fit_ts)) return()
+    try(trilogy_register_fit(p$project_path, "earth",
+                             earthUI:::fit_stamp_(rv$fit_ts)), silent = TRUE)
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$combined_report_btn, {
+    p <- rv$active_project
+    if (is.null(p)) {
+      showNotification("Open a project first.", type = "error", duration = 5)
+      return()
+    }
+    out <- tryCatch(build_combined_report(p$project_path),
+                    error = function(e) {
+                      showNotification(paste("Combined report failed:",
+                                             e$message),
+                                       type = "error", duration = 10)
+                      NULL
+                    })
+    if (!is.null(out)) {
+      showNotification(paste("Combined report written:", basename(out)),
+                       type = "message", duration = 8)
+      try(utils::browseURL(out), silent = TRUE)
+    }
+  })
+
   observeEvent(input$support_glmnet_btn, launch_support_("glmnet"))
   observeEvent(input$support_mgcv_btn,   launch_support_("mgcv"))
   observeEvent(input$support_stop_glmnet, {

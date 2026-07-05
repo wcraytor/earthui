@@ -1473,7 +1473,14 @@ fluidPage(
               actionButton("support_mgcv_btn", "Open mgcv",
                            class = "btn-secondary", style = "flex:1;")
             ),
-            uiOutput("support_fit_status")
+            uiOutput("support_fit_status"),
+            actionButton("combined_report_btn", "Combined Conclusion",
+                         class = "btn-outline-primary",
+                         style = "width:100%; margin-top:6px;",
+                         title = paste("One-page comparative summary: the",
+                                       "earth value conclusion with the",
+                                       "Post Processing Modules' fits as",
+                                       "corroborating support"))
           )
         )
       )

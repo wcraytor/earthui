@@ -165,9 +165,16 @@ function(input, output, session) {
   # Trilogy mode: after each fit, register this method's fit-stamp in the
   # project's trilogy.json so the combined report can group the run's files.
   shiny::observeEvent(model_out$fit_count(), {
+    if (!isTRUE(model_out$fit_count() > 0L)) return()
+    # Register against the trilogy ctx project when launched as a Post
+    # Processing Module, else against the app's own active project — every
+    # fit registers, so the combined report can always group the run.
     ctx <- getOption("earthUI.trilogy")
-    if (is.null(ctx) || !isTRUE(model_out$fit_count() > 0L)) return()
     pp <- ctx$project_path %||% NULL
+    if (is.null(pp)) {
+      ap <- rv_proj$active_project
+      pp <- if (!is.null(ap)) ap$project_path else NULL
+    }
     ts <- model_out$fit_ts()
     if (!is.null(pp) && !is.null(ts)) {
       try(earthUI::trilogy_register_fit(pp, "glmnet",
