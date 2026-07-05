@@ -5289,7 +5289,7 @@ function(input, output, session) {
       else NA_real_
     }, numeric(1))
     lab <- ifelse(is.na(nz), excluded, sprintf("%s (%d)", excluded, nz))
-    ord <- order(is.na(nz), nz)
+    ord <- order(tolower(excluded))
     updateSelectizeInput(session, "rescontrib_features",
                          choices = stats::setNames(excluded[ord], lab[ord]))
   })

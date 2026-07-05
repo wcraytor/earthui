@@ -1601,7 +1601,9 @@ fluidPage(
                 uiOutput("rca_plots_ui"))
           ),
           tabPanel("Residual Contribution", br(),
-            div(style = "max-width: 900px;",
+            div(style = "max-width: 900px;", class = "rescontrib-box",
+              tags$style(HTML(
+                ".rescontrib-box .selectize-dropdown-content { max-height: 400px; }")),
               h4("Residual-Layer Contribution (rare / excluded features)"),
               p(class = "text-muted",
                 "Estimates the market contribution of columns the model was fit ",
