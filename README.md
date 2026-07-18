@@ -1,3 +1,8 @@
+> **Project status (July 2026):** This repository has been rolled back to the
+> stable **v0.11.0** release. New development has moved to a private
+> repository for the time being; features will return here once they have
+> stabilized.
+
 earthUI
 Interactive GUI for Enhanced Adaptive Regression Through Hinges (EARTH) models.
 
